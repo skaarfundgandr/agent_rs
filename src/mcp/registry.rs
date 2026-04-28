@@ -210,11 +210,11 @@ impl ToolDyn for RegisteredMcpTool {
 		self.inner.name()
 	}
 
-	fn definition<'a>(&'a self, prompt: String) -> WasmBoxedFuture<'a, ToolDefinition> {
+	fn definition(&'_ self, prompt: String) -> WasmBoxedFuture<'_, ToolDefinition> {
 		self.inner.definition(prompt)
 	}
 
-	fn call<'a>(&'a self, args: String) -> WasmBoxedFuture<'a, Result<String, ToolError>> {
+	fn call(&'_ self, args: String) -> WasmBoxedFuture<'_, Result<String, ToolError>> {
 		self.inner.call(args)
 	}
 }
@@ -235,7 +235,7 @@ async fn connect_stdio_server(name: String, spec: McpStdioTransportSpec) -> Resu
 
 	let command = build_stdio_command(&spec)?;
 	let transport = TokioChildProcess::new(command).context("failed to spawn MCP stdio server")?;
-	let service = Arc::new((()).serve(transport).await.with_context(|| {
+	let service = Arc::new(().serve(transport).await.with_context(|| {
 		format!("failed to connect to MCP stdio server `{name}`")
 	})?);
 

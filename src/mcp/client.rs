@@ -2,8 +2,10 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, path::PathBuf, process::Command};
+use rig::tool::ToolDyn;
 use url::Url;
 use crate::config::McpConfig;
+use crate::mcp::registry::{McpRegistry, McpRegistryRuntime};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -189,5 +191,18 @@ impl McpClient {
 
     pub fn validate(&self) -> Result<()> {
         self.config.validate()
+    }
+
+    pub async fn connect(self) -> Result<McpRegistryRuntime> {
+        let registry = McpRegistry::from_client(self);
+
+        match registry.connect().await {
+            Ok(runtime) => Ok(runtime),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub async fn tools(self) -> Result<Vec<Box<dyn ToolDyn>>> {
+        Ok(self.connect().await?.into_tools())
     }
 }
