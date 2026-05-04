@@ -23,3 +23,4 @@ serde_json = "1.0.139"
 url = "2.5.4"
 reqwest = { version = "0.12.12", features = ["json", "stream"] }
 async-trait = "0.1.89"
+pdf-extract = "0.10.0"
