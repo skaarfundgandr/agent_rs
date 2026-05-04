@@ -1,12 +1,6 @@
 use rig::prelude::ProviderClient;
 use rig::tool::Tool;
-use serde::*;
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ModelResponse {
-    pub content: String,
-    pub action: String
-}
+use crate::domain::agent::ModelResponse;
 
 pub struct Model<P: ProviderClient, T: Tool> {
     pub provider: P,

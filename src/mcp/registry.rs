@@ -12,10 +12,11 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::process::Command;
-use crate::config::McpConfig;
-use crate::mcp::client::{
-	McpClient, McpServerDef, McpStreamableHttpTransportSpec, McpStdioTransportSpec,
-	McpTransportSpec, ResolvedMcpServer,
+use crate::mcp::client::McpClient;
+use crate::domain::config::McpConfig;
+use crate::domain::mcp::{
+	McpServerDef, McpStreamableHttpTransportSpec, McpStdioTransportSpec,
+	McpTransportSpec, ResolvedMcpServer, RegisteredMcpServer,
 };
 
 /// Registry that resolves MCP server definitions from `mcp.json` into Rig tools.
@@ -112,14 +113,6 @@ impl McpRegistry {
 	pub async fn tools(&self) -> Result<Vec<Box<dyn ToolDyn>>> {
 		Ok(self.connect().await?.into_tools())
 	}
-}
-
-/// Connected server metadata, including the tools discovered on that server.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RegisteredMcpServer {
-	pub name: String,
-	pub transport: McpTransportSpec,
-	pub tool_names: Vec<String>,
 }
 
 /// Runtime registry returned after connecting to the MCP servers.

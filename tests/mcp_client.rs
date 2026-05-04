@@ -1,8 +1,8 @@
-use rs_agent::mcp::client::{McpServerDef, McpTransportKind, McpTransportSpec};
+use rs_agent::domain::mcp::{McpServerDef, McpTransportKind, McpTransportSpec};
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use rs_agent::config::McpConfig;
+use rs_agent::domain::config::McpConfig;
 
 #[test]
 fn parses_stdio_server() {

@@ -1,9 +1,9 @@
-use rs_agent::mcp::client::McpTransportKind;
+use rs_agent::domain::mcp::McpTransportKind;
 use std::collections::HashMap;
 use anyhow::Context;
 use reqwest::header::{HeaderName, HeaderValue};
 use serde_json::json;
-use rs_agent::config::McpConfig;
+use rs_agent::domain::config::McpConfig;
 use rs_agent::mcp::registry::McpRegistry;
 
 #[test]
