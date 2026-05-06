@@ -10,6 +10,7 @@ use rmcp::transport::streamable_http_client::{
 };
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::process::Command;
 use crate::mcp::client::McpClient;
@@ -30,11 +31,6 @@ impl McpRegistry {
 		Self {
 			client: McpClient::new(config),
 		}
-	}
-
-	/// Create a registry from a parsed MCP JSON configuration.
-	pub fn from_str(config: &str) -> Result<Self> {
-		Ok(Self::new(McpConfig::from_str(config)?))
 	}
 
 	/// Create a registry from a configuration file path.
@@ -247,7 +243,7 @@ async fn connect_http_server(
 	let transport = StreamableHttpClientTransport::from_config(
 		StreamableHttpClientTransportConfig::with_uri(spec.url.as_str()).custom_headers(headers),
 	);
-	let service = Arc::new((()).serve(transport).await.with_context(|| {
+	let service = Arc::new(().serve(transport).await.with_context(|| {
 		format!("failed to connect to MCP HTTP server `{name}`")
 	})?);
 
@@ -337,5 +333,23 @@ impl From<McpStdioTransportSpec> for McpTransportSpec {
 impl From<McpStreamableHttpTransportSpec> for McpTransportSpec {
 	fn from(value: McpStreamableHttpTransportSpec) -> Self {
 		Self::StreamableHttp(value)
+	}
+}
+
+impl FromStr for McpRegistry {
+	type Err = anyhow::Error;
+
+	fn from_str(config: &str) -> Result<Self, Self::Err> {
+		Ok(Self::new(McpConfig::from_str(config)?))
+	}
+}
+
+impl FromStr for McpConfig {
+	type Err = anyhow::Error;
+	
+	fn from_str(config: &str) -> Result<Self, Self::Err> {
+		let parsed: Self = serde_json::from_str(config).context("failed to parse MCP config JSON")?;
+		parsed.validate()?;
+		Ok(parsed)
 	}
 }

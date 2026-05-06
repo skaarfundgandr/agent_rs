@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use anyhow::Result;
 use rig::tool::ToolDyn;
 use crate::mcp::registry::{McpRegistry, McpRegistryRuntime};
@@ -12,12 +13,6 @@ impl McpClient {
     pub fn from_config_path(path: &str) -> Result<Self> {
         Ok(Self {
             config: McpConfig::from_path(path)?,
-        })
-    }
-
-    pub fn from_str(config: &str) -> Result<Self> {
-        Ok(Self {
-            config: McpConfig::from_str(config)?,
         })
     }
 
@@ -52,5 +47,15 @@ impl McpClient {
 
     pub async fn tools(self) -> Result<Vec<Box<dyn ToolDyn>>> {
         Ok(self.connect().await?.into_tools())
+    }
+}
+
+impl FromStr for McpClient {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok( Self {
+            config: McpConfig::from_str(s)?,
+        })
     }
 }

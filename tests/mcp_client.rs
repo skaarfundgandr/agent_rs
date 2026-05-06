@@ -2,6 +2,7 @@ use rs_agent::domain::mcp::{McpServerDef, McpTransportKind, McpTransportSpec};
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use rs_agent::domain::config::McpConfig;
 
 #[test]

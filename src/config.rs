@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
 use std::path::Path;
+use std::str::FromStr;
 use crate::domain::mcp::{McpServerDef, ResolvedMcpServer, McpTransportSpec, McpStdioTransportSpec, McpStreamableHttpTransportSpec};
 pub use crate::domain::config::McpConfig;
 use url::Url;
@@ -10,12 +11,6 @@ impl McpConfig {
         let config_str = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read MCP config from {}", path.display()))?;
         Self::from_str(&config_str)
-    }
-
-    pub fn from_str(config: &str) -> Result<Self> {
-        let parsed: Self = serde_json::from_str(config).context("failed to parse MCP config JSON")?;
-        parsed.validate()?;
-        Ok(parsed)
     }
 
     pub fn validate(&self) -> Result<()> {

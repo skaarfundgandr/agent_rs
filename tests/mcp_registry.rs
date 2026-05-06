@@ -1,5 +1,6 @@
 use rs_agent::domain::mcp::McpTransportKind;
 use std::collections::HashMap;
+use std::str::FromStr;
 use anyhow::Context;
 use reqwest::header::{HeaderName, HeaderValue};
 use serde_json::json;
