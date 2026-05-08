@@ -3,8 +3,10 @@ use dotenvy::dotenv;
 use rig::integrations::cli_chatbot::ChatBotBuilder;
 use rig::prelude::*;
 use rig::providers::openai;
+use rig::tool::ToolDyn;
 use rs_agent::agent::embeddings::EmbeddingService;
-use rs_agent::agent::rag::{RagStoreBuilder, ChunkingOptions};
+use rs_agent::agent::rag::{ChunkingOptions, RagStoreBuilder};
+use rs_agent::agent::tools::{ReadDocumentTool, WriteDocumentTool};
 use rs_agent::config::McpConfig;
 use rs_agent::mcp::client::McpClient;
 use std::env;
@@ -15,8 +17,8 @@ async fn main() -> Result<()> {
 
     let embedding_model_name = env::var("EMBEDDING_MODEL")
         .unwrap_or_else(|_| "text-embedding-embeddinggemma-300m-qa".to_string());
-    let chat_model_name = env::var("CHAT_MODEL")
-        .unwrap_or_else(|_| "google/gemma-4-e4b".to_string());
+    let chat_model_name =
+        env::var("CHAT_MODEL").unwrap_or_else(|_| "google/gemma-4-e4b".to_string());
     let rag_top_k = env::var("RAG_TOP_K")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -30,7 +32,7 @@ async fn main() -> Result<()> {
     let embedding_model = client.embedding_model(embedding_model_name);
     let embedding_service = EmbeddingService::new(embedding_model.clone());
 
-    let mcp_client = McpClient::new(McpConfig::from_path("./mcp.json").unwrap())
+    let mut tools = McpClient::new(McpConfig::from_path("./mcp.json").unwrap())
         .tools()
         .await?;
 
@@ -40,26 +42,27 @@ async fn main() -> Result<()> {
             chunk_words: 220,
             chunk_overlap_words: 40,
         })
-        .add_pdf("./Stellaron Architecture Overview.pdf")?
         .add_pdf("./Orientation-ASEAN-AI-HACKATHON-14.4.2026.pdf")?
         .build_index()
         .await?;
 
+    let internal_tools: Vec<Box<dyn ToolDyn>> =
+        vec![Box::new(ReadDocumentTool), Box::new(WriteDocumentTool)];
+    tools.extend(internal_tools);
+
     let agent = client
         .agent(&chat_model_name)
-        .tools(mcp_client)
+        .tools(tools)
         .preamble(
-            "You are a helpful RAG assistant. Answer using the retrieved PDF context first, cite\n\
-             the source chunk when possible, and say when the documents do not contain enough\n\
-             information to answer confidently.",
+            "You are a helpful AI agent \
+            capable of RAG and reading documents \
+            using internal tools.",
         )
         .dynamic_context(rag_top_k, index)
         .temperature(0.6)
         .build();
 
-    let chatbot = ChatBotBuilder::new()
-        .agent(agent)
-        .build();
+    let chatbot = ChatBotBuilder::new().agent(agent).build();
 
     chatbot.run().await?;
 
