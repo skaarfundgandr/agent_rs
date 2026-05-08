@@ -1,8 +1,8 @@
 use anyhow::Context;
 use reqwest::header::{HeaderName, HeaderValue};
-use rs_agent::domain::config::McpConfig;
-use rs_agent::domain::mcp::McpTransportKind;
-use rs_agent::mcp::registry::McpRegistry;
+use rs_agent_lib::domain::config::McpConfig;
+use rs_agent_lib::domain::mcp::McpTransportKind;
+use rs_agent_lib::mcp::registry::McpRegistry;
 use serde_json::json;
 use std::collections::HashMap;
 use std::str::FromStr;

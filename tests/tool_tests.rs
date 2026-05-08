@@ -1,5 +1,5 @@
 use rig::tool::Tool;
-use rs_agent::agent::tools::document::{
+use rs_agent_lib::agent::tools::document::{
     ReadDocumentArgs, ReadDocumentTool, WriteDocumentArgs, WriteDocumentTool,
 };
 use std::fs;

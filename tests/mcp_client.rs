@@ -1,5 +1,5 @@
-use rs_agent::domain::config::McpConfig;
-use rs_agent::domain::mcp::{McpServerDef, McpTransportKind, McpTransportSpec};
+use rs_agent_lib::domain::config::McpConfig;
+use rs_agent_lib::domain::mcp::{McpServerDef, McpTransportKind, McpTransportSpec};
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
