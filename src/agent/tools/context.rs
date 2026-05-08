@@ -1,6 +1,7 @@
 use crate::domain::errors::CompactError;
-use rig::completion::{CompletionModel, Prompt, ToolDefinition};
+use rig::completion::{Prompt, ToolDefinition};
 use rig::tool::Tool;
+use rig::wasm_compat::{WasmCompatSend, WasmCompatSync};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -9,17 +10,17 @@ pub struct CompactArgs {
     pub text: String,
 }
 
-pub struct CompactTool<M: CompletionModel> {
+pub struct CompactTool<M: Prompt + WasmCompatSend + WasmCompatSync + 'static> {
     model: M,
 }
 
-impl<M: CompletionModel> CompactTool<M> {
+impl<M: Prompt + WasmCompatSend + WasmCompatSync + 'static> CompactTool<M> {
     pub fn new(model: M) -> Self {
         Self { model }
     }
 }
 
-impl<M: CompletionModel + Prompt + Send + Sync> Tool for CompactTool<M> {
+impl<M: Prompt + WasmCompatSend + WasmCompatSync + 'static> Tool for CompactTool<M> {
     const NAME: &'static str = "compact";
 
     type Error = CompactError;

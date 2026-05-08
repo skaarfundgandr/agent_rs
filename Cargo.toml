@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
+name = "rs_agent_lib"
 crate-type = ["cdylib", "rlib"]
 
 [profile.release]
@@ -16,7 +17,13 @@ strip = true
 anyhow = "1.0.102"
 dotenvy = "0.15.7"
 rig-core = { version = "0.36.0", features = ["rmcp"] }
-rmcp = { version = "1.5.0", features = ["client", "macros", "transport-streamable-http-client-reqwest", "transport-streamable-http-server", "transport-child-process"] }
+rmcp = { version = "1.6.0", features = [
+    "client",
+    "macros",
+    "transport-streamable-http-client-reqwest",
+    "transport-streamable-http-server",
+    "transport-child-process",
+] }
 tokio = { version = "1.52.1", features = ["full"] }
 serde = { version = "1.0.218", features = ["derive"] }
 serde_json = "1.0.139"
@@ -25,4 +32,4 @@ reqwest = { version = "0.13.3", features = ["json", "stream"] }
 async-trait = "0.1.89"
 pdf-extract = "0.10.0"
 schemars = "1.2.1"
-thiserror = "2.0.12"
+thiserror = "2.0.18"

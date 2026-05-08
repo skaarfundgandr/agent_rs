@@ -4,11 +4,11 @@ use rig::integrations::cli_chatbot::ChatBotBuilder;
 use rig::prelude::*;
 use rig::providers::openai;
 use rig::tool::ToolDyn;
-use rs_agent::agent::embeddings::EmbeddingService;
-use rs_agent::agent::rag::{ChunkingOptions, RagStoreBuilder};
-use rs_agent::agent::tools::{ReadDocumentTool, WriteDocumentTool};
-use rs_agent::config::McpConfig;
-use rs_agent::mcp::client::McpClient;
+use rs_agent_lib::agent::embeddings::EmbeddingService;
+use rs_agent_lib::agent::rag::{ChunkingOptions, RagStoreBuilder};
+use rs_agent_lib::agent::tools::{CompactTool, ReadDocumentTool, WriteDocumentTool};
+use rs_agent_lib::config::McpConfig;
+use rs_agent_lib::mcp::client::McpClient;
 use std::env;
 
 #[tokio::main]
@@ -36,6 +36,14 @@ async fn main() -> Result<()> {
         .tools()
         .await?;
 
+    let compaction_tool = CompactTool::new(
+        client
+            .agent(&chat_model_name)
+            .default_max_turns(20)
+            .preamble("You are a summarization assistant.")
+            .build(),
+    );
+
     // Build RAG index using the new ergonomic builder from the agent module
     let index = RagStoreBuilder::new(embedding_service)
         .with_chunking(ChunkingOptions {
@@ -50,6 +58,8 @@ async fn main() -> Result<()> {
         vec![Box::new(ReadDocumentTool), Box::new(WriteDocumentTool)];
     tools.extend(internal_tools);
 
+    tools.push(Box::new(compaction_tool));
+
     let agent = client
         .agent(&chat_model_name)
         .tools(tools)
@@ -59,6 +69,7 @@ async fn main() -> Result<()> {
             using internal tools.",
         )
         .dynamic_context(rag_top_k, index)
+        .default_max_turns(20)
         .temperature(0.6)
         .build();
 
