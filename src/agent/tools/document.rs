@@ -1,10 +1,10 @@
-use std::fs;
-use std::path::Path;
-use rig::tool::Tool;
-use rig::completion::ToolDefinition;
-use serde_json::json;
 use crate::agent::rag::extract_pdf_text;
 use crate::domain::errors::DocumentError;
+use rig::completion::ToolDefinition;
+use rig::tool::Tool;
+use serde_json::json;
+use std::fs;
+use std::path::Path;
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct ReadDocumentArgs {
@@ -30,7 +30,9 @@ impl Tool for ReadDocumentTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Read the content of a document or text file. Supports .txt, .md, and .pdf.".to_string(),
+            description:
+                "Read the content of a document or text file. Supports .txt, .md, and .pdf."
+                    .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -46,19 +48,14 @@ impl Tool for ReadDocumentTool {
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let path = Path::new(&args.path);
-        let extension = path.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
+        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
         match extension {
             "txt" | "md" => {
                 let content = fs::read_to_string(path)?;
                 Ok(content)
             }
-            "pdf" => {
-                extract_pdf_text(path)
-                    .map_err(|e| DocumentError::Pdf(e.to_string()))
-            }
+            "pdf" => extract_pdf_text(path).map_err(|e| DocumentError::Pdf(e.to_string())),
             _ => Err(DocumentError::UnsupportedExtension(extension.to_string())),
         }
     }
@@ -100,7 +97,7 @@ impl Tool for WriteDocumentTool {
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let path = Path::new(&args.path);
-        
+
         if let Some(true) = args.append {
             let mut options = fs::OpenOptions::new();
             options.append(true).create(true);

@@ -1,8 +1,8 @@
-use rig::embeddings::embed::{EmbedError, TextEmbedder};
-use std::result::Result as StdResult;
 use rig::Embed;
+use rig::embeddings::embed::{EmbedError, TextEmbedder};
 use rig::embeddings::{Embedding, EmbeddingModel};
 use rs_agent::agent::embeddings::EmbeddingService;
+use std::result::Result as StdResult;
 
 #[derive(Clone)]
 struct MockEmbeddingModel;

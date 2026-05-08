@@ -1,9 +1,9 @@
-use std::str::FromStr;
-use anyhow::Result;
-use rig::tool::ToolDyn;
-use crate::mcp::registry::{McpRegistry, McpRegistryRuntime};
 use crate::domain::config::McpConfig;
 use crate::domain::mcp::{McpServerDef, ResolvedMcpServer};
+use crate::mcp::registry::{McpRegistry, McpRegistryRuntime};
+use anyhow::Result;
+use rig::tool::ToolDyn;
+use std::str::FromStr;
 
 pub struct McpClient {
     pub config: McpConfig,
@@ -54,7 +54,7 @@ impl FromStr for McpClient {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok( Self {
+        Ok(Self {
             config: McpConfig::from_str(s)?,
         })
     }

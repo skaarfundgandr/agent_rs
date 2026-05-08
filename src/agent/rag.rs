@@ -1,13 +1,11 @@
-use anyhow::{bail, Context, Result};
-use pdf_extract::extract_text;
-use rig::{
-    embeddings::EmbeddingModel,
-    vector_store::in_memory_store::InMemoryVectorStore,
-    OneOrMany,
-};
-use std::path::Path;
 use crate::agent::embeddings::EmbeddingService;
 pub use crate::domain::rag::ChunkingOptions;
+use anyhow::{Context, Result, bail};
+use pdf_extract::extract_text;
+use rig::{
+    OneOrMany, embeddings::EmbeddingModel, vector_store::in_memory_store::InMemoryVectorStore,
+};
+use std::path::Path;
 
 /// A builder for creating a RAG-enabled vector store.
 pub struct RagStoreBuilder<M: EmbeddingModel> {
@@ -52,9 +50,8 @@ impl<M: EmbeddingModel> RagStoreBuilder<M> {
                 continue;
             }
 
-            self.documents.push(format!(
-                "[source: {source} | chunk: {chunk_idx}]\n{chunk}"
-            ));
+            self.documents
+                .push(format!("[source: {source} | chunk: {chunk_idx}]\n{chunk}"));
         }
 
         Ok(self)
@@ -72,8 +69,11 @@ impl<M: EmbeddingModel> RagStoreBuilder<M> {
             bail!("no embeddable text was provided or extracted");
         }
 
-        let embeddings = self.embedding_service.embed_texts(self.documents.clone()).await?;
-        
+        let embeddings = self
+            .embedding_service
+            .embed_texts(self.documents.clone())
+            .await?;
+
         let mut vector_store = InMemoryVectorStore::<String>::default();
         vector_store.add_documents(
             self.documents
@@ -86,8 +86,12 @@ impl<M: EmbeddingModel> RagStoreBuilder<M> {
     }
 
     /// Build the vector store and return an index for the given model.
-    pub async fn build_index(self) -> Result<rig::vector_store::in_memory_store::InMemoryVectorIndex<M, String>> 
-    where M: Clone {
+    pub async fn build_index(
+        self,
+    ) -> Result<rig::vector_store::in_memory_store::InMemoryVectorIndex<M, String>>
+    where
+        M: Clone,
+    {
         let model = self.embedding_service.model().clone();
         let vector_store = self.build().await?;
         Ok(vector_store.index(model))

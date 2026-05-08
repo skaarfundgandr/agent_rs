@@ -1,9 +1,9 @@
+use rs_agent::domain::config::McpConfig;
 use rs_agent::domain::mcp::{McpServerDef, McpTransportKind, McpTransportSpec};
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use rs_agent::domain::config::McpConfig;
 
 #[test]
 fn parses_stdio_server() {
@@ -20,7 +20,7 @@ fn parses_stdio_server() {
                 }
             }"#,
     )
-        .expect("config should parse");
+    .expect("config should parse");
 
     let server = config.server("memory").expect("server exists");
     assert_eq!(server.transport_kind().unwrap(), McpTransportKind::Stdio);
@@ -29,7 +29,10 @@ fn parses_stdio_server() {
         McpTransportSpec::Stdio(spec) => {
             assert_eq!(spec.command, "npx");
             assert_eq!(spec.args, vec!["-y", "@modelcontextprotocol/server-memory"]);
-            assert_eq!(spec.env.get("MEMORY_PATH").map(String::as_str), Some("/tmp/memory"));
+            assert_eq!(
+                spec.env.get("MEMORY_PATH").map(String::as_str),
+                Some("/tmp/memory")
+            );
         }
         _ => panic!("expected stdio transport"),
     }
@@ -50,15 +53,21 @@ fn parses_streamable_http_server() {
                 }
             }"#,
     )
-        .expect("config should parse");
+    .expect("config should parse");
 
     let server = config.server("remote").expect("server exists");
-    assert_eq!(server.transport_kind().unwrap(), McpTransportKind::StreamableHttp);
+    assert_eq!(
+        server.transport_kind().unwrap(),
+        McpTransportKind::StreamableHttp
+    );
 
     match server.transport_spec().unwrap() {
         McpTransportSpec::StreamableHttp(spec) => {
             assert_eq!(spec.url.as_str(), "http://localhost:3000/mcp");
-            assert_eq!(spec.headers.get("X-API-Key").map(String::as_str), Some("secret"));
+            assert_eq!(
+                spec.headers.get("X-API-Key").map(String::as_str),
+                Some("secret")
+            );
         }
         _ => panic!("expected streamable http transport"),
     }
@@ -76,10 +85,12 @@ fn rejects_mixed_transport_fields() {
                 }
             }"#,
     )
-        .expect_err("mixed config should fail");
+    .expect_err("mixed config should fail");
 
     let message = err.to_string();
-    assert!(message.contains("invalid MCP server `broken`") || message.contains("server definition"));
+    assert!(
+        message.contains("invalid MCP server `broken`") || message.contains("server definition")
+    );
 }
 
 #[test]

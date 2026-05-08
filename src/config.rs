@@ -1,8 +1,11 @@
-use anyhow::{bail, Context, Result};
+pub use crate::domain::config::McpConfig;
+use crate::domain::mcp::{
+    McpServerDef, McpStdioTransportSpec, McpStreamableHttpTransportSpec, McpTransportSpec,
+    ResolvedMcpServer,
+};
+use anyhow::{Context, Result, bail};
 use std::path::Path;
 use std::str::FromStr;
-use crate::domain::mcp::{McpServerDef, ResolvedMcpServer, McpTransportSpec, McpStdioTransportSpec, McpStreamableHttpTransportSpec};
-pub use crate::domain::config::McpConfig;
 use url::Url;
 
 impl McpConfig {
@@ -19,7 +22,9 @@ impl McpConfig {
         }
 
         for (name, server) in &self.mcp_servers {
-            server.validate().with_context(|| format!("invalid MCP server `{name}`"))?;
+            server
+                .validate()
+                .with_context(|| format!("invalid MCP server `{name}`"))?;
         }
 
         Ok(())
@@ -62,8 +67,12 @@ impl McpServerDef {
         match (self.command.is_some(), self.url.is_some()) {
             (true, false) => Ok(crate::domain::mcp::McpTransportKind::Stdio),
             (false, true) => Ok(crate::domain::mcp::McpTransportKind::StreamableHttp),
-            (true, true) => bail!("server definition mixes stdio `command` fields with remote `url` fields"),
-            (false, false) => bail!("server definition must define either a stdio `command` or a remote `url`"),
+            (true, true) => {
+                bail!("server definition mixes stdio `command` fields with remote `url` fields")
+            }
+            (false, false) => {
+                bail!("server definition must define either a stdio `command` or a remote `url`")
+            }
         }
     }
 
@@ -80,7 +89,10 @@ impl McpServerDef {
                 }
             }
             crate::domain::mcp::McpTransportKind::StreamableHttp => {
-                let url = self.url.as_ref().context("HTTP MCP servers must include a `url`")?;
+                let url = self
+                    .url
+                    .as_ref()
+                    .context("HTTP MCP servers must include a `url`")?;
                 Url::parse(url).with_context(|| format!("invalid MCP server URL `{url}`"))?;
 
                 if self.command.is_some() {
@@ -108,13 +120,19 @@ impl McpServerDef {
                 }))
             }
             crate::domain::mcp::McpTransportKind::StreamableHttp => {
-                let url = self.url.clone().context("HTTP MCP servers must include a `url`")?;
-                let parsed_url = Url::parse(&url).with_context(|| format!("invalid MCP server URL `{url}`"))?;
+                let url = self
+                    .url
+                    .clone()
+                    .context("HTTP MCP servers must include a `url`")?;
+                let parsed_url =
+                    Url::parse(&url).with_context(|| format!("invalid MCP server URL `{url}`"))?;
 
-                Ok(McpTransportSpec::StreamableHttp(McpStreamableHttpTransportSpec {
-                    url: parsed_url,
-                    headers: self.headers.clone(),
-                }))
+                Ok(McpTransportSpec::StreamableHttp(
+                    McpStreamableHttpTransportSpec {
+                        url: parsed_url,
+                        headers: self.headers.clone(),
+                    },
+                ))
             }
         }
     }
@@ -122,7 +140,9 @@ impl McpServerDef {
     pub fn build_stdio_command(&self) -> Result<std::process::Command> {
         let transport = match self.transport_spec()? {
             McpTransportSpec::Stdio(transport) => transport,
-            McpTransportSpec::StreamableHttp(_) => bail!("remote MCP servers do not have a stdio command"),
+            McpTransportSpec::StreamableHttp(_) => {
+                bail!("remote MCP servers do not have a stdio command")
+            }
         };
 
         let mut command = std::process::Command::new(&transport.command);

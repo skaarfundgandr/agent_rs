@@ -1,5 +1,7 @@
-use rs_agent::agent::tools::document::{ReadDocumentTool, WriteDocumentTool, ReadDocumentArgs, WriteDocumentArgs};
 use rig::tool::Tool;
+use rs_agent::agent::tools::document::{
+    ReadDocumentArgs, ReadDocumentTool, WriteDocumentArgs, WriteDocumentTool,
+};
 use std::fs;
 
 #[tokio::test]
@@ -7,10 +9,12 @@ async fn test_read_txt() {
     let tool = ReadDocumentTool;
     let path = "test_read.txt";
     fs::write(path, "Hello World").unwrap();
-    
-    let args = ReadDocumentArgs { path: path.to_string() };
+
+    let args = ReadDocumentArgs {
+        path: path.to_string(),
+    };
     let result = tool.call(args).await.unwrap();
-    
+
     assert_eq!(result, "Hello World");
     fs::remove_file(path).unwrap();
 }
@@ -19,10 +23,12 @@ async fn test_read_txt() {
 async fn test_read_pdf() {
     let tool = ReadDocumentTool;
     let path = "Stellaron Architecture Overview.pdf";
-    
-    let args = ReadDocumentArgs { path: path.to_string() };
+
+    let args = ReadDocumentArgs {
+        path: path.to_string(),
+    };
     let result = tool.call(args).await.unwrap();
-    
+
     assert!(!result.is_empty());
     assert!(result.contains("Stellaron"));
 }
@@ -31,7 +37,7 @@ async fn test_read_pdf() {
 async fn test_write_document() {
     let tool = WriteDocumentTool;
     let path = "test_write.txt";
-    
+
     // Test overwrite
     let args = WriteDocumentArgs {
         path: path.to_string(),
@@ -39,7 +45,7 @@ async fn test_write_document() {
         append: None,
     };
     tool.call(args).await.unwrap();
-    
+
     // Test append
     let args = WriteDocumentArgs {
         path: path.to_string(),
@@ -47,7 +53,7 @@ async fn test_write_document() {
         append: Some(true),
     };
     tool.call(args).await.unwrap();
-    
+
     let content = fs::read_to_string(path).unwrap();
     assert_eq!(content, "First line\nSecond line");
     fs::remove_file(path).unwrap();

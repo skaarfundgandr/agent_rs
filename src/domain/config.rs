@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use crate::domain::mcp::McpServerDef;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct McpConfig {

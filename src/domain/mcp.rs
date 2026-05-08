@@ -8,7 +8,12 @@ use url::Url;
 #[serde(rename_all = "kebab-case")]
 pub enum McpTransportKind {
     Stdio,
-    #[serde(alias = "http", alias = "jsonrpc", alias = "json-rpc", alias = "streamable_http")]
+    #[serde(
+        alias = "http",
+        alias = "jsonrpc",
+        alias = "json-rpc",
+        alias = "streamable_http"
+    )]
     StreamableHttp,
 }
 
@@ -61,7 +66,7 @@ pub struct McpStreamableHttpTransportSpec {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegisteredMcpServer {
-	pub name: String,
-	pub transport: McpTransportSpec,
-	pub tool_names: Vec<String>,
+    pub name: String,
+    pub transport: McpTransportSpec,
+    pub tool_names: Vec<String>,
 }

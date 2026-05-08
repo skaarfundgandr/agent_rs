@@ -1,8 +1,8 @@
-use rig::completion::{CompletionModel, ToolDefinition, Prompt};
+use crate::domain::errors::CompactError;
+use rig::completion::{CompletionModel, Prompt, ToolDefinition};
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use crate::domain::errors::CompactError;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CompactArgs {
@@ -46,11 +46,14 @@ impl<M: CompletionModel + Prompt + Send + Sync> Tool for CompactTool<M> {
     async fn call(&self, args: CompactArgs) -> Result<Self::Output, Self::Error> {
         let prompt_text = format!(
             "Summarize the following conversation history while preserving key information, \
-            names, dates, and important technical details. Keep the summary concise:\n\n{}", 
+            names, dates, and important technical details. Keep the summary concise:\n\n{}",
             args.text
         );
 
-        let response = self.model.prompt(&prompt_text).await
+        let response = self
+            .model
+            .prompt(&prompt_text)
+            .await
             .map_err(|e| CompactError::Model(e.to_string()))?;
 
         Ok(response)
