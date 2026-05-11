@@ -167,7 +167,7 @@ where
         }
 
         let mut result = Vec::with_capacity(prepared.len());
-        for ((document, _), embeddings) in prepared.into_iter().zip(grouped.into_iter()) {
+        for ((document, _), embeddings) in prepared.into_iter().zip(grouped) {
             let embeddings = OneOrMany::many(embeddings)
                 .context("a document was expected to have at least one embedding")?;
             result.push((document, embeddings));
