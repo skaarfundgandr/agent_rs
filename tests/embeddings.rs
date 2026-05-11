@@ -1,7 +1,7 @@
+use agent_rs_lib::agent::embeddings::EmbeddingService;
 use rig::Embed;
 use rig::embeddings::embed::{EmbedError, TextEmbedder};
 use rig::embeddings::{Embedding, EmbeddingModel};
-use rs_agent_lib::agent::embeddings::EmbeddingService;
 use std::result::Result as StdResult;
 
 #[derive(Clone)]

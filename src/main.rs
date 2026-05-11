@@ -1,14 +1,14 @@
+use agent_rs_lib::agent::embeddings::EmbeddingService;
+use agent_rs_lib::agent::rag::{ChunkingOptions, RagStoreBuilder};
+use agent_rs_lib::agent::tools::{CompactTool, ReadDocumentTool, WriteDocumentTool};
+use agent_rs_lib::config::McpConfig;
+use agent_rs_lib::mcp::client::McpClient;
 use anyhow::Result;
 use dotenvy::dotenv;
 use rig::integrations::cli_chatbot::ChatBotBuilder;
 use rig::prelude::*;
 use rig::providers::openai;
 use rig::tool::ToolDyn;
-use rs_agent_lib::agent::embeddings::EmbeddingService;
-use rs_agent_lib::agent::rag::{ChunkingOptions, RagStoreBuilder};
-use rs_agent_lib::agent::tools::{CompactTool, ReadDocumentTool, WriteDocumentTool};
-use rs_agent_lib::config::McpConfig;
-use rs_agent_lib::mcp::client::McpClient;
 use std::env;
 
 #[tokio::main]

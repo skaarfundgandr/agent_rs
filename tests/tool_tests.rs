@@ -1,7 +1,7 @@
-use rig::tool::Tool;
-use rs_agent_lib::agent::tools::document::{
+use agent_rs_lib::agent::tools::document::{
     ReadDocumentArgs, ReadDocumentTool, WriteDocumentArgs, WriteDocumentTool,
 };
+use rig::tool::Tool;
 use std::fs;
 
 #[tokio::test]

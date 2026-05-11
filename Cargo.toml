@@ -1,10 +1,10 @@
 [package]
-name = "rs_agent"
+name = "agent_rs"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "rs_agent_lib"
+name = "agent_rs_lib"
 crate-type = ["cdylib", "rlib"]
 
 [profile.release]
