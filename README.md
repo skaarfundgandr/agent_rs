@@ -75,7 +75,13 @@ agent_rs = { git = "https://github.com/skaarfundgandr/agent_rs.git" }
 
 ## 🛠️ Usage
 
-Running the built-in CLI chatbot is simple. Ensure your `.env` is configured and an MCP server configuration is present in `mcp.json`.
+Running the built-in CLI chatbot is simple:
+
+1. Ensure your `.env` is configured.
+2. Set up your MCP servers. Copy `mcp.json.example` to `mcp.json` and customize it with your MCP server details:
+   ```bash
+   cp mcp.json.example mcp.json
+   ```
 
 ### Running the Agent
 ```bash

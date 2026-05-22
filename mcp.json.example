@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "weather-stdio-example": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/path/to/weather-mcp-server/build/index.js"
+      ],
+      "env": {
+        "WEATHER_API_KEY": "your_api_key_here"
+      },
+      "cwd": "/path/to/weather-mcp-server"
+    },
+    "context7-http-example": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "your_context7_api_key_here"
+      }
+    }
+  }
+}
