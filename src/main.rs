@@ -46,7 +46,9 @@ async fn main() -> Result<()> {
     );
 
     // Build RAG index using the new decoupled pipeline
-    let pdf_document = PdfLoader::new().load(std::path::Path::new("./Orientation-ASEAN-AI-HACKATHON-14.4.2026.pdf"))?;
+    let pdf_document = PdfLoader::new().load(std::path::Path::new(
+        "./Orientation-ASEAN-AI-HACKATHON-14.4.2026.pdf",
+    ))?;
     let splitter = WordSplitter::new(220, 40);
 
     let index = RagPipeline::new()

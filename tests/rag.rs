@@ -39,10 +39,7 @@ impl EmbeddingModel for MockEmbeddingModel {
 
 #[test]
 fn test_text_loader_and_splitter() {
-    let temp_file = tempfile::Builder::new()
-        .suffix(".md")
-        .tempfile()
-        .unwrap();
+    let temp_file = tempfile::Builder::new().suffix(".md").tempfile().unwrap();
     let test_file = temp_file.path();
     fs::write(test_file, "This is a test file for the RAG text loader.").unwrap();
 
@@ -70,12 +67,13 @@ fn test_text_loader_and_splitter() {
 
 #[tokio::test]
 async fn test_rag_pipeline_building() {
-    let temp_file = tempfile::Builder::new()
-        .suffix(".txt")
-        .tempfile()
-        .unwrap();
+    let temp_file = tempfile::Builder::new().suffix(".txt").tempfile().unwrap();
     let test_file = temp_file.path();
-    fs::write(test_file, "Rust is a systems programming language focusing on safety and speed.").unwrap();
+    fs::write(
+        test_file,
+        "Rust is a systems programming language focusing on safety and speed.",
+    )
+    .unwrap();
 
     let loader = TextLoader::new();
     let doc = loader.load(test_file).unwrap();
@@ -96,9 +94,12 @@ async fn test_rag_pipeline_building() {
         .samples(1)
         .build();
 
-    let results = index.top_n::<String>(req).await.expect("Search should succeed");
+    let results = index
+        .top_n::<String>(req)
+        .await
+        .expect("Search should succeed");
     assert!(!results.is_empty());
-    
+
     // First result should have the correct score and content
     let (_score, _id, document) = &results[0];
     let source_name = test_file.file_name().unwrap().to_str().unwrap();
@@ -114,7 +115,7 @@ async fn test_rag_pipeline_custom_formatter() {
         metadata: std::collections::HashMap::new(),
     };
     let splitter = WordSplitter::new(5, 1);
-    
+
     let embedding_service = EmbeddingService::new(MockEmbeddingModel);
     let store = RagPipeline::new()
         .add_document(&doc, &splitter)

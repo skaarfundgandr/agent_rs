@@ -12,7 +12,7 @@ async fn test_read_txt() {
         temp_dir.path(),
         HashSet::from(["txt", "md", "pdf"].map(String::from)),
     );
-    
+
     let file_path = temp_dir.path().join("test_read.txt");
     fs::write(&file_path, "Hello World").unwrap();
 
@@ -27,10 +27,7 @@ async fn test_read_txt() {
 #[tokio::test]
 #[ignore]
 async fn test_read_pdf() {
-    let tool = ReadDocumentTool::new(
-        "./",
-        HashSet::from(["txt", "md", "pdf"].map(String::from)),
-    );
+    let tool = ReadDocumentTool::new("./", HashSet::from(["txt", "md", "pdf"].map(String::from)));
     let path = "Stellaron Architecture Overview.pdf";
 
     let args = ReadDocumentArgs {
@@ -81,10 +78,16 @@ async fn test_sandbox_escape_read() {
     let args = ReadDocumentArgs {
         path: "../escaped.txt".to_string(),
     };
-    let err = tool.call(args).await.expect_err("should reject path traversal");
-    
+    let err = tool
+        .call(args)
+        .await
+        .expect_err("should reject path traversal");
+
     assert!(
-        matches!(err, agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)),
+        matches!(
+            err,
+            agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
+        ),
         "Expected SandboxEscape error, got {:?}",
         err
     );
@@ -103,10 +106,16 @@ async fn test_sandbox_escape_write() {
         content: "malicious".to_string(),
         append: None,
     };
-    let err = tool.call(args).await.expect_err("should reject path traversal");
+    let err = tool
+        .call(args)
+        .await
+        .expect_err("should reject path traversal");
 
     assert!(
-        matches!(err, agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)),
+        matches!(
+            err,
+            agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
+        ),
         "Expected SandboxEscape error, got {:?}",
         err
     );

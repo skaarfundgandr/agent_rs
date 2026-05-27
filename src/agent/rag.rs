@@ -59,7 +59,7 @@ impl DocumentLoader for TextLoader {
     fn load(&self, path: &Path) -> Result<Document> {
         let content = fs::read_to_string(path)
             .with_context(|| format!("Failed to read text file: {:?}", path))?;
-        
+
         let source_name = path
             .file_name()
             .and_then(|name| name.to_str())
@@ -76,10 +76,7 @@ impl DocumentLoader for TextLoader {
         metadata.insert("source".to_string(), source_name);
         metadata.insert("file_type".to_string(), file_type);
 
-        Ok(Document {
-            content,
-            metadata,
-        })
+        Ok(Document { content, metadata })
     }
 }
 
@@ -138,7 +135,7 @@ impl TextSplitter for WordSplitter {
         while start < words.len() {
             let end = (start + self.chunk_words).min(words.len());
             let chunk_text = words[start..end].join(" ");
-            
+
             if !chunk_text.trim().is_empty() {
                 let chunk_idx = chunks.len();
                 let mut metadata = HashMap::new();
@@ -203,8 +200,16 @@ impl RagPipeline {
         embedding_service: &EmbeddingService<M>,
     ) -> Result<InMemoryVectorStore<String>> {
         self.build_store_with_formatter(embedding_service, |chunk| {
-            let source = chunk.metadata.get("source").map(|s| s.as_str()).unwrap_or("unknown");
-            let chunk_idx = chunk.metadata.get("chunk_index").map(|s| s.as_str()).unwrap_or("0");
+            let source = chunk
+                .metadata
+                .get("source")
+                .map(|s| s.as_str())
+                .unwrap_or("unknown");
+            let chunk_idx = chunk
+                .metadata
+                .get("chunk_index")
+                .map(|s| s.as_str())
+                .unwrap_or("0");
             format!("[source: {source} | chunk: {chunk_idx}]\n{}", chunk.text)
         })
         .await
@@ -260,13 +265,15 @@ impl RagPipeline {
         F: Fn(&Chunk) -> String,
     {
         let model = embedding_service.model().clone();
-        let store = self.build_store_with_formatter(embedding_service, formatter).await?;
+        let store = self
+            .build_store_with_formatter(embedding_service, formatter)
+            .await?;
         Ok(store.index(model))
     }
 }
 
 /// A builder for creating a RAG-enabled vector store.
-/// 
+///
 /// # Deprecated
 /// Prefer using [`PdfLoader`], [`WordSplitter`], and [`RagPipeline`] instead.
 #[deprecated(since = "0.2.0", note = "use PdfLoader and RagPipeline instead")]
@@ -296,12 +303,26 @@ impl<M: EmbeddingModel> RagStoreBuilder<M> {
     /// Load and chunk a PDF file, adding it to the store.
     pub fn add_pdf<P: AsRef<Path>>(mut self, path: P) -> Result<Self> {
         let doc = PdfLoader.load(path.as_ref())?;
-        let splitter = WordSplitter::new(self.chunking_options.chunk_words, self.chunking_options.chunk_overlap_words);
+        let splitter = WordSplitter::new(
+            self.chunking_options.chunk_words,
+            self.chunking_options.chunk_overlap_words,
+        );
         let chunks = splitter.split(&doc);
         for chunk in chunks {
-            let source = chunk.metadata.get("source").map(|s| s.as_str()).unwrap_or("unknown");
-            let chunk_idx = chunk.metadata.get("chunk_index").map(|s| s.as_str()).unwrap_or("0");
-            self.documents.push(format!("[source: {source} | chunk: {chunk_idx}]\n{}", chunk.text));
+            let source = chunk
+                .metadata
+                .get("source")
+                .map(|s| s.as_str())
+                .unwrap_or("unknown");
+            let chunk_idx = chunk
+                .metadata
+                .get("chunk_index")
+                .map(|s| s.as_str())
+                .unwrap_or("0");
+            self.documents.push(format!(
+                "[source: {source} | chunk: {chunk_idx}]\n{}",
+                chunk.text
+            ));
         }
         Ok(self)
     }

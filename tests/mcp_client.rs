@@ -87,7 +87,9 @@ fn rejects_mixed_transport_fields() {
     )
     .expect("config parsing should succeed");
 
-    let err = config.validate().expect_err("mixed config validation should fail");
+    let err = config
+        .validate()
+        .expect_err("mixed config validation should fail");
 
     let message = err.to_string();
     assert!(

@@ -26,10 +26,7 @@ pub struct ReadDocumentTool {
 }
 
 impl ReadDocumentTool {
-    pub fn new(
-        sandbox_root: impl Into<PathBuf>,
-        allowed_extensions: HashSet<String>,
-    ) -> Self {
+    pub fn new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>) -> Self {
         Self {
             sandbox_root: sandbox_root.into(),
             allowed_extensions,
@@ -45,7 +42,9 @@ impl Tool for ReadDocumentTool {
     type Output = String;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
-        let supported = self.allowed_extensions.iter()
+        let supported = self
+            .allowed_extensions
+            .iter()
             .map(|e| format!(".{e}"))
             .collect::<Vec<_>>()
             .join(", ");
@@ -93,10 +92,7 @@ pub struct WriteDocumentTool {
 }
 
 impl WriteDocumentTool {
-    pub fn new(
-        sandbox_root: impl Into<PathBuf>,
-        allowed_extensions: HashSet<String>,
-    ) -> Self {
+    pub fn new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>) -> Self {
         Self {
             sandbox_root: sandbox_root.into(),
             allowed_extensions,
@@ -112,7 +108,9 @@ impl Tool for WriteDocumentTool {
     type Output = String;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
-        let supported = self.allowed_extensions.iter()
+        let supported = self
+            .allowed_extensions
+            .iter()
             .map(|e| format!(".{e}"))
             .collect::<Vec<_>>()
             .join(", ");
@@ -165,8 +163,12 @@ impl Tool for WriteDocumentTool {
     }
 }
 
-fn validate_sandboxed_path(sandbox_root: &Path, user_path: &Path) -> Result<PathBuf, DocumentError> {
-    let canonical_root = sandbox_root.canonicalize()
+fn validate_sandboxed_path(
+    sandbox_root: &Path,
+    user_path: &Path,
+) -> Result<PathBuf, DocumentError> {
+    let canonical_root = sandbox_root
+        .canonicalize()
         .map_err(|e| DocumentError::Io(e))?;
 
     let target = sandbox_root.join(user_path);
@@ -188,7 +190,9 @@ fn validate_sandboxed_path(sandbox_root: &Path, user_path: &Path) -> Result<Path
             }
         }
 
-        let mut canonical_path = existing_parent.canonicalize().map_err(|e| DocumentError::Io(e))?;
+        let mut canonical_path = existing_parent
+            .canonicalize()
+            .map_err(|e| DocumentError::Io(e))?;
         for comp in components_to_append.into_iter().rev() {
             canonical_path.push(comp);
         }
@@ -196,9 +200,10 @@ fn validate_sandboxed_path(sandbox_root: &Path, user_path: &Path) -> Result<Path
     };
 
     if !canonical_target.starts_with(&canonical_root) {
-        return Err(DocumentError::SandboxEscape(
-            format!("Access denied: Path escapes sandbox: {}", user_path.display())
-        ));
+        return Err(DocumentError::SandboxEscape(format!(
+            "Access denied: Path escapes sandbox: {}",
+            user_path.display()
+        )));
     }
 
     Ok(canonical_target)

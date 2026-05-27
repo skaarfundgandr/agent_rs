@@ -16,9 +16,7 @@ pub struct CompactTool<M: Prompt + WasmCompatSend + WasmCompatSync + 'static> {
 
 impl<M: Prompt + WasmCompatSend + WasmCompatSync + 'static> std::fmt::Debug for CompactTool<M> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CompactTool")
-            .field("model", &"M")
-            .finish()
+        f.debug_struct("CompactTool").field("model", &"M").finish()
     }
 }
 

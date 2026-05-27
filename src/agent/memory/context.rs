@@ -139,7 +139,9 @@ impl<
                             // JSON estimation fallback
                             fallback_len += 100;
                         }
-                        Message::Assistant { content: _content , .. } => {
+                        Message::Assistant {
+                            content: _content, ..
+                        } => {
                             fallback_len += 100;
                         }
                     }
