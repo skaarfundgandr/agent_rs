@@ -39,14 +39,19 @@ impl EmbeddingModel for MockEmbeddingModel {
 
 #[test]
 fn test_text_loader_and_splitter() {
-    let test_file = Path::new("tests/temp_test_doc.md");
+    let temp_file = tempfile::Builder::new()
+        .suffix(".md")
+        .tempfile()
+        .unwrap();
+    let test_file = temp_file.path();
     fs::write(test_file, "This is a test file for the RAG text loader.").unwrap();
 
     let loader = TextLoader::new();
     let doc = loader.load(test_file).unwrap();
 
     assert_eq!(doc.content, "This is a test file for the RAG text loader.");
-    assert_eq!(doc.metadata.get("source").unwrap(), "temp_test_doc.md");
+    let source_name = test_file.file_name().unwrap().to_str().unwrap();
+    assert_eq!(doc.metadata.get("source").unwrap(), source_name);
     assert_eq!(doc.metadata.get("file_type").unwrap(), "md");
 
     // Test WordSplitter
@@ -59,15 +64,17 @@ fn test_text_loader_and_splitter() {
     // Chunk 3 (5 words): "text loader."
     assert!(chunks.len() >= 2);
     assert_eq!(chunks[0].text, "This is a test file");
-    assert_eq!(chunks[0].metadata.get("source").unwrap(), "temp_test_doc.md");
+    assert_eq!(chunks[0].metadata.get("source").unwrap(), source_name);
     assert_eq!(chunks[0].metadata.get("chunk_index").unwrap(), "0");
-
-    fs::remove_file(test_file).unwrap();
 }
 
 #[tokio::test]
 async fn test_rag_pipeline_building() {
-    let test_file = Path::new("tests/temp_test_doc2.txt");
+    let temp_file = tempfile::Builder::new()
+        .suffix(".txt")
+        .tempfile()
+        .unwrap();
+    let test_file = temp_file.path();
     fs::write(test_file, "Rust is a systems programming language focusing on safety and speed.").unwrap();
 
     let loader = TextLoader::new();
@@ -93,8 +100,38 @@ async fn test_rag_pipeline_building() {
     assert!(!results.is_empty());
     
     // First result should have the correct score and content
-    let (_score, id, document) = &results[0];
-    assert!(document.contains("temp_test_doc2.txt"));
+    let (_score, _id, document) = &results[0];
+    let source_name = test_file.file_name().unwrap().to_str().unwrap();
+    assert!(document.contains(source_name));
+}
 
-    fs::remove_file(test_file).unwrap();
+#[tokio::test]
+async fn test_rag_pipeline_custom_formatter() {
+    use agent_rs_lib::agent::rag::Document;
+
+    let doc = Document {
+        content: "Hello from custom formatter test".to_string(),
+        metadata: std::collections::HashMap::new(),
+    };
+    let splitter = WordSplitter::new(5, 1);
+    
+    let embedding_service = EmbeddingService::new(MockEmbeddingModel);
+    let store = RagPipeline::new()
+        .add_document(&doc, &splitter)
+        .build_store_with_formatter(&embedding_service, |chunk| {
+            format!("CUSTOM FORMAT: {}", chunk.text)
+        })
+        .await
+        .expect("Should build store with custom formatter");
+
+    let index = store.index(MockEmbeddingModel);
+    use rig::vector_store::{VectorStoreIndex, request::VectorSearchRequest};
+    let req = VectorSearchRequest::builder()
+        .query("custom")
+        .samples(1)
+        .build();
+    let results = index.top_n::<String>(req).await.unwrap();
+    assert!(!results.is_empty());
+    let (_score, _id, document) = &results[0];
+    assert_eq!(document, "CUSTOM FORMAT: Hello from custom formatter test");
 }

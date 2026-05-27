@@ -16,6 +16,7 @@ pub trait DocumentLoader {
 }
 
 /// Loader for PDF documents.
+#[derive(Default, Clone, Copy, Debug)]
 pub struct PdfLoader;
 
 impl PdfLoader {
@@ -45,6 +46,7 @@ impl DocumentLoader for PdfLoader {
 }
 
 /// Loader for plain text and markdown documents.
+#[derive(Default, Clone, Copy, Debug)]
 pub struct TextLoader;
 
 impl TextLoader {
@@ -88,6 +90,7 @@ pub trait TextSplitter {
 }
 
 /// Splitter that chunks text by word count with a sliding window.
+#[derive(Clone, Debug)]
 pub struct WordSplitter {
     chunk_words: usize,
     chunk_overlap_words: usize,
@@ -161,6 +164,7 @@ impl TextSplitter for WordSplitter {
 }
 
 /// Pipeline to collect chunks and build vector index stores.
+#[derive(Default, Clone, Debug)]
 pub struct RagPipeline {
     chunks: Vec<Chunk>,
 }
@@ -168,7 +172,7 @@ pub struct RagPipeline {
 impl RagPipeline {
     /// Create a new, empty RAG pipeline.
     pub fn new() -> Self {
-        Self { chunks: Vec::new() }
+        Self::default()
     }
 
     /// Add a collection of chunks directly to the pipeline.
@@ -198,20 +202,28 @@ impl RagPipeline {
         &self,
         embedding_service: &EmbeddingService<M>,
     ) -> Result<InMemoryVectorStore<String>> {
+        self.build_store_with_formatter(embedding_service, |chunk| {
+            let source = chunk.metadata.get("source").map(|s| s.as_str()).unwrap_or("unknown");
+            let chunk_idx = chunk.metadata.get("chunk_index").map(|s| s.as_str()).unwrap_or("0");
+            format!("[source: {source} | chunk: {chunk_idx}]\n{}", chunk.text)
+        })
+        .await
+    }
+
+    /// Build a Rig InMemoryVectorStore<String> by formatting chunk text + metadata using a custom formatter.
+    pub async fn build_store_with_formatter<M: EmbeddingModel, F>(
+        &self,
+        embedding_service: &EmbeddingService<M>,
+        formatter: F,
+    ) -> Result<InMemoryVectorStore<String>>
+    where
+        F: Fn(&Chunk) -> String,
+    {
         if self.chunks.is_empty() {
             bail!("cannot build store with empty chunks");
         }
 
-        // Format chunks into the standard text representation stored in vector index
-        let formatted_docs: Vec<String> = self
-            .chunks
-            .iter()
-            .map(|chunk| {
-                let source = chunk.metadata.get("source").map(|s| s.as_str()).unwrap_or("unknown");
-                let chunk_idx = chunk.metadata.get("chunk_index").map(|s| s.as_str()).unwrap_or("0");
-                format!("[source: {source} | chunk: {chunk_idx}]\n{}", chunk.text)
-            })
-            .collect();
+        let formatted_docs: Vec<String> = self.chunks.iter().map(formatter).collect();
 
         let embeddings = embedding_service
             .embed_texts(formatted_docs.clone())
@@ -235,6 +247,20 @@ impl RagPipeline {
     ) -> Result<rig::vector_store::in_memory_store::InMemoryVectorIndex<M, String>> {
         let model = embedding_service.model().clone();
         let store = self.build_store(embedding_service).await?;
+        Ok(store.index(model))
+    }
+
+    /// Build a Rig InMemoryVectorIndex<M, String> using the provided embedding service and a custom formatter.
+    pub async fn build_index_with_formatter<M: EmbeddingModel + Clone, F>(
+        &self,
+        embedding_service: &EmbeddingService<M>,
+        formatter: F,
+    ) -> Result<rig::vector_store::in_memory_store::InMemoryVectorIndex<M, String>>
+    where
+        F: Fn(&Chunk) -> String,
+    {
+        let model = embedding_service.model().clone();
+        let store = self.build_store_with_formatter(embedding_service, formatter).await?;
         Ok(store.index(model))
     }
 }

@@ -75,7 +75,7 @@ fn parses_streamable_http_server() {
 
 #[test]
 fn rejects_mixed_transport_fields() {
-    let err = McpConfig::from_str(
+    let config = McpConfig::from_str(
         r#"{
                 "mcpServers": {
                     "broken": {
@@ -85,7 +85,9 @@ fn rejects_mixed_transport_fields() {
                 }
             }"#,
     )
-    .expect_err("mixed config should fail");
+    .expect("config parsing should succeed");
+
+    let err = config.validate().expect_err("mixed config validation should fail");
 
     let message = err.to_string();
     assert!(

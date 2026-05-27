@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Document {
     pub content: String,
     pub metadata: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Chunk {
     pub text: String,
     pub metadata: HashMap<String, String>,

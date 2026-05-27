@@ -11,6 +11,7 @@ use rig::{Embed, OneOrMany, client::EmbeddingsClient};
 ///
 /// Prefer constructing the underlying provider outside this module and then passing the embedding
 /// model into [`EmbeddingService::new`].
+#[derive(Clone, Debug)]
 pub struct EmbeddingService<M> {
     model: M,
 }

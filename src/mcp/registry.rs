@@ -45,7 +45,7 @@ impl McpRegistry {
 
     /// Access the underlying parsed config.
     pub fn config(&self) -> &McpConfig {
-        &self.client.config
+        self.client.config()
     }
 
     /// Validate the registry configuration.
@@ -65,7 +65,7 @@ impl McpRegistry {
 
     /// Resolve every configured server into transport specs.
     pub fn resolved_servers(&self) -> Result<Vec<ResolvedMcpServer>> {
-        self.client.config.resolved_servers()
+        self.client.config().resolved_servers()
     }
 
     /// Return the configured server names.
@@ -351,18 +351,28 @@ impl From<McpStreamableHttpTransportSpec> for McpTransportSpec {
 impl FromStr for McpRegistry {
     type Err = anyhow::Error;
 
+    /// Parse and validate an MCP configuration, returning an initialized registry.
+    ///
+    /// # Errors
+    ///
+    /// This will return an error if the configuration JSON is invalid or if the validation fails.
     fn from_str(config: &str) -> Result<Self, Self::Err> {
-        Ok(Self::new(McpConfig::from_str(config)?))
+        let parsed = McpConfig::from_str(config)?;
+        parsed.validate()?;
+        Ok(Self::new(parsed))
     }
 }
 
 impl FromStr for McpConfig {
     type Err = anyhow::Error;
 
+    /// Parse an MCP configuration from a JSON string.
+    ///
+    /// Note: This parses the JSON structure but does not validate the server definitions.
+    /// Call `.validate()` to validate the configurations.
     fn from_str(config: &str) -> Result<Self, Self::Err> {
         let parsed: Self =
             serde_json::from_str(config).context("failed to parse MCP config JSON")?;
-        parsed.validate()?;
         Ok(parsed)
     }
 }
