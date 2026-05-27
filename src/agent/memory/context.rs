@@ -135,11 +135,11 @@ impl<
                 for m in history {
                     match m {
                         Message::System { content } => fallback_len += content.len(),
-                        Message::User { content } => {
+                        Message::User { content: _content } => {
                             // JSON estimation fallback
                             fallback_len += 100;
                         }
-                        Message::Assistant { content, .. } => {
+                        Message::Assistant { content: _content , .. } => {
                             fallback_len += 100;
                         }
                     }

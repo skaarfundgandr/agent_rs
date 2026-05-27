@@ -223,14 +223,21 @@ Invokes a completion model to summarize conversation history.
 - **Arguments**: `CompactArgs { text: String }`
 
 ### `ReadDocumentTool`
-Reads document contents from the filesystem. Supports `.txt`, `.md`, and `.pdf` files.
+Reads document contents from the filesystem. Access is restricted to a configurable sandbox root directory and an explicit set of allowed file extensions.
 - **Name**: `read_document`
-- **Arguments**: `ReadDocumentArgs { path: String }`
+- **Constructor**: `ReadDocumentTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>)`
+- **Arguments**: `ReadDocumentArgs { path: String }` (resolved relative to the sandbox root)
+- **Note**: When `"pdf"` is in the allowed set, PDF parsing is handled by `pdf-extract`; all other extensions are read as plain text.
 
 ### `WriteDocumentTool`
-Writes or appends content to a text file.
+Writes or appends content to a text file. Access is restricted to a configurable sandbox root directory and an explicit set of allowed file extensions.
 - **Name**: `write_document`
-- **Arguments**: `WriteDocumentArgs { path: String, content: String, append: Option<bool> }`
+- **Constructor**: `WriteDocumentTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>)`
+- **Arguments**: `WriteDocumentArgs { path: String, content: String, append: Option<bool> }` (resolved relative to the sandbox root)
+
+---
+
+> **Migration from v0.1.0**: See [`migration-0.2.0.md`](migration-0.2.0.md) for breaking changes to tool constructors.
 
 ---
 
@@ -241,7 +248,8 @@ Robust, typed errors used across tools and modules.
 ### `DocumentError`
 * `Io(std::io::Error)`: File read/write failures.
 * `Pdf(String)`: PDF parsing and extraction failures.
-* `UnsupportedExtension(String)`: Ingestion attempted on an unsupported file format.
+* `UnsupportedExtension(String)`: Ingestion or write attempted on an unsupported file format.
+* `SandboxEscape(String)`: Unauthorized path traversal attempt outside the configured sandbox root folder.
 
 ### `CompactError`
 * `Model(String)`: Errors returned by the compaction model.

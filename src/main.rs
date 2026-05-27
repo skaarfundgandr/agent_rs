@@ -9,6 +9,7 @@ use rig::integrations::cli_chatbot::ChatBotBuilder;
 use rig::prelude::*;
 use rig::providers::openai;
 use rig::tool::ToolDyn;
+use std::collections::HashSet;
 use std::env;
 
 #[tokio::main]
@@ -53,8 +54,13 @@ async fn main() -> Result<()> {
         .build_index(&embedding_service)
         .await?;
 
-    let internal_tools: Vec<Box<dyn ToolDyn>> =
-        vec![Box::new(ReadDocumentTool), Box::new(WriteDocumentTool)];
+    let read_extensions = HashSet::from(["txt", "md", "pdf"].map(String::from));
+    let write_extensions = HashSet::from(["txt", "md"].map(String::from));
+
+    let internal_tools: Vec<Box<dyn ToolDyn>> = vec![
+        Box::new(ReadDocumentTool::new("./", read_extensions)),
+        Box::new(WriteDocumentTool::new("./", write_extensions)),
+    ];
     tools.extend(internal_tools);
 
     tools.push(Box::new(compaction_tool));

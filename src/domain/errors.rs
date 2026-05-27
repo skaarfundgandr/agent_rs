@@ -8,6 +8,8 @@ pub enum DocumentError {
     Pdf(String),
     #[error("Unsupported file extension: {0}")]
     UnsupportedExtension(String),
+    #[error("Sandbox escape error: {0}")]
+    SandboxEscape(String),
 }
 
 #[derive(Debug, Error)]
