@@ -1,5 +1,5 @@
 use agent_rs_lib::agent::embeddings::EmbeddingService;
-use agent_rs_lib::agent::rag::{ChunkingOptions, RagStoreBuilder};
+use agent_rs_lib::agent::rag::{DocumentLoader, PdfLoader, RagPipeline, WordSplitter};
 use agent_rs_lib::agent::tools::{CompactTool, ReadDocumentTool, WriteDocumentTool};
 use agent_rs_lib::config::McpConfig;
 use agent_rs_lib::mcp::client::McpClient;
@@ -44,14 +44,13 @@ async fn main() -> Result<()> {
             .build(),
     );
 
-    // Build RAG index using the new ergonomic builder from the agent module
-    let index = RagStoreBuilder::new(embedding_service)
-        .with_chunking(ChunkingOptions {
-            chunk_words: 220,
-            chunk_overlap_words: 40,
-        })
-        .add_pdf("./Orientation-ASEAN-AI-HACKATHON-14.4.2026.pdf")?
-        .build_index()
+    // Build RAG index using the new decoupled pipeline
+    let pdf_document = PdfLoader::new().load(std::path::Path::new("./Orientation-ASEAN-AI-HACKATHON-14.4.2026.pdf"))?;
+    let splitter = WordSplitter::new(220, 40);
+
+    let index = RagPipeline::new()
+        .add_document(&pdf_document, &splitter)
+        .build_index(&embedding_service)
         .await?;
 
     let internal_tools: Vec<Box<dyn ToolDyn>> =
