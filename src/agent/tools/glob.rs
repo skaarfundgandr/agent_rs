@@ -1,3 +1,4 @@
+use crate::agent::permission::PermissionPolicy;
 use crate::agent::tools::document::validate_sandboxed_path;
 use crate::domain::errors::DocumentError;
 use rig::completion::ToolDefinition;
@@ -20,13 +21,15 @@ pub struct GlobSearchArgs {
 #[derive(Debug, Clone)]
 pub struct GlobSearchTool {
     sandbox_root: PathBuf,
+    policy: PermissionPolicy,
 }
 
 impl GlobSearchTool {
     /// Creates a new `GlobSearchTool` restricted to `sandbox_root`.
-    pub fn new(sandbox_root: impl Into<PathBuf>) -> Self {
+    pub fn new(sandbox_root: impl Into<PathBuf>, policy: PermissionPolicy) -> Self {
         Self {
             sandbox_root: sandbox_root.into(),
+            policy,
         }
     }
 }
@@ -56,8 +59,13 @@ impl Tool for GlobSearchTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        let description = format!("Wants to match glob pattern '{}'", args.pattern);
+        if !self.policy.evaluate(Self::NAME, &description).await {
+            return Err(DocumentError::PermissionDenied(description));
+        }
+
         let pattern = &args.pattern;
-        
+
         // Safety: Reject absolute patterns or path traversals containing '..'
         if pattern.contains("..") || Path::new(pattern).is_absolute() {
             return Err(DocumentError::SandboxEscape(format!(
@@ -66,16 +74,18 @@ impl Tool for GlobSearchTool {
             )));
         }
 
-        let canonical_root = self.sandbox_root.canonicalize().map_err(DocumentError::Io)?;
+        let canonical_root = self
+            .sandbox_root
+            .canonicalize()
+            .map_err(DocumentError::Io)?;
         let full_pattern = self.sandbox_root.join(pattern);
         let pattern_str = full_pattern.to_string_lossy();
 
         let mut matches = Vec::new();
         let max_results = 100;
 
-        let paths = glob::glob(&pattern_str).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string())
-        })?;
+        let paths = glob::glob(&pattern_str)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?;
 
         for entry in paths {
             let path = entry.map_err(|e| {
@@ -106,7 +116,10 @@ impl Tool for GlobSearchTool {
             let count = matches.len();
             let mut output = matches.join("\n");
             if count >= max_results {
-                output.push_str(&format!("\n... [Truncated: reached limit of {} matches]", max_results));
+                output.push_str(&format!(
+                    "\n... [Truncated: reached limit of {} matches]",
+                    max_results
+                ));
             }
             Ok(output)
         }

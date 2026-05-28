@@ -1,3 +1,4 @@
+use agent_rs_lib::agent::permission::PermissionPolicy;
 use agent_rs_lib::agent::tools::directory::{ListDirectoryArgs, ListDirectoryTool};
 use agent_rs_lib::agent::tools::document::{
     ReadDocumentArgs, ReadDocumentTool, WriteDocumentArgs, WriteDocumentTool,
@@ -14,6 +15,7 @@ async fn test_read_txt() {
     let tool = ReadDocumentTool::new(
         temp_dir.path(),
         HashSet::from(["txt", "md", "pdf"].map(String::from)),
+        PermissionPolicy::AllowAll,
     );
 
     let file_path = temp_dir.path().join("test_read.txt");
@@ -30,7 +32,11 @@ async fn test_read_txt() {
 #[tokio::test]
 #[ignore]
 async fn test_read_pdf() {
-    let tool = ReadDocumentTool::new("./", HashSet::from(["txt", "md", "pdf"].map(String::from)));
+    let tool = ReadDocumentTool::new(
+        "./",
+        HashSet::from(["txt", "md", "pdf"].map(String::from)),
+        PermissionPolicy::AllowAll,
+    );
     let path = "Stellaron Architecture Overview.pdf";
 
     let args = ReadDocumentArgs {
@@ -48,6 +54,7 @@ async fn test_write_document() {
     let tool = WriteDocumentTool::new(
         temp_dir.path(),
         HashSet::from(["txt", "md"].map(String::from)),
+        PermissionPolicy::AllowAll,
     );
 
     // Test overwrite
@@ -76,6 +83,7 @@ async fn test_sandbox_escape_read() {
     let tool = ReadDocumentTool::new(
         temp_dir.path(),
         HashSet::from(["txt", "md", "pdf"].map(String::from)),
+        PermissionPolicy::AllowAll,
     );
 
     let args = ReadDocumentArgs {
@@ -102,6 +110,7 @@ async fn test_sandbox_escape_write() {
     let tool = WriteDocumentTool::new(
         temp_dir.path(),
         HashSet::from(["txt", "md"].map(String::from)),
+        PermissionPolicy::AllowAll,
     );
 
     let args = WriteDocumentArgs {
@@ -127,13 +136,13 @@ async fn test_sandbox_escape_write() {
 #[tokio::test]
 async fn test_list_directory() {
     let temp_dir = tempfile::tempdir().unwrap();
-    
+
     // Create some structure
     fs::create_dir(temp_dir.path().join("sub_dir")).unwrap();
     fs::write(temp_dir.path().join("file.txt"), "hello").unwrap();
     fs::write(temp_dir.path().join("another.md"), "world").unwrap();
 
-    let tool = ListDirectoryTool::new(temp_dir.path());
+    let tool = ListDirectoryTool::new(temp_dir.path(), PermissionPolicy::AllowAll);
 
     let args = ListDirectoryArgs { path: None };
     let result = tool.call(args).await.unwrap();
@@ -146,30 +155,35 @@ async fn test_list_directory() {
 #[tokio::test]
 async fn test_list_directory_sandbox_escape() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let tool = ListDirectoryTool::new(temp_dir.path());
+    let tool = ListDirectoryTool::new(temp_dir.path(), PermissionPolicy::AllowAll);
 
     let args = ListDirectoryArgs {
         path: Some("../".to_string()),
     };
     let err = tool.call(args).await.expect_err("should reject escape");
 
-    assert!(
-        matches!(err, agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_))
-    );
+    assert!(matches!(
+        err,
+        agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
+    ));
 }
 
 #[tokio::test]
 async fn test_grep_search() {
     let temp_dir = tempfile::tempdir().unwrap();
-    
+
     let sub_dir = temp_dir.path().join("sub");
     fs::create_dir(&sub_dir).unwrap();
 
-    fs::write(temp_dir.path().join("file1.txt"), "Hello World\nRust is awesome\nhello world").unwrap();
+    fs::write(
+        temp_dir.path().join("file1.txt"),
+        "Hello World\nRust is awesome\nhello world",
+    )
+    .unwrap();
     fs::write(sub_dir.join("file2.md"), "Another world here").unwrap();
 
     let allowed = HashSet::from(["txt", "md"].map(String::from));
-    let tool = GrepSearchTool::new(temp_dir.path(), allowed);
+    let tool = GrepSearchTool::new(temp_dir.path(), allowed, PermissionPolicy::AllowAll);
 
     // Test case insensitive search
     let args = GrepSearchArgs {
@@ -197,7 +211,7 @@ async fn test_grep_search() {
 async fn test_grep_search_sandbox_escape() {
     let temp_dir = tempfile::tempdir().unwrap();
     let allowed = HashSet::from(["txt", "md"].map(String::from));
-    let tool = GrepSearchTool::new(temp_dir.path(), allowed);
+    let tool = GrepSearchTool::new(temp_dir.path(), allowed, PermissionPolicy::AllowAll);
 
     let args = GrepSearchArgs {
         query: "test".to_string(),
@@ -206,15 +220,16 @@ async fn test_grep_search_sandbox_escape() {
     };
     let err = tool.call(args).await.expect_err("should reject escape");
 
-    assert!(
-        matches!(err, agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_))
-    );
+    assert!(matches!(
+        err,
+        agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
+    ));
 }
 
 #[tokio::test]
 async fn test_glob_search() {
     let temp_dir = tempfile::tempdir().unwrap();
-    
+
     let sub_dir = temp_dir.path().join("src");
     fs::create_dir(&sub_dir).unwrap();
 
@@ -222,7 +237,7 @@ async fn test_glob_search() {
     fs::write(sub_dir.join("file2.rs"), "fn main() {}").unwrap();
     fs::write(sub_dir.join("file3.txt"), "world").unwrap();
 
-    let tool = GlobSearchTool::new(temp_dir.path());
+    let tool = GlobSearchTool::new(temp_dir.path(), PermissionPolicy::AllowAll);
 
     // Match files recursively
     let args = GlobSearchArgs {
@@ -245,14 +260,15 @@ async fn test_glob_search() {
 #[tokio::test]
 async fn test_glob_search_sandbox_escape() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let tool = GlobSearchTool::new(temp_dir.path());
+    let tool = GlobSearchTool::new(temp_dir.path(), PermissionPolicy::AllowAll);
 
     let args = GlobSearchArgs {
         pattern: "../**/*".to_string(),
     };
     let err = tool.call(args).await.expect_err("should reject escape");
 
-    assert!(
-        matches!(err, agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_))
-    );
+    assert!(matches!(
+        err,
+        agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
+    ));
 }

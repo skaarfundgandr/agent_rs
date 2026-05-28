@@ -45,7 +45,7 @@ impl DocumentLoader for PdfLoader {
     }
 }
 
-/// Loader for plain text and markdown documents.
+/// Loader for plain text and Markdown documents.
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TextLoader;
 

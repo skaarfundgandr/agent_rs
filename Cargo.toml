@@ -32,6 +32,7 @@ reqwest = { version = "0.13.4", features = ["json", "stream"] }
 pdf-extract = "0.10.0"
 thiserror = "2.0.18"
 glob = "0.3.3"
+async-trait = "0.1.88"
 
 [dev-dependencies]
 tempfile = "3.27.0"

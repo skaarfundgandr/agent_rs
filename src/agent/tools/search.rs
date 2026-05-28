@@ -1,3 +1,4 @@
+use crate::agent::permission::PermissionPolicy;
 use crate::agent::tools::document::validate_sandboxed_path;
 use crate::domain::errors::DocumentError;
 use rig::completion::ToolDefinition;
@@ -27,14 +28,20 @@ pub struct GrepSearchArgs {
 pub struct GrepSearchTool {
     sandbox_root: PathBuf,
     allowed_extensions: HashSet<String>,
+    policy: PermissionPolicy,
 }
 
 impl GrepSearchTool {
     /// Creates a new `GrepSearchTool` restricted to `sandbox_root` and the given extension allowlist.
-    pub fn new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>) -> Self {
+    pub fn new(
+        sandbox_root: impl Into<PathBuf>,
+        allowed_extensions: HashSet<String>,
+        policy: PermissionPolicy,
+    ) -> Self {
         Self {
             sandbox_root: sandbox_root.into(),
             allowed_extensions,
+            policy,
         }
     }
 }
@@ -81,7 +88,15 @@ impl Tool for GrepSearchTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let relative_path = args.path.unwrap_or_else(|| ".".to_string());
+        let relative_path = args.path.clone().unwrap_or_else(|| ".".to_string());
+        let description = format!(
+            "Wants to search for substring '{}' at [{}]",
+            args.query, relative_path
+        );
+        if !self.policy.evaluate(Self::NAME, &description).await {
+            return Err(DocumentError::PermissionDenied(description));
+        }
+
         let path = validate_sandboxed_path(&self.sandbox_root, Path::new(&relative_path))?;
 
         let case_sensitive = args.case_sensitive.unwrap_or(false);
@@ -104,7 +119,10 @@ impl Tool for GrepSearchTool {
             let count = results.len();
             let mut output = results.join("\n");
             if count >= max_results {
-                output.push_str(&format!("\n... [Truncated: reached limit of {} matches]", max_results));
+                output.push_str(&format!(
+                    "\n... [Truncated: reached limit of {} matches]",
+                    max_results
+                ));
             }
             Ok(output)
         }
@@ -165,7 +183,7 @@ fn search_recursive(
 
     Ok(())
 }
-
+// TODO: Refactor: Reduce nesting for this function
 /// Searches a single file for `query`, appending matched lines to `results`.
 fn search_file(
     file_path: &Path,
@@ -199,8 +217,7 @@ fn search_file(
                     let matches = if case_sensitive {
                         line.contains(query)
                     } else {
-                        line.to_lowercase()
-                            .contains(query_lower.as_ref().unwrap())
+                        line.to_lowercase().contains(query_lower.as_ref().unwrap())
                     };
 
                     if matches {

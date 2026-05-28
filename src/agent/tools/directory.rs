@@ -1,3 +1,4 @@
+use crate::agent::permission::PermissionPolicy;
 use crate::agent::tools::document::validate_sandboxed_path;
 use crate::domain::errors::DocumentError;
 use rig::completion::ToolDefinition;
@@ -21,13 +22,15 @@ pub struct ListDirectoryArgs {
 #[derive(Debug, Clone)]
 pub struct ListDirectoryTool {
     sandbox_root: PathBuf,
+    policy: PermissionPolicy,
 }
 
 impl ListDirectoryTool {
     /// Creates a new `ListDirectoryTool` restricted to `sandbox_root`.
-    pub fn new(sandbox_root: impl Into<PathBuf>) -> Self {
+    pub fn new(sandbox_root: impl Into<PathBuf>, policy: PermissionPolicy) -> Self {
         Self {
             sandbox_root: sandbox_root.into(),
+            policy,
         }
     }
 }
@@ -42,7 +45,8 @@ impl Tool for ListDirectoryTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "List the contents of a directory relative to the sandbox root.".to_string(),
+            description: "List the contents of a directory relative to the sandbox root."
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -56,14 +60,20 @@ impl Tool for ListDirectoryTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let relative_path = args.path.unwrap_or_else(|| ".".to_string());
+        let relative_path = args.path.clone().unwrap_or_else(|| ".".to_string());
+        let description = format!("Wants to list directory content at [{relative_path}]");
+        if !self.policy.evaluate(Self::NAME, &description).await {
+            return Err(DocumentError::PermissionDenied(description));
+        }
+
         let path = validate_sandboxed_path(&self.sandbox_root, Path::new(&relative_path))?;
 
         if !path.is_dir() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Path is not a directory: {}", relative_path)
-            ).into());
+                format!("Path is not a directory: {}", relative_path),
+            )
+            .into());
         }
 
         let mut entries = Vec::new();
@@ -82,18 +92,20 @@ impl Tool for ListDirectoryTool {
         }
 
         // Sort: directories first, then files alphabetically (case-insensitive)
-        entries.sort_by(|a, b| {
-            match (a.0, b.0) {
-                (true, false) => std::cmp::Ordering::Less,
-                (false, true) => std::cmp::Ordering::Greater,
-                _ => a.1.to_lowercase().cmp(&b.1.to_lowercase()),
-            }
+        entries.sort_by(|a, b| match (a.0, b.0) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.1.to_lowercase().cmp(&b.1.to_lowercase()),
         });
 
         if entries.is_empty() {
             Ok("Directory is empty.".to_string())
         } else {
-            let formatted = entries.into_iter().map(|(_, _, s)| s).collect::<Vec<_>>().join("\n");
+            let formatted = entries
+                .into_iter()
+                .map(|(_, _, s)| s)
+                .collect::<Vec<_>>()
+                .join("\n");
             Ok(formatted)
         }
     }

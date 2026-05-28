@@ -1,3 +1,4 @@
+use crate::agent::permission::PermissionPolicy;
 use crate::agent::rag::extract_pdf_text;
 use crate::domain::errors::DocumentError;
 use rig::completion::ToolDefinition;
@@ -23,13 +24,19 @@ pub struct WriteDocumentArgs {
 pub struct ReadDocumentTool {
     sandbox_root: PathBuf,
     allowed_extensions: HashSet<String>,
+    policy: PermissionPolicy,
 }
 
 impl ReadDocumentTool {
-    pub fn new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>) -> Self {
+    pub fn new(
+        sandbox_root: impl Into<PathBuf>,
+        allowed_extensions: HashSet<String>,
+        policy: PermissionPolicy,
+    ) -> Self {
         Self {
             sandbox_root: sandbox_root.into(),
             allowed_extensions,
+            policy,
         }
     }
 }
@@ -68,6 +75,11 @@ impl Tool for ReadDocumentTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        let description = format!("Wants to read file asset at [{}]", args.path);
+        if !self.policy.evaluate(Self::NAME, &description).await {
+            return Err(DocumentError::PermissionDenied(description));
+        }
+
         let path = validate_sandboxed_path(&self.sandbox_root, Path::new(&args.path))?;
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
@@ -89,13 +101,19 @@ impl Tool for ReadDocumentTool {
 pub struct WriteDocumentTool {
     sandbox_root: PathBuf,
     allowed_extensions: HashSet<String>,
+    policy: PermissionPolicy,
 }
 
 impl WriteDocumentTool {
-    pub fn new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>) -> Self {
+    pub fn new(
+        sandbox_root: impl Into<PathBuf>,
+        allowed_extensions: HashSet<String>,
+        policy: PermissionPolicy,
+    ) -> Self {
         Self {
             sandbox_root: sandbox_root.into(),
             allowed_extensions,
+            policy,
         }
     }
 }
@@ -142,6 +160,11 @@ impl Tool for WriteDocumentTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        let description = format!("Wants to modify/write file asset at [{}]", args.path);
+        if !self.policy.evaluate(Self::NAME, &description).await {
+            return Err(DocumentError::PermissionDenied(description));
+        }
+
         let path = validate_sandboxed_path(&self.sandbox_root, Path::new(&args.path))?;
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 

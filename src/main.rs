@@ -1,7 +1,9 @@
 use agent_rs_lib::agent::embeddings::EmbeddingService;
+use agent_rs_lib::agent::permission::PermissionPolicy;
 use agent_rs_lib::agent::rag::{DocumentLoader, PdfLoader, RagPipeline, WordSplitter};
 use agent_rs_lib::agent::tools::{
-    CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool, WriteDocumentTool,
+    CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool,
+    WriteDocumentTool,
 };
 use agent_rs_lib::config::McpConfig;
 use agent_rs_lib::mcp::client::McpClient;
@@ -63,12 +65,22 @@ async fn main() -> Result<()> {
 
     let grep_extensions = HashSet::from(["txt", "md"].map(String::from));
 
+    let policy = match env::var("PERMISSION_POLICY").as_deref() {
+        Ok("deny") => PermissionPolicy::DenyAll,
+        Ok("prompt") => PermissionPolicy::CliPrompt,
+        _ => PermissionPolicy::AllowAll,
+    };
+
     let internal_tools: Vec<Box<dyn ToolDyn>> = vec![
-        Box::new(ReadDocumentTool::new("./", read_extensions)),
-        Box::new(WriteDocumentTool::new("./", write_extensions)),
-        Box::new(ListDirectoryTool::new("./")),
-        Box::new(GrepSearchTool::new("./", grep_extensions)),
-        Box::new(GlobSearchTool::new("./")),
+        Box::new(ReadDocumentTool::new("./", read_extensions, policy.clone())),
+        Box::new(WriteDocumentTool::new(
+            "./",
+            write_extensions,
+            policy.clone(),
+        )),
+        Box::new(ListDirectoryTool::new("./", policy.clone())),
+        Box::new(GrepSearchTool::new("./", grep_extensions, policy.clone())),
+        Box::new(GlobSearchTool::new("./", policy)),
     ];
     tools.extend(internal_tools);
 

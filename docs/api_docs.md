@@ -223,11 +223,42 @@ let response = managed_agent.chat("What were my previous requests?", &mut histor
 
 ---
 
-## 5. Agent Tools
+## 5. Permission System
+
+> **Type reference:** See the [class diagram](diagrams/class-diagram.md) for the `PermissionPolicy` type hierarchy.
+
+### `PermissionPolicy`
+Controls whether tool execution is allowed, denied, or requires confirmation.
+```rust
+pub enum PermissionPolicy {
+    AllowAll,
+    DenyAll,
+    CliPrompt,
+    Custom(Arc<dyn PermissionGate>),
+}
+```
+- `AllowAll` — automatically permits every tool call.
+- `DenyAll` — automatically denies every tool call.
+- `CliPrompt` — prints a prompt to stderr and reads `y/N` from stdin.
+- `Custom(gate)` — delegates to a user-defined `PermissionGate`.
+
+### `PermissionGate` trait
+```rust
+#[async_trait::async_trait]
+pub trait PermissionGate: Send + Sync {
+    async fn check_permission(&self, tool_name: &str, description: &str) -> bool;
+}
+```
+
+---
+
+## 6. Agent Tools
 
 Standard Rig `Tool` implementations available to agents.
 
 > **Architecture reference:** See the [C4 component diagram](diagrams/c4-architecture.md) for how tools relate to the agent core, the [sandbox validation flowchart](diagrams/flowchart.md) for path security enforcement, and the [class diagram](diagrams/class-diagram.md) for tool type hierarchy.
+
+All five filesystem tools accept a `PermissionPolicy` in their constructor. When the policy denies an operation, the tool returns `DocumentError::PermissionDenied` (see [§7 Domain Errors](#7-domain-errors)).
 
 ### `CompactTool`
 Invokes a completion model to summarize conversation history.
@@ -237,32 +268,32 @@ Invokes a completion model to summarize conversation history.
 ### `ReadDocumentTool`
 Reads document contents from the filesystem. Access is restricted to a configurable sandbox root directory and an explicit set of allowed file extensions.
 - **Name**: `read_document`
-- **Constructor**: `ReadDocumentTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>)`
+- **Constructor**: `ReadDocumentTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>, policy: PermissionPolicy)`
 - **Arguments**: `ReadDocumentArgs { path: String }` (resolved relative to the sandbox root)
 - **Note**: When `"pdf"` is in the allowed set, PDF parsing is handled by `pdf-extract`; all other extensions are read as plain text.
 
 ### `WriteDocumentTool`
 Writes or appends content to a text file. Access is restricted to a configurable sandbox root directory and an explicit set of allowed file extensions.
 - **Name**: `write_document`
-- **Constructor**: `WriteDocumentTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>)`
+- **Constructor**: `WriteDocumentTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>, policy: PermissionPolicy)`
 - **Arguments**: `WriteDocumentArgs { path: String, content: String, append: Option<bool> }` (resolved relative to the sandbox root)
 
 ### `ListDirectoryTool`
 Lists the contents of a directory within the sandbox root. Directories are prefixed with `[DIR]`, files with `[FILE]` (including byte size). Entries are sorted directories-first, then case-insensitively by name.
 - **Name**: `list_directory`
-- **Constructor**: `ListDirectoryTool::new(sandbox_root: impl Into<PathBuf>)`
+- **Constructor**: `ListDirectoryTool::new(sandbox_root: impl Into<PathBuf>, policy: PermissionPolicy)`
 - **Arguments**: `ListDirectoryArgs { path: Option<String> }` (defaults to sandbox root)
 
 ### `GlobSearchTool`
 Finds files and directories matching a glob pattern within the sandbox root. Uses the [`glob`](https://crates.io/crates/glob) crate. Rejects absolute patterns and path traversals containing `..`. Returns up to 100 results.
 - **Name**: `glob_search`
-- **Constructor**: `GlobSearchTool::new(sandbox_root: impl Into<PathBuf>)`
+- **Constructor**: `GlobSearchTool::new(sandbox_root: impl Into<PathBuf>, policy: PermissionPolicy)`
 - **Arguments**: `GlobSearchArgs { pattern: String }` (relative to sandbox root, e.g. `"src/**/*.rs"`)
 
 ### `GrepSearchTool`
 Searches for a substring pattern in workspace text files within the sandbox root. Only searches files whose extension is in the configured allowlist. Results are returned in `path:line: content` format, capped at 100 matches.
 - **Name**: `grep_search`
-- **Constructor**: `GrepSearchTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>)`
+- **Constructor**: `GrepSearchTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>, policy: PermissionPolicy)`
 - **Arguments**: `GrepSearchArgs { query: String, path: Option<String>, case_sensitive: Option<bool> }`
 
 ---
@@ -282,6 +313,8 @@ pub use search::GrepSearchTool;
 Crate-level re-exports (`src/agent/mod.rs`):
 
 ```rust
+pub mod permission;
+pub use permission::{PermissionGate, PermissionPolicy};
 pub use tools::{
     CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool, WriteDocumentTool,
 };
@@ -289,7 +322,7 @@ pub use tools::{
 
 ---
 
-## 6. Domain Errors
+## 7. Domain Errors
 
 Robust, typed errors used across tools and modules.
 
@@ -300,6 +333,4 @@ Robust, typed errors used across tools and modules.
 * `Pdf(String)`: PDF parsing and extraction failures.
 * `UnsupportedExtension(String)`: Ingestion or write attempted on an unsupported file format.
 * `SandboxEscape(String)`: Unauthorized path traversal attempt outside the configured sandbox root folder.
-
-### `CompactError`
-* `Model(String)`: Errors returned by the compaction model.
+* `PermissionDenied(String)`: Tool execution denied by the configured `PermissionPolicy`.

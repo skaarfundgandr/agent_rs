@@ -44,7 +44,36 @@ let allowed_extensions = HashSet::from(["txt".to_string(), "md".to_string()]);
 let tool = WriteDocumentTool::new("./sandbox", allowed_extensions);
 ```
 
-### 2. Sandbox Escape Error Variant
+### 2. Permission System
+
+`ReadDocumentTool`, `WriteDocumentTool`, `ListDirectoryTool`, `GlobSearchTool`, and `GrepSearchTool` now require a `PermissionPolicy` parameter in their constructors (typically `PermissionPolicy::AllowAll` for unrestricted use).
+
+**Before (v0.1.0/v0.2.0-beta):**
+```rust
+let reader = ReadDocumentTool::new("./sandbox", read_extensions);
+let lister = ListDirectoryTool::new("./sandbox");
+```
+
+**After (v0.2.0):**
+```rust
+use agent_rs_lib::agent::permission::PermissionPolicy;
+
+let policy = PermissionPolicy::AllowAll;
+let reader = ReadDocumentTool::new("./sandbox", read_extensions, policy.clone());
+let lister = ListDirectoryTool::new("./sandbox", policy);
+```
+
+The policy controls tool execution at runtime. Available variants:
+- `AllowAll` — permits every call (backward-compatible default).
+- `DenyAll` — denies every call.
+- `CliPrompt` — interactively prompts the user via stderr/stdin.
+- `Custom(Arc<dyn PermissionGate>)` — delegates to user-defined logic.
+
+### 3. PermissionDenied Error Variant
+
+A new error variant `DocumentError::PermissionDenied(String)` has been added. If you manually match on `DocumentError`, you must handle this new variant.
+
+### 4. Sandbox Escape Error Variant
 
 A new error variant `DocumentError::SandboxEscape` has been added to `DocumentError` representing unauthorized path traversal attempts outside the configured sandbox root folder. If you manually match on `DocumentError`, you must handle this new variant.
 
@@ -54,10 +83,11 @@ A new error variant `DocumentError::SandboxEscape` has been added to `DocumentEr
 
 ### Step 1: Add Imports
 
-Ensure you import `HashSet` and the new error variant if you pattern match on document errors:
+Ensure you import `HashSet`, `PermissionPolicy` and the new error variant if you pattern match on document errors:
 
 ```rust
 use std::collections::HashSet;
+use agent_rs_lib::agent::permission::PermissionPolicy;
 use agent_rs_lib::agent::tools::{ReadDocumentTool, WriteDocumentTool};
 use agent_rs_lib::domain::errors::DocumentError;
 ```
@@ -67,13 +97,17 @@ use agent_rs_lib::domain::errors::DocumentError;
 Define your sandbox root path and the set of allowed file extensions (without leading dots):
 
 ```rust
+use agent_rs_lib::agent::permission::PermissionPolicy;
+
+let policy = PermissionPolicy::AllowAll;
+
 // Read: txt, md, and pdf
 let read_extensions = HashSet::from(["txt", "md", "pdf"].map(String::from));
-let reader = ReadDocumentTool::new("./data", read_extensions);
+let reader = ReadDocumentTool::new("./data", read_extensions, policy.clone());
 
 // Write: only txt and md
 let write_extensions = HashSet::from(["txt", "md"].map(String::from));
-let writer = WriteDocumentTool::new("./data", write_extensions);
+let writer = WriteDocumentTool::new("./data", write_extensions, policy);
 ```
 
 > **Note on PDF support**: PDF files are read-only and extracted using `pdf-extract`. Including `"pdf"` in write extensions will only perform a plain-text write and will not build a valid PDF file.
