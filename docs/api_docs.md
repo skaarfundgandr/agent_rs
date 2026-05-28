@@ -18,6 +18,8 @@
 
 Provides configuration parser and client interfaces to load and connect to stdio or HTTP-based MCP servers.
 
+> **Architecture reference:** See the [C4 architecture diagram](diagrams/c4-architecture.md) for how these modules fit into the system, the [class diagram](diagrams/class-diagram.md) for type relationships (`McpConfig`, `McpServerDef`, `McpTransportSpec`), and the [module dependency graph](diagrams/module-dependency.md) for crate-level structure.
+
 ### `McpConfig`
 Stores parsed configuration definitions for one or more MCP servers. Compatible with standard MCP `mcp.json` layouts.
 
@@ -35,6 +37,8 @@ Stores parsed configuration definitions for one or more MCP servers. Compatible 
 
 ### `McpClient`
 Manages connections and tool listing for the configured MCP servers.
+
+> **Lifecycle reference:** See the [MCP connection state diagram](diagrams/state-diagram.md) for the full connection lifecycle and the [startup sequence diagram](diagrams/sequence-diagram.md) for how `connect()` fits into application bootstrap.
 
 #### Methods
 * **`from_config_path(path: &str) -> Result<Self>`**
@@ -68,6 +72,8 @@ async fn main() -> anyhow::Result<()> {
 
 Wraps any Rig `EmbeddingModel` to provide structured document splitting, order-preserving batching, and error handling.
 
+> **Pipeline reference:** See the [RAG flowchart](diagrams/flowchart.md) for how embedding batching integrates with the ingestion pipeline, and the [class diagram](diagrams/class-diagram.md) for `EmbeddingService`'s generic type constraints and relationships.
+
 ### `EmbeddingService<M>`
 Generic over `M: EmbeddingModel`.
 
@@ -92,6 +98,8 @@ Generic over `M: EmbeddingModel`.
 ## 3. RAG Pipeline
 
 A decoupled ingestion pipeline that transforms files into chunked, embedded vector indexes.
+
+> **Pipeline reference:** See the [RAG processing flowchart](diagrams/flowchart.md) for the end-to-end document ingestion flow, the [class diagram](diagrams/class-diagram.md) for trait relationships (`DocumentLoader`, `TextSplitter`, `RagPipeline`), and the [sequence diagram](diagrams/sequence-diagram.md) for how the pipeline is invoked at startup.
 
 ### Data Models (`src/domain/rag.rs`)
 ```rust
@@ -181,6 +189,8 @@ async fn main() -> anyhow::Result<()> {
 
 Automates history size management to prevent context window overflows and excessive token costs.
 
+> **Runtime reference:** See the [history compaction flowchart](diagrams/flowchart.md) for the compaction algorithm, the [runtime sequence diagram](diagrams/sequence-diagram.md) for how context management interacts with the chat loop, and the [class diagram](diagrams/class-diagram.md) for `ContextManagedAgent` and `AgentContextExt`.
+
 ### `ContextManagedAgent<M, C>`
 Wraps an `Agent<M>` (where `M: CompletionModel`) and a compaction model `C: Prompt` to automatically summarize conversation history when it crosses a character-based token approximation threshold.
 
@@ -216,6 +226,8 @@ let response = managed_agent.chat("What were my previous requests?", &mut histor
 ## 5. Agent Tools
 
 Standard Rig `Tool` implementations available to agents.
+
+> **Architecture reference:** See the [C4 component diagram](diagrams/c4-architecture.md) for how tools relate to the agent core, the [sandbox validation flowchart](diagrams/flowchart.md) for path security enforcement, and the [class diagram](diagrams/class-diagram.md) for tool type hierarchy.
 
 ### `CompactTool`
 Invokes a completion model to summarize conversation history.
@@ -280,6 +292,8 @@ pub use tools::{
 ## 6. Domain Errors
 
 Robust, typed errors used across tools and modules.
+
+> **Type reference:** See the [class diagram](diagrams/class-diagram.md) for error enum variants and their usage across the system.
 
 ### `DocumentError`
 * `Io(std::io::Error)`: File read/write failures.

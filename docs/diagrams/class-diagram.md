@@ -1,0 +1,275 @@
+# Class / Type Diagram
+
+To make the codebase structure easier to navigate, the type definitions are broken down into four thematic, logical diagrams:
+1. [Crate Configuration & Transport Models](#1-crate-configuration--transport-models)
+2. [MCP Registry & Connection Runtime](#2-mcp-registry--connection-runtime)
+3. [RAG & Document Ingestion Pipeline](#3-rag--document-ingestion-pipeline)
+4. [Agent Memory & Internal Tools](#4-agent-memory--internal-tools)
+
+---
+
+## 1. Crate Configuration & Transport Models
+
+This diagram represents the parsing of MCP configuration (`mcp.json`) and the abstraction of STDIO or HTTP connection parameters.
+
+```mermaid
+classDiagram
+    direction TB
+    class McpConfig {
+        +HashMap~String, McpServerDef~ mcp_servers
+        +from_path(path) Result~McpConfig~
+        +validate() Result
+        +resolved_servers() List~ResolvedMcpServer~
+    }
+
+    class McpServerDef {
+        +Option~McpTransportKind~ transport_type
+        +Option~String~ command
+        +Vec~String~ args
+        +Option~PathBuf~ cwd
+        +Option~String~ url
+        +HashMap~String, String~ headers
+        +transport_spec() Result~McpTransportSpec~
+    }
+
+    class McpTransportKind {
+        <<enumeration>>
+        +Stdio
+        +StreamableHttp
+    }
+
+    class McpTransportSpec {
+        <<enumeration>>
+        +Stdio(McpStdioTransportSpec)
+        +StreamableHttp(McpStreamableHttpTransportSpec)
+    }
+
+    class McpStdioTransportSpec {
+        +String command
+        +Vec~String~ args
+        +HashMap~String, String~ env
+        +Option~PathBuf~ cwd
+    }
+
+    class McpStreamableHttpTransportSpec {
+        +Url url
+        +HashMap~String, String~ headers
+    }
+
+    class ResolvedMcpServer {
+        +String name
+        +McpTransportSpec transport
+    }
+
+    McpConfig "1" *--> "many" McpServerDef
+    McpServerDef --> McpTransportKind : has
+    McpServerDef ..> McpTransportSpec : resolves to
+    McpTransportSpec <|.. McpStdioTransportSpec
+    McpTransportSpec <|.. McpStreamableHttpTransportSpec
+    ResolvedMcpServer --> McpTransportSpec : has
+```
+
+---
+
+## 2. MCP Registry & Connection Runtime
+
+This diagram illustrates how client connections to MCP servers are managed, spawned, and wrapped into Rig-compatible tools.
+
+```mermaid
+classDiagram
+    direction TB
+    class McpClient {
+        -McpConfig config
+        +from_config_path(path) Self
+        +connect() McpRegistryRuntime
+        +tools() List~ToolDyn~
+    }
+
+    class McpRegistry {
+        -McpClient client
+        +connect() Result~McpRegistryRuntime~
+    }
+
+    class McpRegistryRuntime {
+        -Vec~RegisteredMcpServer~ servers
+        -Vec~RegisteredMcpTool~ tools
+        +servers() List~RegisteredMcpServer~
+        +tools() List~RegisteredMcpTool~
+        +into_tools() List~ToolDyn~
+    }
+
+    class RegisteredMcpServer {
+        +String name
+        +McpTransportSpec transport
+        +Vec~String~ tool_names
+    }
+
+    class RegisteredMcpTool {
+        -String server_name
+        -String tool_name
+        -RigMcpTool inner
+        -Arc~ArcService~ _keepalive
+    }
+
+    McpRegistry --> McpClient : owns
+    McpRegistry ..> McpRegistryRuntime : creates
+    McpClient ..> McpRegistryRuntime : connects to
+    McpRegistryRuntime *--> RegisteredMcpServer : manages
+    McpRegistryRuntime *--> RegisteredMcpTool : manages
+```
+
+---
+
+## 3. RAG & Document Ingestion Pipeline
+
+This diagram shows how documents (PDF, Text, Markdown) are loaded, split into chunks, and loaded into the vector index using embedding models.
+
+```mermaid
+classDiagram
+    direction TB
+    class Document {
+        +String content
+        +HashMap~String, String~ metadata
+    }
+
+    class Chunk {
+        +String text
+        +HashMap~String, String~ metadata
+    }
+
+    class ChunkingOptions {
+        +usize chunk_words
+        +usize chunk_overlap_words
+    }
+
+    class DocumentLoader {
+        <<interface>>
+        +load(path) Result~Document~
+    }
+
+    class PdfLoader {
+        +load(path) Result~Document~
+    }
+
+    class TextLoader {
+        +load(path) Result~Document~
+    }
+
+    class TextSplitter {
+        <<interface>>
+        +split(document) Vec~Chunk~
+    }
+
+    class WordSplitter {
+        +new(chunk_words, overlap) Self
+        +split(document) Vec~Chunk~
+    }
+
+    class RagPipeline {
+        -Vec~Chunk~ chunks
+        +add_document(doc, splitter)
+        +build_index(embedding_service) VectorIndex
+    }
+
+    class EmbeddingService~M~ {
+        -M model
+        +new(model) Self
+        +ndims() usize
+        +max_documents() usize
+        +embed_text(text) Vec~f64~
+        +embed_texts(texts) List~Vec~f64~~
+        +embed_document(doc) List~Vec~f64~~
+    }
+
+    class DocumentError {
+        <<enumeration>>
+        +Io(io::Error)
+        +Pdf(String)
+        +UnsupportedExtension(String)
+        +SandboxEscape(String)
+    }
+
+    DocumentLoader <|.. PdfLoader
+    DocumentLoader <|.. TextLoader
+    DocumentLoader ..> Document : creates
+    DocumentLoader ..> DocumentError : throws
+    
+    TextSplitter <|.. WordSplitter
+    WordSplitter --> ChunkingOptions : configures
+    TextSplitter ..> Chunk : creates
+
+    RagPipeline --> EmbeddingService : uses
+    RagPipeline --> TextSplitter : uses
+    RagPipeline *--> Chunk : stores
+```
+
+---
+
+## 4. Agent Memory & Internal Tools
+
+This diagram outlines the context-managed agent wrapper for conversation compaction and the set of sandboxed filesystem utilities.
+
+```mermaid
+classDiagram
+    direction TB
+    class ContextManagedAgent~M, C~ {
+        -Agent~M~ inner
+        -usize compaction_threshold
+        -C compaction_model
+        -Option~Estimator~ token_estimator
+        +chat(prompt, history) Response
+        +agent() Agent~M~
+    }
+
+    class AgentContextExt {
+        <<interface>>
+        +with_compaction(threshold, model) ContextManagedAgent
+    }
+
+    class Tool {
+        <<interface>>
+        +definition(prompt) ToolDefinition
+        +call(args) Result~Output~
+    }
+
+    class ReadDocumentTool {
+        +call(args) Result~String~
+    }
+
+    class WriteDocumentTool {
+        +call(args) Result~String~
+    }
+
+    class GrepSearchTool {
+        +call(args) Result~String~
+    }
+
+    class GlobSearchTool {
+        +call(args) Result~String~
+    }
+
+    class ListDirectoryTool {
+        +call(args) Result~String~
+    }
+
+    class CompactTool~M~ {
+        -M model
+        +call(args) Result~String~
+    }
+
+    class CompactError {
+        <<enumeration>>
+        +Model(String)
+    }
+
+    AgentContextExt ..> ContextManagedAgent : creates
+    
+    ReadDocumentTool ..|> Tool
+    WriteDocumentTool ..|> Tool
+    GrepSearchTool ..|> Tool
+    GlobSearchTool ..|> Tool
+    ListDirectoryTool ..|> Tool
+    CompactTool ..|> Tool
+    CompactTool ..> CompactError : throws
+```
+

@@ -85,3 +85,5 @@ let writer = WriteDocumentTool::new("./data", write_extensions);
 - **Path Verification**: Target paths are canonicalized to resolve symlinks and relative directories (`../`). Any path resolving outside the canonicalized sandbox root returns `DocumentError::SandboxEscape`.
 - **Extension Filtering**: File extensions are checked before execution. Any file access with an extension not present in `allowed_extensions` returns `DocumentError::UnsupportedExtension`.
 - **Dynamic Tool Description**: The supported extensions list in the tool definitions is now dynamically generated from the configured `allowed_extensions` set.
+
+> **Architecture reference:** See the [sandbox path validation flowchart](diagrams/flowchart.md) for a visual walkthrough of the canonicalization logic, and the [class diagram](diagrams/class-diagram.md) for the `DocumentError` enum definition.
