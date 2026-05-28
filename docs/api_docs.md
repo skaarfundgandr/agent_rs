@@ -235,9 +235,45 @@ Writes or appends content to a text file. Access is restricted to a configurable
 - **Constructor**: `WriteDocumentTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>)`
 - **Arguments**: `WriteDocumentArgs { path: String, content: String, append: Option<bool> }` (resolved relative to the sandbox root)
 
+### `ListDirectoryTool`
+Lists the contents of a directory within the sandbox root. Directories are prefixed with `[DIR]`, files with `[FILE]` (including byte size). Entries are sorted directories-first, then case-insensitively by name.
+- **Name**: `list_directory`
+- **Constructor**: `ListDirectoryTool::new(sandbox_root: impl Into<PathBuf>)`
+- **Arguments**: `ListDirectoryArgs { path: Option<String> }` (defaults to sandbox root)
+
+### `GlobSearchTool`
+Finds files and directories matching a glob pattern within the sandbox root. Uses the [`glob`](https://crates.io/crates/glob) crate. Rejects absolute patterns and path traversals containing `..`. Returns up to 100 results.
+- **Name**: `glob_search`
+- **Constructor**: `GlobSearchTool::new(sandbox_root: impl Into<PathBuf>)`
+- **Arguments**: `GlobSearchArgs { pattern: String }` (relative to sandbox root, e.g. `"src/**/*.rs"`)
+
+### `GrepSearchTool`
+Searches for a substring pattern in workspace text files within the sandbox root. Only searches files whose extension is in the configured allowlist. Results are returned in `path:line: content` format, capped at 100 matches.
+- **Name**: `grep_search`
+- **Constructor**: `GrepSearchTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>)`
+- **Arguments**: `GrepSearchArgs { query: String, path: Option<String>, case_sensitive: Option<bool> }`
+
 ---
 
 > **Migration from v0.1.0**: See [`migration-0.2.0.md`](migration-0.2.0.md) for breaking changes to tool constructors.
+
+### Module Re-exports (`src/agent/tools/mod.rs`)
+
+```rust
+pub use context::CompactTool;
+pub use directory::ListDirectoryTool;
+pub use document::{ReadDocumentTool, WriteDocumentTool};
+pub use glob::GlobSearchTool;
+pub use search::GrepSearchTool;
+```
+
+Crate-level re-exports (`src/agent/mod.rs`):
+
+```rust
+pub use tools::{
+    CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool, WriteDocumentTool,
+};
+```
 
 ---
 

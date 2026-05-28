@@ -5,17 +5,25 @@ use rig::tool::Tool;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
+/// Arguments for the `glob_search` tool.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct GlobSearchArgs {
+    /// Glob pattern to match (e.g. `"src/**/*.rs"`, `"*.md"`).
     pub pattern: String,
 }
 
+/// Finds files and directories matching a glob pattern within the sandbox root.
+///
+/// Uses the [`glob`] crate for pattern matching. Rejects absolute patterns
+/// and path traversals containing `..`. Returns up to 100 matches with
+/// forward-slash-normalized paths relative to the sandbox root.
 #[derive(Debug, Clone)]
 pub struct GlobSearchTool {
     sandbox_root: PathBuf,
 }
 
 impl GlobSearchTool {
+    /// Creates a new `GlobSearchTool` restricted to `sandbox_root`.
     pub fn new(sandbox_root: impl Into<PathBuf>) -> Self {
         Self {
             sandbox_root: sandbox_root.into(),

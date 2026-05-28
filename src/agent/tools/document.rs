@@ -163,6 +163,12 @@ impl Tool for WriteDocumentTool {
     }
 }
 
+/// Validates that `user_path` resolves to a path within `sandbox_root`.
+///
+/// Canonicalizes both paths and returns the resolved canonical path.
+/// Returns [`DocumentError::SandboxEscape`] if the resolved path falls
+/// outside the sandbox. For non-existent paths, walks up the tree to
+/// canonicalize the nearest existing ancestor.
 pub(crate) fn validate_sandboxed_path(
     sandbox_root: &Path,
     user_path: &Path,

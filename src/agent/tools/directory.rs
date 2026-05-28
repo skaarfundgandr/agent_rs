@@ -6,17 +6,25 @@ use serde_json::json;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Arguments for the `list_directory` tool.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct ListDirectoryArgs {
+    /// Relative path to list (defaults to sandbox root).
     pub path: Option<String>,
 }
 
+/// Lists the contents of a directory within the sandbox root.
+///
+/// Directories are listed first (prefix `[DIR]`), followed by files
+/// (prefix `[FILE]` with byte size). Entries are sorted case-insensitively
+/// within each group.
 #[derive(Debug, Clone)]
 pub struct ListDirectoryTool {
     sandbox_root: PathBuf,
 }
 
 impl ListDirectoryTool {
+    /// Creates a new `ListDirectoryTool` restricted to `sandbox_root`.
     pub fn new(sandbox_root: impl Into<PathBuf>) -> Self {
         Self {
             sandbox_root: sandbox_root.into(),

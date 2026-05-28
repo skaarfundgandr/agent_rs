@@ -7,13 +7,22 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Arguments for the `grep_search` tool.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct GrepSearchArgs {
+    /// The substring query to search for.
     pub query: String,
+    /// Relative path to search within (directory or specific file, defaults to sandbox root).
     pub path: Option<String>,
+    /// Whether to perform a case-sensitive search (defaults to false).
     pub case_sensitive: Option<bool>,
 }
 
+/// Searches for a substring pattern in workspace text files within the sandbox root.
+///
+/// Only searches files whose extension is in the `allowed_extensions` set.
+/// Results are returned in `path:line: content` format, capped at 100 matches.
+/// Supports case-insensitive (default) and case-sensitive modes.
 #[derive(Debug, Clone)]
 pub struct GrepSearchTool {
     sandbox_root: PathBuf,
@@ -21,6 +30,7 @@ pub struct GrepSearchTool {
 }
 
 impl GrepSearchTool {
+    /// Creates a new `GrepSearchTool` restricted to `sandbox_root` and the given extension allowlist.
     pub fn new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>) -> Self {
         Self {
             sandbox_root: sandbox_root.into(),
@@ -101,6 +111,7 @@ impl Tool for GrepSearchTool {
     }
 }
 
+/// Recursively walks `target` and searches each file for `query`.
 fn search_recursive(
     target: &Path,
     query: &str,
@@ -155,6 +166,7 @@ fn search_recursive(
     Ok(())
 }
 
+/// Searches a single file for `query`, appending matched lines to `results`.
 fn search_file(
     file_path: &Path,
     query: &str,
