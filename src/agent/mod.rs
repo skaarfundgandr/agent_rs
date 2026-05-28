@@ -9,4 +9,6 @@ pub use memory::{AgentContextExt, ContextManagedAgent};
 pub use rag::{
     Chunk, Document, DocumentLoader, PdfLoader, RagPipeline, TextLoader, TextSplitter, WordSplitter,
 };
-pub use tools::{CompactTool, ReadDocumentTool, WriteDocumentTool};
+pub use tools::{
+    CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool, WriteDocumentTool,
+};

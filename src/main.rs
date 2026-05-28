@@ -1,6 +1,8 @@
 use agent_rs_lib::agent::embeddings::EmbeddingService;
 use agent_rs_lib::agent::rag::{DocumentLoader, PdfLoader, RagPipeline, WordSplitter};
-use agent_rs_lib::agent::tools::{CompactTool, ReadDocumentTool, WriteDocumentTool};
+use agent_rs_lib::agent::tools::{
+    CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool, WriteDocumentTool,
+};
 use agent_rs_lib::config::McpConfig;
 use agent_rs_lib::mcp::client::McpClient;
 use anyhow::Result;
@@ -59,9 +61,14 @@ async fn main() -> Result<()> {
     let read_extensions = HashSet::from(["txt", "md", "pdf"].map(String::from));
     let write_extensions = HashSet::from(["txt", "md"].map(String::from));
 
+    let grep_extensions = HashSet::from(["txt", "md"].map(String::from));
+
     let internal_tools: Vec<Box<dyn ToolDyn>> = vec![
         Box::new(ReadDocumentTool::new("./", read_extensions)),
         Box::new(WriteDocumentTool::new("./", write_extensions)),
+        Box::new(ListDirectoryTool::new("./")),
+        Box::new(GrepSearchTool::new("./", grep_extensions)),
+        Box::new(GlobSearchTool::new("./")),
     ];
     tools.extend(internal_tools);
 

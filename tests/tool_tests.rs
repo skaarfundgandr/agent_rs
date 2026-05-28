@@ -1,6 +1,9 @@
+use agent_rs_lib::agent::tools::directory::{ListDirectoryArgs, ListDirectoryTool};
 use agent_rs_lib::agent::tools::document::{
     ReadDocumentArgs, ReadDocumentTool, WriteDocumentArgs, WriteDocumentTool,
 };
+use agent_rs_lib::agent::tools::glob::{GlobSearchArgs, GlobSearchTool};
+use agent_rs_lib::agent::tools::search::{GrepSearchArgs, GrepSearchTool};
 use rig::tool::Tool;
 use std::collections::HashSet;
 use std::fs;
@@ -118,5 +121,138 @@ async fn test_sandbox_escape_write() {
         ),
         "Expected SandboxEscape error, got {:?}",
         err
+    );
+}
+
+#[tokio::test]
+async fn test_list_directory() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    
+    // Create some structure
+    fs::create_dir(temp_dir.path().join("sub_dir")).unwrap();
+    fs::write(temp_dir.path().join("file.txt"), "hello").unwrap();
+    fs::write(temp_dir.path().join("another.md"), "world").unwrap();
+
+    let tool = ListDirectoryTool::new(temp_dir.path());
+
+    let args = ListDirectoryArgs { path: None };
+    let result = tool.call(args).await.unwrap();
+
+    assert!(result.contains("[DIR]  sub_dir"));
+    assert!(result.contains("[FILE] another.md (5 bytes)"));
+    assert!(result.contains("[FILE] file.txt (5 bytes)"));
+}
+
+#[tokio::test]
+async fn test_list_directory_sandbox_escape() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let tool = ListDirectoryTool::new(temp_dir.path());
+
+    let args = ListDirectoryArgs {
+        path: Some("../".to_string()),
+    };
+    let err = tool.call(args).await.expect_err("should reject escape");
+
+    assert!(
+        matches!(err, agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_))
+    );
+}
+
+#[tokio::test]
+async fn test_grep_search() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    
+    let sub_dir = temp_dir.path().join("sub");
+    fs::create_dir(&sub_dir).unwrap();
+
+    fs::write(temp_dir.path().join("file1.txt"), "Hello World\nRust is awesome\nhello world").unwrap();
+    fs::write(sub_dir.join("file2.md"), "Another world here").unwrap();
+
+    let allowed = HashSet::from(["txt", "md"].map(String::from));
+    let tool = GrepSearchTool::new(temp_dir.path(), allowed);
+
+    // Test case insensitive search
+    let args = GrepSearchArgs {
+        query: "world".to_string(),
+        path: None,
+        case_sensitive: None,
+    };
+    let result = tool.call(args).await.unwrap();
+    assert!(result.contains("file1.txt:1: Hello World"));
+    assert!(result.contains("file1.txt:3: hello world"));
+    assert!(result.contains("file2.md:1: Another world here"));
+
+    // Test case sensitive search
+    let args_sensitive = GrepSearchArgs {
+        query: "Hello".to_string(),
+        path: None,
+        case_sensitive: Some(true),
+    };
+    let result_sensitive = tool.call(args_sensitive).await.unwrap();
+    assert!(result_sensitive.contains("file1.txt:1: Hello World"));
+    assert!(!result_sensitive.contains("file1.txt:3: hello world"));
+}
+
+#[tokio::test]
+async fn test_grep_search_sandbox_escape() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let allowed = HashSet::from(["txt", "md"].map(String::from));
+    let tool = GrepSearchTool::new(temp_dir.path(), allowed);
+
+    let args = GrepSearchArgs {
+        query: "test".to_string(),
+        path: Some("../../".to_string()),
+        case_sensitive: None,
+    };
+    let err = tool.call(args).await.expect_err("should reject escape");
+
+    assert!(
+        matches!(err, agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_))
+    );
+}
+
+#[tokio::test]
+async fn test_glob_search() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    
+    let sub_dir = temp_dir.path().join("src");
+    fs::create_dir(&sub_dir).unwrap();
+
+    fs::write(temp_dir.path().join("file1.txt"), "hello").unwrap();
+    fs::write(sub_dir.join("file2.rs"), "fn main() {}").unwrap();
+    fs::write(sub_dir.join("file3.txt"), "world").unwrap();
+
+    let tool = GlobSearchTool::new(temp_dir.path());
+
+    // Match files recursively
+    let args = GlobSearchArgs {
+        pattern: "**/*.txt".to_string(),
+    };
+    let result = tool.call(args).await.unwrap();
+    assert!(result.contains("file1.txt"));
+    assert!(result.contains("src/file3.txt"));
+    assert!(!result.contains("file2.rs"));
+
+    // Match specific folder
+    let args2 = GlobSearchArgs {
+        pattern: "src/*.rs".to_string(),
+    };
+    let result2 = tool.call(args2).await.unwrap();
+    assert!(result2.contains("src/file2.rs"));
+    assert!(!result2.contains("file1.txt"));
+}
+
+#[tokio::test]
+async fn test_glob_search_sandbox_escape() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let tool = GlobSearchTool::new(temp_dir.path());
+
+    let args = GlobSearchArgs {
+        pattern: "../**/*".to_string(),
+    };
+    let err = tool.call(args).await.expect_err("should reject escape");
+
+    assert!(
+        matches!(err, agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_))
     );
 }

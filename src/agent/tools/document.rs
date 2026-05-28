@@ -163,7 +163,7 @@ impl Tool for WriteDocumentTool {
     }
 }
 
-fn validate_sandboxed_path(
+pub(crate) fn validate_sandboxed_path(
     sandbox_root: &Path,
     user_path: &Path,
 ) -> Result<PathBuf, DocumentError> {
