@@ -183,7 +183,6 @@ fn search_recursive(
 
     Ok(())
 }
-// TODO: Refactor: Reduce nesting for this function
 /// Searches a single file for `query`, appending matched lines to `results`.
 fn search_file(
     file_path: &Path,
@@ -198,40 +197,47 @@ fn search_file(
         return Ok(());
     }
 
-    if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-        if allowed_extensions.contains(ext) {
-            if let Ok(content) = fs::read_to_string(file_path) {
-                let relative_path = file_path
-                    .strip_prefix(sandbox_root)
-                    .unwrap_or(file_path)
-                    .to_string_lossy()
-                    .into_owned();
+    let ext = match file_path.extension().and_then(|e| e.to_str()) {
+        Some(ext) => ext,
+        None => return Ok(()),
+    };
+    if !allowed_extensions.contains(ext) {
+        return Ok(());
+    }
 
-                let query_lower = if !case_sensitive {
-                    Some(query.to_lowercase())
-                } else {
-                    None
-                };
+    let content = match fs::read_to_string(file_path) {
+        Ok(c) => c,
+        Err(_) => return Ok(()),
+    };
 
-                for (line_num, line) in content.lines().enumerate() {
-                    let matches = if case_sensitive {
-                        line.contains(query)
-                    } else {
-                        line.to_lowercase().contains(query_lower.as_ref().unwrap())
-                    };
+    let relative_path = file_path
+        .strip_prefix(sandbox_root)
+        .unwrap_or(file_path)
+        .to_string_lossy()
+        .into_owned();
 
-                    if matches {
-                        results.push(format!(
-                            "{}:{}: {}",
-                            relative_path,
-                            line_num + 1,
-                            line.trim()
-                        ));
-                        if results.len() >= max_results {
-                            return Ok(());
-                        }
-                    }
-                }
+    let query_lower = if !case_sensitive {
+        Some(query.to_lowercase())
+    } else {
+        None
+    };
+
+    for (line_num, line) in content.lines().enumerate() {
+        let matches = if case_sensitive {
+            line.contains(query)
+        } else {
+            line.to_lowercase().contains(query_lower.as_ref().unwrap())
+        };
+
+        if matches {
+            results.push(format!(
+                "{}:{}: {}",
+                relative_path,
+                line_num + 1,
+                line.trim()
+            ));
+            if results.len() >= max_results {
+                return Ok(());
             }
         }
     }

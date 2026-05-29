@@ -1,10 +1,9 @@
 use agent_rs_lib::agent::embeddings::EmbeddingService;
 use agent_rs_lib::agent::rag::{
-    DocumentLoader, PdfLoader, RagPipeline, TextLoader, TextSplitter, WordSplitter,
+    DocumentLoader, RagPipeline, TextLoader, TextSplitter, WordSplitter,
 };
 use rig::embeddings::{Embedding, EmbeddingModel};
 use std::fs;
-use std::path::Path;
 use std::result::Result as StdResult;
 
 #[derive(Clone)]
@@ -88,7 +87,7 @@ async fn test_rag_pipeline_building() {
 
     // The index implements rig::vector_store::VectorStoreIndex
     // Let's do a top_n search to check compatibility
-    use rig::vector_store::{VectorStoreIndex, request::VectorSearchRequest};
+    use rig::vector_store::{request::VectorSearchRequest, VectorStoreIndex};
     let req = VectorSearchRequest::builder()
         .query("Rust programming")
         .samples(1)
@@ -126,7 +125,7 @@ async fn test_rag_pipeline_custom_formatter() {
         .expect("Should build store with custom formatter");
 
     let index = store.index(MockEmbeddingModel);
-    use rig::vector_store::{VectorStoreIndex, request::VectorSearchRequest};
+    use rig::vector_store::{request::VectorSearchRequest, VectorStoreIndex};
     let req = VectorSearchRequest::builder()
         .query("custom")
         .samples(1)
