@@ -1,12 +1,12 @@
 use crate::agent::permission::PermissionPolicy;
-use crate::agent::tools::document::validate_sandboxed_path;
 use crate::domain::errors::DocumentError;
+use crate::security::{SandboxConfig, relative_display_path, validate_sandboxed_path};
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde_json::json;
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Arguments for the `grep_search` tool.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -26,20 +26,20 @@ pub struct GrepSearchArgs {
 /// Supports case-insensitive (default) and case-sensitive modes.
 #[derive(Debug, Clone)]
 pub struct GrepSearchTool {
-    sandbox_root: PathBuf,
+    sandbox: SandboxConfig,
     allowed_extensions: HashSet<String>,
     policy: PermissionPolicy,
 }
 
 impl GrepSearchTool {
-    /// Creates a new `GrepSearchTool` restricted to `sandbox_root` and the given extension allowlist.
+    /// Creates a new `GrepSearchTool` restricted to `sandbox` and the given extension allowlist.
     pub fn new(
-        sandbox_root: impl Into<PathBuf>,
+        sandbox: SandboxConfig,
         allowed_extensions: HashSet<String>,
         policy: PermissionPolicy,
     ) -> Self {
         Self {
-            sandbox_root: sandbox_root.into(),
+            sandbox,
             allowed_extensions,
             policy,
         }
@@ -64,7 +64,7 @@ impl Tool for GrepSearchTool {
         ToolDefinition {
             name: Self::NAME.to_string(),
             description: format!(
-                "Search for a pattern/substring in workspace text files. Supports extensions: {supported}. Paths are relative to sandbox root."
+                "Search for a pattern/substring in workspace text files. Supports extensions: {supported}. Paths are relative to sandbox root(s)."
             ),
             parameters: json!({
                 "type": "object",
@@ -97,7 +97,7 @@ impl Tool for GrepSearchTool {
             return Err(DocumentError::PermissionDenied(description));
         }
 
-        let path = validate_sandboxed_path(&self.sandbox_root, Path::new(&relative_path))?;
+        let path = validate_sandboxed_path(&self.sandbox, Path::new(&relative_path))?;
 
         let case_sensitive = args.case_sensitive.unwrap_or(false);
         let max_results = 100;
@@ -108,7 +108,7 @@ impl Tool for GrepSearchTool {
             &args.query,
             case_sensitive,
             &self.allowed_extensions,
-            &self.sandbox_root,
+            &self.sandbox,
             &mut results,
             max_results,
         )?;
@@ -135,7 +135,7 @@ fn search_recursive(
     query: &str,
     case_sensitive: bool,
     allowed_extensions: &HashSet<String>,
-    sandbox_root: &Path,
+    sandbox: &SandboxConfig,
     results: &mut Vec<String>,
     max_results: usize,
 ) -> Result<(), std::io::Error> {
@@ -153,7 +153,7 @@ fn search_recursive(
                     query,
                     case_sensitive,
                     allowed_extensions,
-                    sandbox_root,
+                    sandbox,
                     results,
                     max_results,
                 )?;
@@ -163,7 +163,7 @@ fn search_recursive(
                     query,
                     case_sensitive,
                     allowed_extensions,
-                    sandbox_root,
+                    sandbox,
                     results,
                     max_results,
                 )?;
@@ -175,7 +175,7 @@ fn search_recursive(
             query,
             case_sensitive,
             allowed_extensions,
-            sandbox_root,
+            sandbox,
             results,
             max_results,
         )?;
@@ -183,13 +183,14 @@ fn search_recursive(
 
     Ok(())
 }
+
 /// Searches a single file for `query`, appending matched lines to `results`.
 fn search_file(
     file_path: &Path,
     query: &str,
     case_sensitive: bool,
     allowed_extensions: &HashSet<String>,
-    sandbox_root: &Path,
+    sandbox: &SandboxConfig,
     results: &mut Vec<String>,
     max_results: usize,
 ) -> Result<(), std::io::Error> {
@@ -210,11 +211,7 @@ fn search_file(
         Err(_) => return Ok(()),
     };
 
-    let relative_path = file_path
-        .strip_prefix(sandbox_root)
-        .unwrap_or(file_path)
-        .to_string_lossy()
-        .into_owned();
+    let relative_path = relative_display_path(sandbox, file_path);
 
     let query_lower = if !case_sensitive {
         Some(query.to_lowercase())

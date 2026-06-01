@@ -7,6 +7,7 @@ use agent_rs_lib::agent::tools::{
 };
 use agent_rs_lib::config::McpConfig;
 use agent_rs_lib::mcp::client::McpClient;
+use agent_rs_lib::security::SandboxConfig;
 use anyhow::Result;
 use dotenvy::dotenv;
 use rig::integrations::cli_chatbot::ChatBotBuilder;
@@ -15,6 +16,7 @@ use rig::providers::openai;
 use rig::tool::ToolDyn;
 use std::collections::HashSet;
 use std::env;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 #[tokio::main]
@@ -76,17 +78,35 @@ async fn main() -> Result<()> {
         _ => PermissionPolicy::AllowAll,
     };
 
+    // Sandbox configuration: SANDBOX_ROOTS env var overrides default "./"
+    // Format: comma-separated paths, first is primary (default for writes)
+    // Example: SANDBOX_ROOTS="./,/tmp/shared,/home/user/docs"
+    let sandbox = match env::var("SANDBOX_ROOTS") {
+        Ok(s) if !s.trim().is_empty() => {
+            SandboxConfig::new(s.split(',').map(|p| PathBuf::from(p.trim())).collect())?
+        }
+        _ => SandboxConfig::single("./")?,
+    };
+
     let internal_tools: Vec<Box<dyn ToolDyn>> = vec![
-        Box::new(ReadDocumentTool::new("./", read_extensions, policy.clone())),
+        Box::new(ReadDocumentTool::new(
+            sandbox.clone(),
+            read_extensions,
+            policy.clone(),
+        )),
         Box::new(WriteDocumentTool::new(
-            "./",
+            sandbox.clone(),
             write_extensions,
             policy.clone(),
         )),
-        Box::new(ListDirectoryTool::new("./", policy.clone())),
-        Box::new(GrepSearchTool::new("./", grep_extensions, policy.clone())),
-        Box::new(GlobSearchTool::new("./", policy.clone())),
-        Box::new(ManageRagTool::new(rag_registry, "./", policy)),
+        Box::new(ListDirectoryTool::new(sandbox.clone(), policy.clone())),
+        Box::new(GrepSearchTool::new(
+            sandbox.clone(),
+            grep_extensions,
+            policy.clone(),
+        )),
+        Box::new(GlobSearchTool::new(sandbox.clone(), policy.clone())),
+        Box::new(ManageRagTool::new(rag_registry, sandbox, policy)),
     ];
     tools.extend(internal_tools);
 

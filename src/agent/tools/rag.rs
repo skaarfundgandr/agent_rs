@@ -1,12 +1,12 @@
 use crate::agent::permission::PermissionPolicy;
-use crate::agent::tools::document::validate_sandboxed_path;
 use crate::domain::errors::DocumentError;
 use crate::domain::rag::{RagSource, RagSourceType};
+use crate::security::{SandboxConfig, validate_sandboxed_path};
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde_json::json;
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 /// A thread-safe registry that tracks RAG sources (files and directories).
@@ -42,14 +42,14 @@ impl RagSourceRegistry {
 
     /// Adds a source (file or directory) to the registry.
     ///
-    /// The path is resolved relative to `sandbox_root` and canonicalized.
+    /// The path is resolved relative to `sandbox` and canonicalized.
     /// Files are checked against the supported extension set, and duplicate
     /// paths are rejected.
     ///
     /// # Arguments
     ///
     /// * `path` - Relative or absolute path to the file or directory.
-    /// * `sandbox_root` - The root directory within which the path is validated.
+    /// * `sandbox` - Sandbox configuration within which the path is validated.
     ///
     /// # Returns
     ///
@@ -57,15 +57,15 @@ impl RagSourceRegistry {
     ///
     /// # Errors
     ///
-    /// * [`DocumentError::SandboxEscape`] if the path resolves outside the sandbox.
+    /// * [`DocumentError::SandboxEscape`] if the path resolves outside all sandbox roots.
     /// * [`DocumentError::UnsupportedExtension`] if the file extension is not in the supported set.
     /// * [`DocumentError::Rag`] if the source is already indexed or the path does not exist.
     pub fn add_source(
         &mut self,
         path: &Path,
-        sandbox_root: &Path,
+        sandbox: &SandboxConfig,
     ) -> Result<String, DocumentError> {
-        let canonical = validate_sandboxed_path(sandbox_root, path)?;
+        let canonical = validate_sandboxed_path(sandbox, path)?;
 
         if self.sources.iter().any(|s| s.path == canonical) {
             return Err(DocumentError::Rag(format!(
@@ -75,114 +75,76 @@ impl RagSourceRegistry {
         }
 
         if canonical.is_file() {
-            let ext = canonical
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("")
-                .to_string();
+            let ext = canonical.extension().and_then(|e| e.to_str()).unwrap_or("");
 
-            if !self.supported_extensions.contains(&ext) {
-                return Err(DocumentError::UnsupportedExtension(ext));
+            if !self.supported_extensions.contains(ext) {
+                return Err(DocumentError::UnsupportedExtension(ext.to_string()));
             }
 
             self.sources.push(RagSource {
-                path: canonical.clone(),
+                path: canonical,
                 source_type: RagSourceType::File,
             });
-
-            Ok(format!(
-                "Added file source: {} ({} sources total)",
-                path.display(),
-                self.sources.len()
-            ))
         } else if canonical.is_dir() {
             self.sources.push(RagSource {
-                path: canonical.clone(),
+                path: canonical,
                 source_type: RagSourceType::Directory,
             });
-
-            Ok(format!(
-                "Added directory source: {} ({} sources total)",
-                path.display(),
-                self.sources.len()
-            ))
         } else {
-            Err(DocumentError::Rag(format!(
-                "Path does not exist: {}",
-                path.display()
-            )))
-        }
-    }
-
-    /// Removes a source by its path string.
-    ///
-    /// Matches against the stored canonical paths. The path is compared
-    /// lexically — it does not need to be canonicalized by the caller.
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - The path string to match against stored sources.
-    ///
-    /// # Returns
-    ///
-    /// A confirmation message with the number of remaining sources.
-    ///
-    /// # Errors
-    ///
-    /// [`DocumentError::Rag`] if no source matches the given path.
-    pub fn remove_source(&mut self, path: &Path) -> Result<String, DocumentError> {
-        let before = self.sources.len();
-
-        self.sources.retain(|s| s.path != path);
-
-        if self.sources.len() == before {
             return Err(DocumentError::Rag(format!(
-                "Source not found: {}",
+                "Path does not exist: {}",
                 path.display()
             )));
         }
 
         Ok(format!(
-            "Removed source: {} ({} sources remaining)",
+            "Added source '{}' (total: {})",
             path.display(),
             self.sources.len()
         ))
     }
 
-    /// Returns a formatted string listing all registered sources.
-    ///
-    /// Each entry shows its index, type (`File` or `Dir`), and path.
-    /// Returns a message indicating no sources are registered when empty.
-    pub fn list_sources(&self) -> String {
-        if self.sources.is_empty() {
-            return "No RAG sources registered.".to_string();
+    /// Removes a source by its canonical path.
+    pub fn remove_source(&mut self, canonical_path: &Path) -> Result<String, DocumentError> {
+        let before = self.sources.len();
+        self.sources.retain(|s| s.path != canonical_path);
+
+        if self.sources.len() == before {
+            return Err(DocumentError::Rag(format!(
+                "Source not found: {}",
+                canonical_path.display()
+            )));
         }
 
-        let entries: Vec<String> = self
-            .sources
-            .iter()
-            .enumerate()
-            .map(|(i, s)| {
-                let kind = match s.source_type {
-                    RagSourceType::File => "File",
-                    RagSourceType::Directory => "Dir",
-                };
-                format!("{}. [{}] {}", i + 1, kind, s.path.display())
-            })
-            .collect();
-
-        format!(
-            "{} RAG sources registered:\n{}",
-            self.sources.len(),
-            entries.join("\n")
-        )
+        Ok(format!(
+            "Removed source '{}' (total: {})",
+            canonical_path.display(),
+            self.sources.len()
+        ))
     }
 
-    /// Returns a read-only slice of the registered sources.
-    ///
-    /// Consumers iterate this to load documents and rebuild the RAG pipeline.
+    /// Returns all registered sources.
     pub fn sources(&self) -> &[RagSource] {
         &self.sources
+    }
+
+    /// Returns a formatted list of all sources.
+    pub fn list_sources(&self) -> String {
+        if self.sources.is_empty() {
+            return "No sources registered.".to_string();
+        }
+
+        self.sources
+            .iter()
+            .map(|s| {
+                let kind = match s.source_type {
+                    RagSourceType::File => "FILE",
+                    RagSourceType::Directory => "DIR",
+                };
+                format!("[{}] {}", kind, s.path.display())
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     /// Returns `true` if no sources are registered.
@@ -215,7 +177,7 @@ pub struct ManageRagArgs {
 #[derive(Debug, Clone)]
 pub struct ManageRagTool {
     registry: Arc<Mutex<RagSourceRegistry>>,
-    sandbox_root: PathBuf,
+    sandbox: SandboxConfig,
     policy: PermissionPolicy,
 }
 
@@ -225,17 +187,17 @@ impl ManageRagTool {
     /// # Arguments
     ///
     /// * `registry` - Shared registry that this tool reads from and writes to.
-    /// * `sandbox_root` - Directory within which all source paths are resolved
-    ///   and validated. Paths that escape this root are rejected.
+    /// * `sandbox` - Sandbox configuration within which all source paths are resolved
+    ///   and validated. Paths that escape all sandbox roots are rejected.
     /// * `policy` - Permission policy evaluated before each tool invocation.
     pub fn new(
         registry: Arc<Mutex<RagSourceRegistry>>,
-        sandbox_root: impl Into<PathBuf>,
+        sandbox: SandboxConfig,
         policy: PermissionPolicy,
     ) -> Self {
         Self {
             registry,
-            sandbox_root: sandbox_root.into(),
+            sandbox,
             policy,
         }
     }
@@ -281,7 +243,7 @@ impl Tool for ManageRagTool {
     ///   or registry-level errors (duplicate source, source not found).
     /// * [`DocumentError::PermissionDenied`] if the permission policy rejects
     ///   the invocation.
-    /// * [`DocumentError::SandboxEscape`] if the path escapes the sandbox root
+    /// * [`DocumentError::SandboxEscape`] if the path escapes all sandbox roots
     ///   (via `add_source`).
     /// * [`DocumentError::UnsupportedExtension`] if the file extension is not
     ///   in the supported set (via `add_source`).
@@ -319,7 +281,7 @@ impl Tool for ManageRagTool {
                     .registry
                     .lock()
                     .map_err(|e| DocumentError::Rag(e.to_string()))?;
-                registry.add_source(path, &self.sandbox_root)
+                registry.add_source(path, &self.sandbox)
             }
             "remove" => {
                 let path_str = args.path.ok_or_else(|| {
@@ -328,7 +290,7 @@ impl Tool for ManageRagTool {
                     )
                 })?;
                 let path = Path::new(&path_str);
-                let canonical = validate_sandboxed_path(&self.sandbox_root, path)?;
+                let canonical = validate_sandboxed_path(&self.sandbox, path)?;
                 let mut registry = self
                     .registry
                     .lock()

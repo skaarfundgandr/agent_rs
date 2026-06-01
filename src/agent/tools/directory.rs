@@ -1,11 +1,11 @@
 use crate::agent::permission::PermissionPolicy;
-use crate::agent::tools::document::validate_sandboxed_path;
 use crate::domain::errors::DocumentError;
+use crate::security::{SandboxConfig, validate_sandboxed_path};
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde_json::json;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Arguments for the `list_directory` tool.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -21,17 +21,14 @@ pub struct ListDirectoryArgs {
 /// within each group.
 #[derive(Debug, Clone)]
 pub struct ListDirectoryTool {
-    sandbox_root: PathBuf,
+    sandbox: SandboxConfig,
     policy: PermissionPolicy,
 }
 
 impl ListDirectoryTool {
     /// Creates a new `ListDirectoryTool` restricted to `sandbox_root`.
-    pub fn new(sandbox_root: impl Into<PathBuf>, policy: PermissionPolicy) -> Self {
-        Self {
-            sandbox_root: sandbox_root.into(),
-            policy,
-        }
+    pub fn new(sandbox: SandboxConfig, policy: PermissionPolicy) -> Self {
+        Self { sandbox, policy }
     }
 }
 
@@ -66,7 +63,7 @@ impl Tool for ListDirectoryTool {
             return Err(DocumentError::PermissionDenied(description));
         }
 
-        let path = validate_sandboxed_path(&self.sandbox_root, Path::new(&relative_path))?;
+        let path = validate_sandboxed_path(&self.sandbox, Path::new(&relative_path))?;
 
         if !path.is_dir() {
             return Err(std::io::Error::new(
