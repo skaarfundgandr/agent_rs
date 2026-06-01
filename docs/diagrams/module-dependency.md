@@ -17,6 +17,10 @@ graph LR
         domain_errors["errors.rs<br/>DocumentError, CompactError"]
     end
 
+    subgraph security["src/security/"]
+        security_sandbox["sandbox.rs<br/>SandboxConfig<br/>validate_sandboxed_path<br/>find_containing_root<br/>relative_display_path"]
+    end
+
     subgraph config["src/config.rs"]
         config_rs["McpConfig impl<br/>validation, resolution, transport detection"]
     end
@@ -31,7 +35,7 @@ graph LR
         end
 
         subgraph tools["tools/"]
-            document["document.rs<br/>ReadDocumentTool, WriteDocumentTool<br/>validate_sandboxed_path"]
+            document["document.rs<br/>ReadDocumentTool, WriteDocumentTool"]
             search["search.rs<br/>GrepSearchTool"]
             glob["glob.rs<br/>GlobSearchTool"]
             directory["directory.rs<br/>ListDirectoryTool"]
@@ -47,6 +51,7 @@ graph LR
     main_rs --> lib_rs
     lib_rs --> config_rs
     lib_rs --> domain
+    lib_rs --> security
     lib_rs --> agent
     lib_rs --> mcp
 
@@ -63,9 +68,10 @@ graph LR
 
     document --> domain_errors
     document --> rag
-    search --> document
-    glob --> document
-    directory --> document
+    document --> security_sandbox
+    search --> security_sandbox
+    glob --> security_sandbox
+    directory --> security_sandbox
     compact --> domain_errors
 
     client --> domain_config

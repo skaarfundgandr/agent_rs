@@ -6,12 +6,13 @@
 
 ## Table of Contents
 1. [Config and MCP Modules](#1-config-and-mcp-modules)
-2. [Embedding Service](#2-embedding-service)
-3. [RAG Pipeline](#3-rag-pipeline)
-4. [Memory and Agent Context](#4-memory-and-agent-context)
-5. [Permission System](#5-permission-system)
-6. [Agent Tools](#6-agent-tools)
-7. [Domain Errors](#7-domain-errors)
+2. [Security Sandbox](#2-security-sandbox)
+3. [Embedding Service](#3-embedding-service)
+4. [RAG Pipeline](#4-rag-pipeline)
+5. [Memory and Agent Context](#5-memory-and-agent-context)
+6. [Permission System](#6-permission-system)
+7. [Agent Tools](#7-agent-tools)
+8. [Domain Errors](#8-domain-errors)
 
 ---
 
@@ -69,7 +70,75 @@ async fn main() -> anyhow::Result<()> {
 
 ---
 
-## 2. Embedding Service
+## 2. Security Sandbox
+
+Multi-root filesystem sandboxing. Controls which paths tools can access and where new files are written.
+
+> **Architecture reference:** See the [sandbox validation flowchart](diagrams/flowchart.md) for the path resolution algorithm, and the [module dependency graph](diagrams/module-dependency.md) for how `security::sandbox` fits into the crate.
+
+### `SandboxConfig`
+Stores an ordered list of allowed filesystem roots. The first root is the **primary** — used as the default target when creating new files. All roots participate equally in read/search/glob operations.
+
+```rust
+pub struct SandboxConfig {
+    roots: Vec<PathBuf>,
+    canonical_roots: Vec<PathBuf>,
+}
+```
+
+#### Methods
+* **`single(root: impl Into<PathBuf>) -> Result<Self, DocumentError>`**
+  Creates a sandbox with a single root. Returns an IO error if the root cannot be canonicalized.
+* **`new(roots: Vec<PathBuf>) -> Result<Self, DocumentError>`**
+  Creates a sandbox with multiple roots. The first root is primary. Returns an error if `roots` is empty or if any root cannot be canonicalized. All roots are canonicalized at construction time.
+* **`primary(&self) -> &Path`**
+  Returns the primary (first) root.
+* **`roots(&self) -> &[PathBuf]`**
+  Returns the original (non-canonicalized) roots. Use for display paths and user-facing operations.
+* **`canonical_roots(&self) -> &[PathBuf]`**
+  Returns canonicalized roots. Use for security validation.
+* **`len(&self) -> usize`**
+  Returns the number of configured roots.
+* **`is_empty(&self) -> bool`**
+  Returns `true` if no roots are configured (should never happen).
+
+#### Trait Implementations
+* `Default` — uses `"."` as a single root.
+* `TryFrom<PathBuf>`, `TryFrom<&Path>`, `TryFrom<&str>` — each creates a single-root sandbox. Returns an error if the root cannot be canonicalized.
+
+### `validate_sandboxed_path()`
+```rust
+pub fn validate_sandboxed_path(
+    sandbox: &SandboxConfig,
+    user_path: &Path,
+) -> Result<PathBuf, DocumentError>
+```
+Validates that `user_path` resolves to a path within one of the sandbox roots. Uses a two-phase algorithm:
+1. **Phase 1 (reads):** Try each canonical root in order. If the joined+canonicalized path falls within a root **and** the file exists, return it.
+2. **Phase 2 (writes):** If no root has the file, use the primary root to allow creating new files.
+Returns `DocumentError::SandboxEscape` if the resolved path falls outside all roots.
+
+### `find_containing_root()`
+```rust
+pub fn find_containing_root<'a>(
+    sandbox: &'a SandboxConfig,
+    path: &Path,
+) -> Option<&'a PathBuf>
+```
+Returns the original (non-canonicalized) root that contains `path`, or `None` if the path does not fall under any root. Uses original roots for comparison to avoid Windows `\\?\` prefix issues.
+
+### `relative_display_path()`
+```rust
+pub fn relative_display_path(sandbox: &SandboxConfig, path: &Path) -> String
+```
+Computes a relative display path for a file, preferring the shortest prefix among the sandbox roots for readability. Falls back to the full path if no root matches.
+
+### Environment Variables
+* **`SANDBOX_ROOTS`** — comma-separated list of allowed filesystem paths. The first path is the primary root (default for writes). Example: `SANDBOX_ROOTS="./,/tmp/shared,/home/user/docs"`. Defaults to `"./"` if unset.
+
+---
+
+## 3. Embedding Service
 
 Wraps any Rig `EmbeddingModel` to provide structured document splitting, order-preserving batching, and error handling.
 
@@ -96,7 +165,7 @@ Generic over `M: EmbeddingModel`.
 
 ---
 
-## 3. RAG Pipeline
+## 4. RAG Pipeline
 
 A decoupled ingestion pipeline that transforms files into chunked, embedded vector indexes.
 
@@ -196,7 +265,7 @@ async fn main() -> anyhow::Result<()> {
 
 ---
 
-## 4. Memory and Agent Context
+## 5. Memory and Agent Context
 
 Automates history size management to prevent context window overflows and excessive token costs.
 
@@ -234,7 +303,7 @@ let response = managed_agent.chat("What were my previous requests?", &mut histor
 
 ---
 
-## 5. Permission System
+## 6. Permission System
 
 > **Type reference:** See the [class diagram](diagrams/class-diagram.md) for the `PermissionPolicy` type hierarchy.
 
@@ -263,13 +332,13 @@ pub trait PermissionGate: Send + Sync {
 
 ---
 
-## 6. Agent Tools
+## 7. Agent Tools
 
 Standard Rig `Tool` implementations available to agents.
 
 > **Architecture reference:** See the [C4 component diagram](diagrams/c4-architecture.md) for how tools relate to the agent core, the [sandbox validation flowchart](diagrams/flowchart.md) for path security enforcement, and the [class diagram](diagrams/class-diagram.md) for tool type hierarchy.
 
-All filesystem tools accept a `PermissionPolicy` in their constructor. When the policy denies an operation, the tool returns `DocumentError::PermissionDenied` (see [§7 Domain Errors](#7-domain-errors)).
+All filesystem tools accept a `PermissionPolicy` and a `SandboxConfig` in their constructor. When the policy denies an operation, the tool returns `DocumentError::PermissionDenied` (see [§8 Domain Errors](#8-domain-errors)).
 
 ### `CompactTool`
 Invokes a completion model to summarize conversation history.
@@ -279,38 +348,38 @@ Invokes a completion model to summarize conversation history.
 ### `ReadDocumentTool`
 Reads document contents from the filesystem. Access is restricted to a configurable sandbox root directory and an explicit set of allowed file extensions.
 - **Name**: `read_document`
-- **Constructor**: `ReadDocumentTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>, policy: PermissionPolicy)`
+- **Constructor**: `ReadDocumentTool::new(sandbox: SandboxConfig, allowed_extensions: HashSet<String>, policy: PermissionPolicy)`
 - **Arguments**: `ReadDocumentArgs { path: String }` (resolved relative to the sandbox root)
 - **Note**: When `"pdf"` is in the allowed set, PDF parsing is handled by `pdf-extract`; all other extensions are read as plain text.
 
 ### `WriteDocumentTool`
 Writes or appends content to a text file. Access is restricted to a configurable sandbox root directory and an explicit set of allowed file extensions.
 - **Name**: `write_document`
-- **Constructor**: `WriteDocumentTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>, policy: PermissionPolicy)`
+- **Constructor**: `WriteDocumentTool::new(sandbox: SandboxConfig, allowed_extensions: HashSet<String>, policy: PermissionPolicy)`
 - **Arguments**: `WriteDocumentArgs { path: String, content: String, append: Option<bool> }` (resolved relative to the sandbox root)
 
 ### `ListDirectoryTool`
 Lists the contents of a directory within the sandbox root. Directories are prefixed with `[DIR]`, files with `[FILE]` (including byte size). Entries are sorted directories-first, then case-insensitively by name.
 - **Name**: `list_directory`
-- **Constructor**: `ListDirectoryTool::new(sandbox_root: impl Into<PathBuf>, policy: PermissionPolicy)`
+- **Constructor**: `ListDirectoryTool::new(sandbox: SandboxConfig, policy: PermissionPolicy)`
 - **Arguments**: `ListDirectoryArgs { path: Option<String> }` (defaults to sandbox root)
 
 ### `GlobSearchTool`
 Finds files and directories matching a glob pattern within the sandbox root. Uses the [`glob`](https://crates.io/crates/glob) crate. Rejects absolute patterns and path traversals containing `..`. Returns up to 100 results.
 - **Name**: `glob_search`
-- **Constructor**: `GlobSearchTool::new(sandbox_root: impl Into<PathBuf>, policy: PermissionPolicy)`
-- **Arguments**: `GlobSearchArgs { pattern: String }` (relative to sandbox root, e.g. `"src/**/*.rs"`)
+- **Constructor**: `GlobSearchTool::new(sandbox: SandboxConfig, policy: PermissionPolicy)`
+- **Arguments**: `GlobSearchArgs { pattern: String, directory: Option<String> }` (pattern relative to sandbox root, e.g. `"src/**/*.rs"`; optional `directory` narrows the search to a specific subdirectory)
 
 ### `GrepSearchTool`
 Searches for a substring pattern in workspace text files within the sandbox root. Only searches files whose extension is in the configured allowlist. Results are returned in `path:line: content` format, capped at 100 matches.
 - **Name**: `grep_search`
-- **Constructor**: `GrepSearchTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>, policy: PermissionPolicy)`
+- **Constructor**: `GrepSearchTool::new(sandbox: SandboxConfig, allowed_extensions: HashSet<String>, policy: PermissionPolicy)`
 - **Arguments**: `GrepSearchArgs { query: String, path: Option<String>, case_sensitive: Option<bool> }`
 
 ### `ManageRagTool`
 Unified tool for managing RAG sources. Supports three actions via a string enum: add a file or directory, remove a source, or list all indexed sources. After add/remove, the consumer should rebuild the RAG pipeline from the updated registry.
 - **Name**: `manage_rag`
-- **Constructor**: `ManageRagTool::new(registry: Arc<Mutex<RagSourceRegistry>>, sandbox_root: impl Into<PathBuf>, policy: PermissionPolicy)`
+- **Constructor**: `ManageRagTool::new(registry: Arc<Mutex<RagSourceRegistry>>, sandbox: SandboxConfig, policy: PermissionPolicy)`
 - **Arguments**: `ManageRagArgs { action: String, path: Option<String> }`
   - `action`: One of `"add"`, `"remove"`, or `"list"`.
   - `path`: Path to the file or directory (relative to sandbox root). Required for `"add"` and `"remove"`.
@@ -321,10 +390,10 @@ Thread-safe registry that tracks which files and directories are indexed for RAG
 #### Methods
 * **`new(supported_extensions: HashSet<String>) -> Self`**
   Creates an empty registry. `supported_extensions` is the set of file extensions (without the dot) the consumer can load.
-* **`add_source(&mut self, path: &Path, sandbox_root: &Path) -> Result<String, DocumentError>`**
-  Validates the path against the sandbox root, checks the file extension, rejects duplicates, and registers the source.
-* **`remove_source(&mut self, path: &str) -> Result<String, DocumentError>`**
-  Removes a source by its path string. Returns an error if no source matches.
+* **`add_source(&mut self, path: &Path, sandbox: &SandboxConfig) -> Result<String, DocumentError>`**
+  Validates the path against the sandbox, checks the file extension, rejects duplicates, and registers the source.
+* **`remove_source(&mut self, canonical_path: &Path) -> Result<String, DocumentError>`**
+  Removes a source by its canonical path. Returns an error if no source matches.
 * **`list_sources(&self) -> String`**
   Returns a formatted string listing all registered sources with their type and index.
 * **`sources(&self) -> &[RagSource]`**
@@ -362,9 +431,15 @@ pub use tools::{
 };
 ```
 
+Module re-exports (`src/security/mod.rs`):
+
+```rust
+pub use sandbox::{SandboxConfig, find_containing_root, relative_display_path, validate_sandboxed_path};
+```
+
 ---
 
-## 7. Domain Errors
+## 8. Domain Errors
 
 Robust, typed errors used across tools and modules.
 

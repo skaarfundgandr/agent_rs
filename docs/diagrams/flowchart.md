@@ -30,17 +30,24 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    Input(["User-provided path"]) --> CanonRoot["Canonicalize sandbox root"]
-    CanonRoot --> Join["Join: sandbox_root + user_path"]
+    Input(["User-provided path"]) --> LoopStart["For each canonical root"]
+    LoopStart --> Join["Join: root + user_path"]
     Join --> Exists{"target exists?"}
     Exists -->|Yes| CanonTarget["Canonicalize directly"]
     Exists -->|No| WalkUp["Walk up non-existent parents<br/>→ find nearest existing ancestor"]
     WalkUp --> CanonAncestor["Canonicalize ancestor"]
     CanonAncestor --> Rebuild["Rebuild path from ancestor"]
-    Rebuild --> CheckSafety
-    CanonTarget --> CheckSafety{"canonical_target<br/>starts_with<br/>canonical_root?"}
-    CheckSafety -->|Yes| Success["✅ Return canonical path"]
-    CheckSafety -->|No| Fail["❌ DocumentError::SandboxEscape"]
+    Rebuild --> WithinRoot{"within root?"}
+    CanonTarget --> WithinRoot
+    WithinRoot -->|Yes| ExistsCheck{"file exists<br/>in this root?"}
+    WithinRoot -->|No| NextRoot{"more roots?"}
+    ExistsCheck -->|Yes| Success["✅ Return canonical path"]
+    ExistsCheck -->|No| NextRoot
+    NextRoot -->|Yes| LoopStart
+    NextRoot -->|No| Primary["Use primary root<br/>(for writes to new files)"]
+    Primary --> PrimaryCheck{"within primary root?"}
+    PrimaryCheck -->|Yes| Success2["✅ Return canonical path"]
+    PrimaryCheck -->|No| Fail["❌ DocumentError::SandboxEscape"]
 ```
 
 ## History Compaction (Context-Managed Agent)
