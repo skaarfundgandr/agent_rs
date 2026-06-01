@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Document {
@@ -27,4 +28,20 @@ impl Default for ChunkingOptions {
             chunk_overlap_words: 40,
         }
     }
+}
+
+/// The kind of RAG source (individual file or directory).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum RagSourceType {
+    File,
+    Directory,
+}
+
+/// A registered RAG source entry: the path and whether it is a file or directory.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RagSource {
+    /// Canonical path to the source on disk.
+    pub path: PathBuf,
+    /// Whether the source is an individual file or a directory.
+    pub source_type: RagSourceType,
 }

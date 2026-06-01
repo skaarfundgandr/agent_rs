@@ -12,6 +12,8 @@ pub enum DocumentError {
     SandboxEscape(String),
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
+    #[error("RAG error: {0}")]
+    Rag(String),
 }
 
 #[derive(Debug, Error)]

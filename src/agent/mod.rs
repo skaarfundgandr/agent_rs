@@ -10,9 +10,10 @@ pub use permission::{PermissionGate, PermissionPolicy};
 pub use embeddings::EmbeddingService;
 pub use memory::{AgentContextExt, ContextManagedAgent};
 pub use rag::{
-    Chunk, Document, DocumentLoader, PdfLoader, RagPipeline, TextLoader, TextSplitter, WordSplitter,
+    Chunk, Document, DocumentLoader, PdfLoader, RagPipeline, RagSource, RagSourceType, TextLoader,
+    TextSplitter, WordSplitter,
 };
 pub use tools::{
-    CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool,
-    WriteDocumentTool,
+    CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ManageRagTool,
+    RagSourceRegistry, ReadDocumentTool, WriteDocumentTool,
 };

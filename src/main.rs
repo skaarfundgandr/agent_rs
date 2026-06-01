@@ -2,8 +2,8 @@ use agent_rs_lib::agent::embeddings::EmbeddingService;
 use agent_rs_lib::agent::permission::PermissionPolicy;
 use agent_rs_lib::agent::rag::{DocumentLoader, PdfLoader, RagPipeline, WordSplitter};
 use agent_rs_lib::agent::tools::{
-    CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool,
-    WriteDocumentTool,
+    CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ManageRagTool,
+    RagSourceRegistry, ReadDocumentTool, WriteDocumentTool,
 };
 use agent_rs_lib::config::McpConfig;
 use agent_rs_lib::mcp::client::McpClient;
@@ -15,6 +15,7 @@ use rig::providers::openai;
 use rig::tool::ToolDyn;
 use std::collections::HashSet;
 use std::env;
+use std::sync::{Arc, Mutex};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -36,6 +37,10 @@ async fn main() -> Result<()> {
 
     let embedding_model = client.embedding_model(embedding_model_name);
     let embedding_service = EmbeddingService::new(embedding_model.clone());
+
+    // RAG source registry shared across the manage_rag tool
+    let rag_extensions = HashSet::from(["txt", "md", "pdf"].map(String::from));
+    let rag_registry = Arc::new(Mutex::new(RagSourceRegistry::new(rag_extensions)));
 
     let mut tools = McpClient::new(McpConfig::from_path("./mcp.json").unwrap())
         .tools()
@@ -80,7 +85,8 @@ async fn main() -> Result<()> {
         )),
         Box::new(ListDirectoryTool::new("./", policy.clone())),
         Box::new(GrepSearchTool::new("./", grep_extensions, policy.clone())),
-        Box::new(GlobSearchTool::new("./", policy)),
+        Box::new(GlobSearchTool::new("./", policy.clone())),
+        Box::new(ManageRagTool::new(rag_registry, "./", policy)),
     ];
     tools.extend(internal_tools);
 

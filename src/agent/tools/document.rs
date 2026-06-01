@@ -198,12 +198,12 @@ pub(crate) fn validate_sandboxed_path(
 ) -> Result<PathBuf, DocumentError> {
     let canonical_root = sandbox_root
         .canonicalize()
-        .map_err(|e| DocumentError::Io(e))?;
+        .map_err(DocumentError::Io)?;
 
     let target = sandbox_root.join(user_path);
 
     let canonical_target = if target.exists() {
-        target.canonicalize().map_err(|e| DocumentError::Io(e))?
+        target.canonicalize().map_err(DocumentError::Io)?
     } else {
         let mut existing_parent = target.as_path();
         let mut components_to_append = Vec::new();
@@ -221,7 +221,7 @@ pub(crate) fn validate_sandboxed_path(
 
         let mut canonical_path = existing_parent
             .canonicalize()
-            .map_err(|e| DocumentError::Io(e))?;
+            .map_err(DocumentError::Io)?;
         for comp in components_to_append.into_iter().rev() {
             canonical_path.push(comp);
         }

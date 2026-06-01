@@ -9,8 +9,9 @@
 2. [Embedding Service](#2-embedding-service)
 3. [RAG Pipeline](#3-rag-pipeline)
 4. [Memory and Agent Context](#4-memory-and-agent-context)
-5. [Agent Tools](#5-agent-tools)
-6. [Domain Errors](#6-domain-errors)
+5. [Permission System](#5-permission-system)
+6. [Agent Tools](#6-agent-tools)
+7. [Domain Errors](#7-domain-errors)
 
 ---
 
@@ -111,6 +112,16 @@ pub struct Document {
 pub struct Chunk {
     pub text: String,
     pub metadata: HashMap<String, String>,
+}
+
+pub enum RagSourceType {
+    File,
+    Directory,
+}
+
+pub struct RagSource {
+    pub path: PathBuf,
+    pub source_type: RagSourceType,
 }
 ```
 
@@ -258,7 +269,7 @@ Standard Rig `Tool` implementations available to agents.
 
 > **Architecture reference:** See the [C4 component diagram](diagrams/c4-architecture.md) for how tools relate to the agent core, the [sandbox validation flowchart](diagrams/flowchart.md) for path security enforcement, and the [class diagram](diagrams/class-diagram.md) for tool type hierarchy.
 
-All five filesystem tools accept a `PermissionPolicy` in their constructor. When the policy denies an operation, the tool returns `DocumentError::PermissionDenied` (see [§7 Domain Errors](#7-domain-errors)).
+All filesystem tools accept a `PermissionPolicy` in their constructor. When the policy denies an operation, the tool returns `DocumentError::PermissionDenied` (see [§7 Domain Errors](#7-domain-errors)).
 
 ### `CompactTool`
 Invokes a completion model to summarize conversation history.
@@ -296,6 +307,31 @@ Searches for a substring pattern in workspace text files within the sandbox root
 - **Constructor**: `GrepSearchTool::new(sandbox_root: impl Into<PathBuf>, allowed_extensions: HashSet<String>, policy: PermissionPolicy)`
 - **Arguments**: `GrepSearchArgs { query: String, path: Option<String>, case_sensitive: Option<bool> }`
 
+### `ManageRagTool`
+Unified tool for managing RAG sources. Supports three actions via a string enum: add a file or directory, remove a source, or list all indexed sources. After add/remove, the consumer should rebuild the RAG pipeline from the updated registry.
+- **Name**: `manage_rag`
+- **Constructor**: `ManageRagTool::new(registry: Arc<Mutex<RagSourceRegistry>>, sandbox_root: impl Into<PathBuf>, policy: PermissionPolicy)`
+- **Arguments**: `ManageRagArgs { action: String, path: Option<String> }`
+  - `action`: One of `"add"`, `"remove"`, or `"list"`.
+  - `path`: Path to the file or directory (relative to sandbox root). Required for `"add"` and `"remove"`.
+
+### `RagSourceRegistry`
+Thread-safe registry that tracks which files and directories are indexed for RAG. Does not rebuild the vector index itself — consumers read [`sources()`](RagSourceRegistry::sources) and rebuild the pipeline when needed. Intended to be wrapped in `Arc<Mutex<...>>` for shared ownership across tools.
+
+#### Methods
+* **`new(supported_extensions: HashSet<String>) -> Self`**
+  Creates an empty registry. `supported_extensions` is the set of file extensions (without the dot) the consumer can load.
+* **`add_source(&mut self, path: &Path, sandbox_root: &Path) -> Result<String, DocumentError>`**
+  Validates the path against the sandbox root, checks the file extension, rejects duplicates, and registers the source.
+* **`remove_source(&mut self, path: &str) -> Result<String, DocumentError>`**
+  Removes a source by its path string. Returns an error if no source matches.
+* **`list_sources(&self) -> String`**
+  Returns a formatted string listing all registered sources with their type and index.
+* **`sources(&self) -> &[RagSource]`**
+  Returns a read-only slice of registered sources for consumers to iterate when rebuilding the pipeline.
+* **`is_empty(&self) -> bool`**
+  Returns `true` if no sources are registered.
+
 ---
 
 > **Migration from v0.1.0**: See [`migration-0.2.0.md`](migration-0.2.0.md) for breaking changes to tool constructors.
@@ -308,6 +344,7 @@ pub use directory::ListDirectoryTool;
 pub use document::{ReadDocumentTool, WriteDocumentTool};
 pub use glob::GlobSearchTool;
 pub use search::GrepSearchTool;
+pub use rag::{ManageRagTool, RagSourceRegistry};
 ```
 
 Crate-level re-exports (`src/agent/mod.rs`):
@@ -315,8 +352,13 @@ Crate-level re-exports (`src/agent/mod.rs`):
 ```rust
 pub mod permission;
 pub use permission::{PermissionGate, PermissionPolicy};
+pub use rag::{
+    Chunk, Document, DocumentLoader, PdfLoader, RagPipeline, RagSource, RagSourceType,
+    TextLoader, TextSplitter, WordSplitter,
+};
 pub use tools::{
-    CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool, WriteDocumentTool,
+    CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ManageRagTool,
+    ReadDocumentTool, RagSourceRegistry, WriteDocumentTool,
 };
 ```
 
@@ -334,3 +376,4 @@ Robust, typed errors used across tools and modules.
 * `UnsupportedExtension(String)`: Ingestion or write attempted on an unsupported file format.
 * `SandboxEscape(String)`: Unauthorized path traversal attempt outside the configured sandbox root folder.
 * `PermissionDenied(String)`: Tool execution denied by the configured `PermissionPolicy`.
+* `Rag(String)`: RAG registry errors — duplicate source, source not found, invalid action, or missing required arguments.

@@ -1,5 +1,5 @@
 use crate::agent::embeddings::EmbeddingService;
-pub use crate::domain::rag::{Chunk, ChunkingOptions, Document};
+pub use crate::domain::rag::{Chunk, ChunkingOptions, Document, RagSource, RagSourceType};
 use anyhow::{Context, Result, bail};
 use pdf_extract::extract_text;
 use rig::{
@@ -194,7 +194,7 @@ impl RagPipeline {
         self
     }
 
-    /// Build a Rig InMemoryVectorStore<String> by formatting chunk text + metadata.
+    /// Build a Rig `InMemoryVectorStore<String>` by formatting chunk text + metadata.
     pub async fn build_store<M: EmbeddingModel>(
         &self,
         embedding_service: &EmbeddingService<M>,
@@ -215,7 +215,7 @@ impl RagPipeline {
         .await
     }
 
-    /// Build a Rig InMemoryVectorStore<String> by formatting chunk text + metadata using a custom formatter.
+    /// Build a Rig `InMemoryVectorStore<String>` by formatting chunk text + metadata using a custom formatter.
     pub async fn build_store_with_formatter<M: EmbeddingModel, F>(
         &self,
         embedding_service: &EmbeddingService<M>,
