@@ -5,6 +5,7 @@ use agent_rs_lib::agent::tools::document::{
 };
 use agent_rs_lib::agent::tools::glob::{GlobSearchArgs, GlobSearchTool};
 use agent_rs_lib::agent::tools::search::{GrepSearchArgs, GrepSearchTool};
+use agent_rs_lib::security::SandboxConfig;
 use rig::tool::Tool;
 use std::collections::HashSet;
 use std::fs;
@@ -13,7 +14,7 @@ use std::fs;
 async fn test_read_txt() {
     let temp_dir = tempfile::tempdir().unwrap();
     let tool = ReadDocumentTool::new(
-        temp_dir.path(),
+        SandboxConfig::single(temp_dir.path()).unwrap(),
         HashSet::from(["txt", "md", "pdf"].map(String::from)),
         PermissionPolicy::AllowAll,
     );
@@ -33,7 +34,7 @@ async fn test_read_txt() {
 #[ignore]
 async fn test_read_pdf() {
     let tool = ReadDocumentTool::new(
-        "./",
+        SandboxConfig::single("./").unwrap(),
         HashSet::from(["txt", "md", "pdf"].map(String::from)),
         PermissionPolicy::AllowAll,
     );
@@ -52,7 +53,7 @@ async fn test_read_pdf() {
 async fn test_write_document() {
     let temp_dir = tempfile::tempdir().unwrap();
     let tool = WriteDocumentTool::new(
-        temp_dir.path(),
+        SandboxConfig::single(temp_dir.path()).unwrap(),
         HashSet::from(["txt", "md"].map(String::from)),
         PermissionPolicy::AllowAll,
     );
@@ -81,7 +82,7 @@ async fn test_write_document() {
 async fn test_sandbox_escape_read() {
     let temp_dir = tempfile::tempdir().unwrap();
     let tool = ReadDocumentTool::new(
-        temp_dir.path(),
+        SandboxConfig::single(temp_dir.path()).unwrap(),
         HashSet::from(["txt", "md", "pdf"].map(String::from)),
         PermissionPolicy::AllowAll,
     );
@@ -108,7 +109,7 @@ async fn test_sandbox_escape_read() {
 async fn test_sandbox_escape_write() {
     let temp_dir = tempfile::tempdir().unwrap();
     let tool = WriteDocumentTool::new(
-        temp_dir.path(),
+        SandboxConfig::single(temp_dir.path()).unwrap(),
         HashSet::from(["txt", "md"].map(String::from)),
         PermissionPolicy::AllowAll,
     );
@@ -142,7 +143,10 @@ async fn test_list_directory() {
     fs::write(temp_dir.path().join("file.txt"), "hello").unwrap();
     fs::write(temp_dir.path().join("another.md"), "world").unwrap();
 
-    let tool = ListDirectoryTool::new(temp_dir.path(), PermissionPolicy::AllowAll);
+    let tool = ListDirectoryTool::new(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+        PermissionPolicy::AllowAll,
+    );
 
     let args = ListDirectoryArgs { path: None };
     let result = tool.call(args).await.unwrap();
@@ -155,7 +159,10 @@ async fn test_list_directory() {
 #[tokio::test]
 async fn test_list_directory_sandbox_escape() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let tool = ListDirectoryTool::new(temp_dir.path(), PermissionPolicy::AllowAll);
+    let tool = ListDirectoryTool::new(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+        PermissionPolicy::AllowAll,
+    );
 
     let args = ListDirectoryArgs {
         path: Some("../".to_string()),
@@ -183,7 +190,11 @@ async fn test_grep_search() {
     fs::write(sub_dir.join("file2.md"), "Another world here").unwrap();
 
     let allowed = HashSet::from(["txt", "md"].map(String::from));
-    let tool = GrepSearchTool::new(temp_dir.path(), allowed, PermissionPolicy::AllowAll);
+    let tool = GrepSearchTool::new(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+        allowed,
+        PermissionPolicy::AllowAll,
+    );
 
     // Test case insensitive search
     let args = GrepSearchArgs {
@@ -211,7 +222,11 @@ async fn test_grep_search() {
 async fn test_grep_search_sandbox_escape() {
     let temp_dir = tempfile::tempdir().unwrap();
     let allowed = HashSet::from(["txt", "md"].map(String::from));
-    let tool = GrepSearchTool::new(temp_dir.path(), allowed, PermissionPolicy::AllowAll);
+    let tool = GrepSearchTool::new(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+        allowed,
+        PermissionPolicy::AllowAll,
+    );
 
     let args = GrepSearchArgs {
         query: "test".to_string(),
@@ -237,11 +252,15 @@ async fn test_glob_search() {
     fs::write(sub_dir.join("file2.rs"), "fn main() {}").unwrap();
     fs::write(sub_dir.join("file3.txt"), "world").unwrap();
 
-    let tool = GlobSearchTool::new(temp_dir.path(), PermissionPolicy::AllowAll);
+    let tool = GlobSearchTool::new(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+        PermissionPolicy::AllowAll,
+    );
 
     // Match files recursively
     let args = GlobSearchArgs {
         pattern: "**/*.txt".to_string(),
+        directory: None,
     };
     let result = tool.call(args).await.unwrap();
     assert!(result.contains("file1.txt"));
@@ -251,19 +270,33 @@ async fn test_glob_search() {
     // Match specific folder
     let args2 = GlobSearchArgs {
         pattern: "src/*.rs".to_string(),
+        directory: None,
     };
     let result2 = tool.call(args2).await.unwrap();
     assert!(result2.contains("src/file2.rs"));
     assert!(!result2.contains("file1.txt"));
+
+    // Match specific folder via directory argument
+    let args3 = GlobSearchArgs {
+        pattern: "*.rs".to_string(),
+        directory: Some("src".to_string()),
+    };
+    let result3 = tool.call(args3).await.unwrap();
+    assert!(result3.contains("file2.rs"));
+    assert!(!result3.contains("file1.txt"));
 }
 
 #[tokio::test]
 async fn test_glob_search_sandbox_escape() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let tool = GlobSearchTool::new(temp_dir.path(), PermissionPolicy::AllowAll);
+    let tool = GlobSearchTool::new(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+        PermissionPolicy::AllowAll,
+    );
 
     let args = GlobSearchArgs {
         pattern: "../**/*".to_string(),
+        directory: None,
     };
     let err = tool.call(args).await.expect_err("should reject escape");
 
@@ -271,4 +304,262 @@ async fn test_glob_search_sandbox_escape() {
         err,
         agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
     ));
+}
+
+// ============================================================================
+// Multi-root sandbox tests (integration-level, not covered by unit tests)
+// ============================================================================
+
+#[tokio::test]
+async fn test_multi_root_read_from_secondary() {
+    let primary = tempfile::tempdir().unwrap();
+    let secondary = tempfile::tempdir().unwrap();
+
+    let sandbox = SandboxConfig::new(vec![
+        primary.path().to_path_buf(),
+        secondary.path().to_path_buf(),
+    ])
+    .unwrap();
+
+    // File lives in secondary root
+    fs::write(secondary.path().join("shared.txt"), "from secondary").unwrap();
+
+    let tool = ReadDocumentTool::new(
+        sandbox,
+        HashSet::from(["txt"].map(String::from)),
+        PermissionPolicy::AllowAll,
+    );
+
+    let args = ReadDocumentArgs {
+        path: "shared.txt".to_string(),
+    };
+    let result = tool.call(args).await.unwrap();
+    assert_eq!(result, "from secondary");
+}
+
+#[tokio::test]
+async fn test_multi_root_write_to_primary() {
+    let primary = tempfile::tempdir().unwrap();
+    let secondary = tempfile::tempdir().unwrap();
+
+    let sandbox = SandboxConfig::new(vec![
+        primary.path().to_path_buf(),
+        secondary.path().to_path_buf(),
+    ])
+    .unwrap();
+
+    let tool = WriteDocumentTool::new(
+        sandbox,
+        HashSet::from(["txt"].map(String::from)),
+        PermissionPolicy::AllowAll,
+    );
+
+    // New file written to primary root (default)
+    let args = WriteDocumentArgs {
+        path: "new_file.txt".to_string(),
+        content: "written to primary".to_string(),
+        append: None,
+    };
+    tool.call(args).await.unwrap();
+
+    let content = fs::read_to_string(primary.path().join("new_file.txt")).unwrap();
+    assert_eq!(content, "written to primary");
+
+    // Verify not in secondary
+    assert!(!secondary.path().join("new_file.txt").exists());
+}
+
+#[tokio::test]
+async fn test_multi_root_escape_rejected() {
+    let primary = tempfile::tempdir().unwrap();
+    let secondary = tempfile::tempdir().unwrap();
+
+    let sandbox = SandboxConfig::new(vec![
+        primary.path().to_path_buf(),
+        secondary.path().to_path_buf(),
+    ])
+    .unwrap();
+
+    let tool = ReadDocumentTool::new(
+        sandbox,
+        HashSet::from(["txt"].map(String::from)),
+        PermissionPolicy::AllowAll,
+    );
+
+    // Try to escape both roots
+    let args = ReadDocumentArgs {
+        path: "../../etc/passwd".to_string(),
+    };
+    let err = tool.call(args).await.expect_err("should reject escape");
+
+    assert!(matches!(
+        err,
+        agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
+    ));
+}
+
+#[tokio::test]
+async fn test_multi_root_list_directory() {
+    let primary = tempfile::tempdir().unwrap();
+    let secondary = tempfile::tempdir().unwrap();
+
+    fs::write(primary.path().join("primary.txt"), "p").unwrap();
+    fs::write(secondary.path().join("secondary.txt"), "s").unwrap();
+
+    let sandbox = SandboxConfig::new(vec![
+        primary.path().to_path_buf(),
+        secondary.path().to_path_buf(),
+    ])
+    .unwrap();
+
+    let tool = ListDirectoryTool::new(sandbox, PermissionPolicy::AllowAll);
+
+    // List primary
+    let args = ListDirectoryArgs { path: None };
+    let result = tool.call(args).await.unwrap();
+    assert!(result.contains("primary.txt"));
+    assert!(!result.contains("secondary.txt"));
+
+    // List secondary by path
+    let args2 = ListDirectoryArgs {
+        path: Some(secondary.path().to_string_lossy().to_string()),
+    };
+    let result2 = tool.call(args2).await.unwrap();
+    assert!(result2.contains("secondary.txt"));
+    assert!(!result2.contains("primary.txt"));
+}
+
+#[tokio::test]
+async fn test_multi_root_grep() {
+    let primary = tempfile::tempdir().unwrap();
+    let secondary = tempfile::tempdir().unwrap();
+
+    fs::write(primary.path().join("main.txt"), "Hello from primary").unwrap();
+    fs::write(secondary.path().join("docs.txt"), "Hello from secondary").unwrap();
+
+    let sandbox = SandboxConfig::new(vec![
+        primary.path().to_path_buf(),
+        secondary.path().to_path_buf(),
+    ])
+    .unwrap();
+
+    let allowed = HashSet::from(["txt"].map(String::from));
+    let tool = GrepSearchTool::new(sandbox, allowed, PermissionPolicy::AllowAll);
+
+    let args = GrepSearchArgs {
+        query: "Hello".to_string(),
+        path: None,
+        case_sensitive: None,
+    };
+    let result = tool.call(args).await.unwrap();
+    assert!(result.contains("Hello from primary"));
+    // Grep searches only from the resolved path (primary by default),
+    // not across all roots. This is intentional — path-based resolution
+    // means the user chooses which root to search.
+}
+
+#[tokio::test]
+async fn test_multi_root_grep_from_secondary() {
+    let primary = tempfile::tempdir().unwrap();
+    let secondary = tempfile::tempdir().unwrap();
+
+    fs::write(primary.path().join("main.txt"), "Hello from primary").unwrap();
+    fs::write(secondary.path().join("docs.txt"), "Hello from secondary").unwrap();
+
+    let sandbox = SandboxConfig::new(vec![
+        primary.path().to_path_buf(),
+        secondary.path().to_path_buf(),
+    ])
+    .unwrap();
+
+    let allowed = HashSet::from(["txt"].map(String::from));
+    let tool = GrepSearchTool::new(sandbox, allowed, PermissionPolicy::AllowAll);
+
+    // Search explicitly in secondary root
+    let args = GrepSearchArgs {
+        query: "Hello".to_string(),
+        path: Some(secondary.path().to_string_lossy().to_string()),
+        case_sensitive: None,
+    };
+    let result = tool.call(args).await.unwrap();
+    assert!(result.contains("Hello from secondary"));
+    assert!(!result.contains("Hello from primary"));
+}
+
+#[tokio::test]
+async fn test_multi_root_glob_across_roots() {
+    let primary = tempfile::tempdir().unwrap();
+    let secondary = tempfile::tempdir().unwrap();
+
+    fs::write(primary.path().join("a.txt"), "hello").unwrap();
+    fs::write(secondary.path().join("b.txt"), "world").unwrap();
+
+    let sandbox = SandboxConfig::new(vec![
+        primary.path().to_path_buf(),
+        secondary.path().to_path_buf(),
+    ])
+    .unwrap();
+
+    let tool = GlobSearchTool::new(sandbox, PermissionPolicy::AllowAll);
+
+    let args = GlobSearchArgs {
+        pattern: "**/*.txt".to_string(),
+        directory: None,
+    };
+    let result = tool.call(args).await.unwrap();
+    // Should find files from both roots
+    assert!(result.contains("a.txt"));
+    assert!(result.contains("b.txt"));
+}
+
+#[tokio::test]
+async fn test_multi_root_glob_escape_rejected() {
+    let primary = tempfile::tempdir().unwrap();
+    let secondary = tempfile::tempdir().unwrap();
+
+    let sandbox = SandboxConfig::new(vec![
+        primary.path().to_path_buf(),
+        secondary.path().to_path_buf(),
+    ])
+    .unwrap();
+
+    let tool = GlobSearchTool::new(sandbox, PermissionPolicy::AllowAll);
+
+    let args = GlobSearchArgs {
+        pattern: "../**/*".to_string(),
+        directory: None,
+    };
+    let err = tool.call(args).await.expect_err("should reject escape");
+
+    assert!(matches!(
+        err,
+        agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
+    ));
+}
+
+#[tokio::test]
+async fn test_sandbox_config_try_from() {
+    let tmp = tempfile::tempdir().unwrap();
+    let sandbox = SandboxConfig::try_from(tmp.path()).unwrap();
+    assert_eq!(sandbox.len(), 1);
+
+    let tool = ReadDocumentTool::new(
+        sandbox,
+        HashSet::from(["txt"].map(String::from)),
+        PermissionPolicy::AllowAll,
+    );
+
+    fs::write(tmp.path().join("test.txt"), "content").unwrap();
+    let args = ReadDocumentArgs {
+        path: "test.txt".to_string(),
+    };
+    let result = tool.call(args).await.unwrap();
+    assert_eq!(result, "content");
+}
+
+#[tokio::test]
+async fn test_sandbox_config_default() {
+    let sandbox = SandboxConfig::default();
+    assert_eq!(sandbox.len(), 1);
+    assert_eq!(sandbox.primary(), std::path::Path::new("."));
 }
