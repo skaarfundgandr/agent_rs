@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-Rust AI agent framework (edition 2024, v0.2.0). Single crate with binary + library.
+Rust AI agent framework (edition 2024, v0.2.0). Library crate with examples.
 Library consumers import as `agent_rs_lib` (not `agent_rs`).
 
 Core deps: `rig-core` 0.36 (with `rmcp` feature), `rmcp` 1.6, `tokio` (full), `reqwest`, `pdf-extract`.
@@ -16,11 +16,12 @@ cargo test                     # run all tests (some #[ignore]d — see below)
 cargo test -- --include-ignored # run ignored tests too (requires local PDF files)
 cargo clippy                   # lint (no custom clippy.toml)
 cargo doc --open               # local API docs
+cargo run --example cli_chatbot # run the CLI chatbot example
 ```
 
 No CI pipeline, no pre-commit hooks, no rustfmt.toml — use `cargo fmt` with defaults.
 
-## Running the Binary
+## Running the Example
 
 Requires `.env` with `API_KEY` and `mcp.json` (copy from `mcp.json.example`).
 Defaults: `EMBEDDING_MODEL=text-embedding-embeddinggemma-300m-qa`, `CHAT_MODEL=google/gemma-4-e4b`.
@@ -30,8 +31,9 @@ Connects to OpenAI-compatible endpoint at `http://127.0.0.1:1234/v1` by default.
 ## Architecture
 
 ```
+examples/
+└── cli_chatbot.rs           # CLI chatbot example wiring
 src/
-├── main.rs              # binary entrypoint — CLI chatbot wiring
 ├── lib.rs               # re-exports: agent, config, domain, mcp
 ├── config.rs            # McpConfig loader + validation
 ├── security/
@@ -54,7 +56,7 @@ src/
 ```
 
 Key wiring: `McpClient` → `McpRegistry` → `McpRegistryRuntime` → `Vec<Box<dyn ToolDyn>>`.
-Internal tools (filesystem, RAG, compact) are added to the same tool vec in `main.rs`.
+Internal tools (filesystem, RAG, compact) are added to the same tool vec in `cli_chatbot.rs`.
 
 ## Testing
 

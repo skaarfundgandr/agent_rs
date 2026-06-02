@@ -90,8 +90,8 @@ cargo run
 
 ### Code Example: Building a Custom Agent
 ```rust
-use rs_agent_lib::agent::rag::RagStoreBuilder;
-use rs_agent_lib::agent::embeddings::EmbeddingService;
+use agent_rs_lib::agent::rag::RagStoreBuilder;
+use agent_rs_lib::agent::embeddings::EmbeddingService;
 
 #[tokio::main]
 async fn main() -> Result<()> {
