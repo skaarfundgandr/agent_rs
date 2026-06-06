@@ -90,21 +90,26 @@ cargo run
 
 ### Code Example: Building a Custom Agent
 ```rust
-use agent_rs_lib::agent::rag::RagStoreBuilder;
+use std::path::Path;
 use agent_rs_lib::agent::embeddings::EmbeddingService;
+use agent_rs_lib::agent::rag::{DocumentLoader, PdfLoader, RagPipeline, WordSplitter};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // 1. Initialize Embeddings
     let embedding_service = EmbeddingService::new(client.embedding_model("my-model"));
 
-    // 2. Build a RAG Store from a PDF
-    let index = RagStoreBuilder::new(embedding_service)
-        .add_pdf("./my_docs.pdf")?
-        .build_index()
+    // 2. Load and chunk a PDF file
+    let doc = PdfLoader::new().load(Path::new("./my_docs.pdf"))?;
+    let splitter = WordSplitter::new(200, 40); // 200 words, 40 words overlap
+
+    // 3. Build the RAG vector index using the pipeline
+    let index = RagPipeline::new()
+        .add_document(&doc, &splitter)
+        .build_index(&embedding_service)
         .await?;
 
-    // 3. Create the Agent
+    // 4. Create the Agent
     let agent = client
         .agent("chat-model")
         .preamble("You are a helpful research assistant.")

@@ -7,7 +7,7 @@ graph LR
     end
 
     subgraph lib["lib.rs (reexports)"]
-        lib_rs["agent, config, domain, mcp"]
+        lib_rs["agent, config, domain, mcp, security"]
     end
 
     subgraph domain["src/domain/"]
@@ -81,4 +81,14 @@ graph LR
     registry --> domain_config
     registry --> domain_mcp
     registry --> client
+    
+    style agent stroke:#4a82b8,stroke-width:2px,fill:none
+    style memory stroke:#4a82b8,stroke-width:1.5px,fill:none
+    style tools stroke:#4a82b8,stroke-width:1.5px,fill:none
+    style domain stroke:#4a82b8,stroke-width:2px,fill:none
+    style security stroke:#4a82b8,stroke-width:2px,fill:none
+    style config stroke:#4a82b8,stroke-width:2px,fill:none
+    style mcp stroke:#4a82b8,stroke-width:2px,fill:none
+    
+    linkStyle default stroke:#4a82b8,stroke-width:2px;
 ```

@@ -24,6 +24,7 @@ flowchart TB
     EmbedBatch --> Store["InMemoryVectorStore<br/>.add_documents(embeddings)"]
     Store --> Index["InMemoryVectorIndex<br/>.index(model)"]
     Index --> QueryReady["Ready for semantic search<br/>(top-k retrieval)"]
+    linkStyle default stroke:#4a82b8,stroke-width:2px;
 ```
 
 ## Sandbox Path Validation
@@ -48,6 +49,7 @@ flowchart TB
     Primary --> PrimaryCheck{"within primary root?"}
     PrimaryCheck -->|Yes| Success2["✅ Return canonical path"]
     PrimaryCheck -->|No| Fail["❌ DocumentError::SandboxEscape"]
+    linkStyle default stroke:#4a82b8,stroke-width:2px;
 ```
 
 ## History Compaction (Context-Managed Agent)
@@ -64,4 +66,5 @@ flowchart TB
     Replace --> NormalChat
     NormalChat --> Append["Append user msg +<br/>assistant response to history"]
     Append --> Out(["Return response"])
+    linkStyle default stroke:#4a82b8,stroke-width:2px;
 ```

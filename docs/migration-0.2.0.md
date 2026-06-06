@@ -12,7 +12,7 @@ As a result, both tools have been changed from unit structs to structured types 
 
 ### 1. Tool Instantiation
 
-In `v0.1.0`, `ReadDocumentTool` and `WriteDocumentTool` were unit structs without any fields or constructors. In `v0.2.0`, both tools are structured types and must be constructed via `::new(...)` with a sandbox root directory and a set of allowed file extensions.
+In `v0.1.0`, `ReadDocumentTool` and `WriteDocumentTool` were unit structs without any fields or constructors. In `v0.2.0`, both tools are structured types and must be constructed via `::new(...)` with a sandbox configuration, allowed extensions, and a permission policy.
 
 #### `ReadDocumentTool::new`
 
@@ -24,9 +24,13 @@ let tool = ReadDocumentTool;
 **After (v0.2.0):**
 ```rust
 use std::collections::HashSet;
+use agent_rs_lib::security::SandboxConfig;
+use agent_rs_lib::agent::permission::PermissionPolicy;
 
+let sandbox = SandboxConfig::single("./sandbox").unwrap();
 let allowed_extensions = HashSet::from(["txt".to_string(), "md".to_string(), "pdf".to_string()]);
-let tool = ReadDocumentTool::new("./sandbox", allowed_extensions);
+let policy = PermissionPolicy::AllowAll;
+let tool = ReadDocumentTool::new(sandbox, allowed_extensions, policy);
 ```
 
 #### `WriteDocumentTool::new`
@@ -39,9 +43,13 @@ let tool = WriteDocumentTool;
 **After (v0.2.0):**
 ```rust
 use std::collections::HashSet;
+use agent_rs_lib::security::SandboxConfig;
+use agent_rs_lib::agent::permission::PermissionPolicy;
 
+let sandbox = SandboxConfig::single("./sandbox").unwrap();
 let allowed_extensions = HashSet::from(["txt".to_string(), "md".to_string()]);
-let tool = WriteDocumentTool::new("./sandbox", allowed_extensions);
+let policy = PermissionPolicy::AllowAll;
+let tool = WriteDocumentTool::new(sandbox, allowed_extensions, policy);
 ```
 
 ### 2. Permission System
@@ -50,17 +58,19 @@ let tool = WriteDocumentTool::new("./sandbox", allowed_extensions);
 
 **Before (v0.1.0/v0.2.0-beta):**
 ```rust
-let reader = ReadDocumentTool::new("./sandbox", read_extensions);
-let lister = ListDirectoryTool::new("./sandbox");
+let reader = ReadDocumentTool::new(sandbox, read_extensions);
+let lister = ListDirectoryTool::new(sandbox);
 ```
 
 **After (v0.2.0):**
 ```rust
+use agent_rs_lib::security::SandboxConfig;
 use agent_rs_lib::agent::permission::PermissionPolicy;
 
+let sandbox = SandboxConfig::single("./sandbox").unwrap();
 let policy = PermissionPolicy::AllowAll;
-let reader = ReadDocumentTool::new("./sandbox", read_extensions, policy.clone());
-let lister = ListDirectoryTool::new("./sandbox", policy);
+let reader = ReadDocumentTool::new(sandbox.clone(), read_extensions, policy.clone());
+let lister = ListDirectoryTool::new(sandbox, policy);
 ```
 
 The policy controls tool execution at runtime. Available variants:
@@ -83,10 +93,11 @@ A new error variant `DocumentError::SandboxEscape` has been added to `DocumentEr
 
 ### Step 1: Add Imports
 
-Ensure you import `HashSet`, `PermissionPolicy` and the new error variant if you pattern match on document errors:
+Ensure you import `HashSet`, `SandboxConfig`, `PermissionPolicy` and the new error variant if you pattern match on document errors:
 
 ```rust
 use std::collections::HashSet;
+use agent_rs_lib::security::SandboxConfig;
 use agent_rs_lib::agent::permission::PermissionPolicy;
 use agent_rs_lib::agent::tools::{ReadDocumentTool, WriteDocumentTool};
 use agent_rs_lib::domain::errors::DocumentError;
@@ -94,20 +105,22 @@ use agent_rs_lib::domain::errors::DocumentError;
 
 ### Step 2: Configure Sandbox and Allowed Extensions
 
-Define your sandbox root path and the set of allowed file extensions (without leading dots):
+Define your sandbox configuration and the set of allowed file extensions (without leading dots):
 
 ```rust
+use agent_rs_lib::security::SandboxConfig;
 use agent_rs_lib::agent::permission::PermissionPolicy;
 
+let sandbox = SandboxConfig::single("./data").unwrap();
 let policy = PermissionPolicy::AllowAll;
 
 // Read: txt, md, and pdf
 let read_extensions = HashSet::from(["txt", "md", "pdf"].map(String::from));
-let reader = ReadDocumentTool::new("./data", read_extensions, policy.clone());
+let reader = ReadDocumentTool::new(sandbox.clone(), read_extensions, policy.clone());
 
 // Write: only txt and md
 let write_extensions = HashSet::from(["txt", "md"].map(String::from));
-let writer = WriteDocumentTool::new("./data", write_extensions, policy);
+let writer = WriteDocumentTool::new(sandbox, write_extensions, policy);
 ```
 
 > **Note on PDF support**: PDF files are read-only and extracted using `pdf-extract`. Including `"pdf"` in write extensions will only perform a plain-text write and will not build a valid PDF file.

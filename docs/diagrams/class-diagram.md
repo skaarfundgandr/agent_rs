@@ -187,6 +187,8 @@ classDiagram
         +Pdf(String)
         +UnsupportedExtension(String)
         +SandboxEscape(String)
+        +PermissionDenied(String)
+        +Rag(String)
     }
 
     DocumentLoader <|.. PdfLoader

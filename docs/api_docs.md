@@ -47,10 +47,44 @@ Manages connections and tool listing for the configured MCP servers.
   Initializes the client from a path to an `mcp.json` file.
 * **`new(config: McpConfig) -> Self`**
   Constructs a new client using an existing configuration struct.
-* **`connect(self) -> Result<McpRegistryRuntime>`**
+* **`async connect(self) -> Result<McpRegistryRuntime>`**
   Establishes standard I/O processes or HTTP streams with all configured MCP servers.
-* **`tools(self) -> Result<Vec<Box<dyn ToolDyn>>>`**
+* **`async tools(self) -> Result<Vec<Box<dyn ToolDyn>>>`**
   Connects to all servers and returns all exposed endpoints as a list of dynamic Rig `ToolDyn` objects.
+
+---
+
+### `McpRegistry`
+Registry that resolves MCP server definitions from `mcp.json` into Rig tools and performs name deduplication.
+
+#### Methods
+* **`new(config: McpConfig) -> Self`**
+  Creates a registry from a validated configuration.
+* **`from_path(path: impl AsRef<Path>) -> Result<Self>`**
+  Creates a registry from a configuration file path.
+* **`from_client(client: McpClient) -> Self`**
+  Creates a registry from an existing client manager.
+* **`async connect(&self) -> Result<McpRegistryRuntime>`**
+  Connects to all configured MCP servers and collects their tools.
+* **`async tools(&self) -> Result<Vec<Box<dyn ToolDyn>>>`**
+  Connects to all configured MCP servers and returns Rig-compatible boxed tools.
+
+---
+
+### `McpRegistryRuntime`
+Runtime registry returned after connecting to the MCP servers, holding the active connections and resolved tools.
+
+#### Methods
+* **`servers(&self) -> &[RegisteredMcpServer]`**
+  Returns registered servers in connection order.
+* **`server(&self, name: &str) -> Option<&RegisteredMcpServer>`**
+  Looks up a server by name.
+* **`tools(&self) -> &[RegisteredMcpTool]`**
+  Returns registered tools in connection order.
+* **`tool_names(&self) -> impl Iterator<Item = &str>`**
+  Convenience iterator over tool names.
+* **`into_tools(self) -> Vec<Box<dyn ToolDyn>>`**
+  Converts the runtime registry into boxed Rig tools.
 
 #### Example Usage: Loading MCP Tools
 ```rust
@@ -277,6 +311,10 @@ Wraps an `Agent<M>` (where `M: CompletionModel`) and a compaction model `C: Prom
 #### Methods
 * **`async chat(&self, prompt: &str, history: &mut Vec<Message>) -> Result<String, PromptError>`**
   Executes an LLM chat turn. Summarizes conversation history in-place if threshold is crossed, then appends the current user prompt and assistant response.
+* **`async chat_with_owned_history(&self, prompt: &str, history: Vec<Message>) -> Result<(String, Vec<Message>), PromptError>`**
+  Executes an LLM chat turn using owned history, returning the updated history rather than mutating it in-place.
+* **`with_token_estimator(mut self, estimator: fn(&[Message]) -> usize) -> Self`**
+  Registers a custom token estimator callback to replace the default character-based token approximation.
 * **`agent(&self) -> &Agent<M>`**
   Returns a reference to the inner wrapped `Agent`.
 
@@ -421,13 +459,15 @@ Crate-level re-exports (`src/agent/mod.rs`):
 ```rust
 pub mod permission;
 pub use permission::{PermissionGate, PermissionPolicy};
+pub use embeddings::EmbeddingService;
+pub use memory::{AgentContextExt, ContextManagedAgent};
 pub use rag::{
     Chunk, Document, DocumentLoader, PdfLoader, RagPipeline, RagSource, RagSourceType,
     TextLoader, TextSplitter, WordSplitter,
 };
 pub use tools::{
     CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ManageRagTool,
-    ReadDocumentTool, RagSourceRegistry, WriteDocumentTool,
+    RagSourceRegistry, ReadDocumentTool, WriteDocumentTool,
 };
 ```
 

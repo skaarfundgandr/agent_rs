@@ -22,6 +22,7 @@ flowchart TB
     classDef system fill:#1168bd,stroke:#0b4c8c,color:#ffffff
     classDef external fill:#999999,stroke:#666666,color:#ffffff
     style External fill:none,stroke:#cccccc,stroke-dasharray: 3 3
+    linkStyle default stroke:#4a82b8,stroke-width:2px;
 ```
 
 ## Container Diagram (Level 2)
@@ -63,6 +64,7 @@ flowchart TB
     classDef container fill:#1168bd,stroke:#0b4c8c,color:#ffffff
     classDef external fill:#999999,stroke:#666666,color:#ffffff
     style AgentRS fill:none,stroke:#333333,stroke-dasharray: 5 5
+    linkStyle default stroke:#4a82b8,stroke-width:2px;
 ```
 
 ## Component Diagram (Level 3) - Agent Core
@@ -87,7 +89,7 @@ flowchart TB
             glob["GlobSearchTool<br/><small>tools/glob.rs</small><br/><small>Glob matching</small>"]:::component
             list["ListDirectoryTool<br/><small>tools/directory.rs</small><br/><small>Directory listing</small>"]:::component
             
-            sandbox["Sandbox Validator<br/><small>tools/document.rs</small><br/><small>Path canonicalization</small>"]:::component
+            sandbox["Sandbox Validator<br/><small>security/sandbox.rs</small><br/><small>Path canonicalization</small>"]:::component
         end
     end
 
@@ -102,7 +104,8 @@ flowchart TB
 
     classDef component fill:#85bbf0,stroke:#4a82b8,color:#000000
     style AgentCore fill:none,stroke:#333333,stroke-dasharray: 5 5
-    style Ingestion fill:#f9f9f9,stroke:#cccccc
-    style Memory fill:#f9f9f9,stroke:#cccccc
-    style Security fill:#f9f9f9,stroke:#cccccc
+    style Ingestion fill:none,stroke:#cccccc
+    style Memory fill:none,stroke:#cccccc
+    style Security fill:none,stroke:#cccccc
+    linkStyle default stroke:#4a82b8,stroke-width:2px;
 ```
