@@ -317,6 +317,9 @@ Wraps an `Agent<M, P>` (where `M: CompletionModel` and `P: PromptHook<M>`) and a
   Executes a streaming LLM chat turn. Compacts history if needed, returns a stream wrapper yielding elements, and a Future (oneshot Receiver) that resolves to the updated history once the stream is fully consumed.
 * **`async stream_chat_with_owned_history(&self, prompt: &str, history: Vec<Message>) -> Result<(ContextManagedChatStream<impl Stream, M::StreamingResponse>, oneshot::Receiver<Vec<Message>>), PromptError>`**
   Executes a streaming LLM chat turn using owned history.
+
+  > [!NOTE]
+  > **Thought / Thinking Tokens:** The returned stream (`ContextManagedChatStream`) does not filter or modify the elements yielded by the underlying completion model. Therefore, any thought, reasoning, or thinking tokens produced by the model (e.g. from OpenAI's models, Anthropic's thinking models, or similar models) are preserved and passed through to the consumer (as part of `MultiTurnStreamItem::StreamAssistantItem`).
 * **`with_token_estimator(mut self, estimator: fn(&[Message]) -> usize) -> Self`**
   Registers a custom token estimator callback to replace the default `cl100k_base` token counting.
 * **`with_compaction_prompt_formatter(mut self, formatter: fn(&str) -> String) -> Self`**
@@ -383,14 +386,51 @@ Extension trait implemented for standard Rig `Agent<M, P>` structs to easily wra
 use agent_rs_lib::agent::memory::AgentContextExt;
 use rig::message::Message;
 
-let chat_agent = openai.agent("gpt-4o").build();
-let compaction_agent = openai.agent("gpt-4o-mini").build();
+let chat_agent = openai.agent("gpt-5").build();
+let compaction_agent = openai.agent("gpt-5-mini").build();
 
 // Wrap the chat agent to automatically compact context when it exceeds ~2000 tokens
 let managed_agent = chat_agent.with_compaction(2000, compaction_agent);
 
 let mut history = vec![];
 let response = managed_agent.chat("What were my previous requests?", &mut history).await?;
+```
+
+#### Example Usage: Streaming Chat & Thought Tokens
+```rust
+use agent_rs_lib::agent::memory::AgentContextExt;
+use rig::message::Message;
+use rig::agent::MultiTurnStreamItem;
+use futures::StreamExt; // for .next()
+
+let chat_agent = openai.agent("gpt-5").build();
+let compaction_agent = openai.agent("gpt-5-mini").build();
+
+// Wrap the agent with compaction enabled
+let managed_agent = chat_agent.with_compaction(2000, compaction_agent);
+
+let history = vec![];
+
+// Start streaming chat turn
+let (mut stream, rx) = managed_agent.stream_chat("Explain quantum computing.", &history).await?;
+
+while let Some(chunk) = stream.next().await {
+    match chunk {
+        Ok(MultiTurnStreamItem::StreamAssistantItem(content)) => {
+            // content can be standard text chunks or thought/reasoning tokens (if supported by provider)
+            println!("Received assistant chunk: {:?}", content);
+        }
+        Ok(MultiTurnStreamItem::FinalResponse(response)) => {
+            println!("Streaming finished! Final response: {}", response.choice);
+        }
+        Err(err) => {
+            eprintln!("Error in stream: {:?}", err);
+        }
+    }
+}
+
+// Retrieve the updated history containing the final response
+let updated_history = rx.await?;
 ```
 
 ---
