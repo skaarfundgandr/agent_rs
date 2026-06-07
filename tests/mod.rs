@@ -4,3 +4,6 @@ pub mod embeddings;
 pub mod mcp_client;
 #[cfg(test)]
 pub mod mcp_registry;
+#[cfg(test)]
+pub mod agents_tests;
+

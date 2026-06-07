@@ -1,14 +1,16 @@
+pub mod agents;
 pub mod embeddings;
 pub mod memory;
+pub mod model;
 pub mod permission;
 pub mod rag;
 // pub mod react;
 pub mod tools;
 
+pub use agents::{AgentContextExt, ContextManagedAgent};
+pub use embeddings::EmbeddingService;
 pub use permission::{PermissionGate, PermissionPolicy};
 
-pub use embeddings::EmbeddingService;
-pub use memory::{AgentContextExt, ContextManagedAgent};
 pub use rag::{
     Chunk, Document, DocumentLoader, PdfLoader, RagPipeline, RagSource, RagSourceType, TextLoader,
     TextSplitter, WordSplitter,

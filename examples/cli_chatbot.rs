@@ -48,13 +48,13 @@ async fn main() -> Result<()> {
         .tools()
         .await?;
 
-    let compaction_tool = CompactTool::new(
-        client
-            .agent(&chat_model_name)
-            .default_max_turns(20)
-            .preamble("You are a summarization assistant.")
-            .build(),
-    );
+    let compaction_agent = client
+        .agent(&chat_model_name)
+        .default_max_turns(20)
+        .preamble("You are a summarization assistant.")
+        .build();
+
+    let compaction_tool = CompactTool::new(compaction_agent);
 
     // Build RAG index using the new decoupled pipeline
     let pdf_document = PdfLoader::new().load(std::path::Path::new(

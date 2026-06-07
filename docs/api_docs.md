@@ -305,18 +305,25 @@ Automates history size management to prevent context window overflows and excess
 
 > **Runtime reference:** See the [history compaction flowchart](diagrams/flowchart.md) for the compaction algorithm, the [runtime sequence diagram](diagrams/sequence-diagram.md) for how context management interacts with the chat loop, and the [class diagram](diagrams/class-diagram.md) for `ContextManagedAgent` and `AgentContextExt`.
 
-### `ContextManagedAgent<M, C>`
-Wraps an `Agent<M>` (where `M: CompletionModel`) and a compaction model `C: Prompt` to automatically summarize conversation history when it crosses a character-based token approximation threshold.
+### `ContextManagedAgent<M, C, P>`
+Wraps an `Agent<M, P>` (where `M: CompletionModel` and `P: PromptHook<M>`) and a compaction model `C: Prompt` to automatically summarize conversation history when it crosses a token threshold calculated accurately via the `cl100k_base` BPE tokenizer.
 
 #### Methods
 * **`async chat(&self, prompt: &str, history: &mut Vec<Message>) -> Result<String, PromptError>`**
   Executes an LLM chat turn. Summarizes conversation history in-place if threshold is crossed, then appends the current user prompt and assistant response.
 * **`async chat_with_owned_history(&self, prompt: &str, history: Vec<Message>) -> Result<(String, Vec<Message>), PromptError>`**
   Executes an LLM chat turn using owned history, returning the updated history rather than mutating it in-place.
+* **`async stream_chat(&self, prompt: &str, history: &[Message]) -> Result<(ContextManagedChatStream<impl Stream, M::StreamingResponse>, oneshot::Receiver<Vec<Message>>), PromptError>`**
+  Executes a streaming LLM chat turn. Compacts history if needed, returns a stream wrapper yielding elements, and a Future (oneshot Receiver) that resolves to the updated history once the stream is fully consumed.
+* **`async stream_chat_with_owned_history(&self, prompt: &str, history: Vec<Message>) -> Result<(ContextManagedChatStream<impl Stream, M::StreamingResponse>, oneshot::Receiver<Vec<Message>>), PromptError>`**
+  Executes a streaming LLM chat turn using owned history.
 * **`with_token_estimator(mut self, estimator: fn(&[Message]) -> usize) -> Self`**
-  Registers a custom token estimator callback to replace the default character-based token approximation.
-* **`agent(&self) -> &Agent<M>`**
+  Registers a custom token estimator callback to replace the default `cl100k_base` token counting.
+* **`with_compaction_prompt_formatter(mut self, formatter: fn(&str) -> String) -> Self`**
+  Registers a custom prompt formatter to format the compaction request sent to the compaction model.
+* **`agent(&self) -> &Agent<M, P>`**
   Returns a reference to the inner wrapped `Agent`.
+
 
 ### `AgentContextExt`
 Extension trait implemented for all standard Rig `Agent<M>` structs.
