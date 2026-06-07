@@ -24,6 +24,15 @@ fn default_compaction_prompt_formatter(history_text: &str) -> String {
 
 impl<C: Prompt + rig::wasm_compat::WasmCompatSend + rig::wasm_compat::WasmCompatSync + 'static> ContextManager<C> {
     /// Creates a new `ContextManager` with a threshold and a compaction LLM.
+    ///
+    /// # Arguments
+    ///
+    /// * `compaction_threshold` - The threshold token count above which conversation history is compacted.
+    /// * `compaction_model` - The LLM/compactor model that implements `Prompt` used to generate the summary.
+    ///
+    /// # Returns
+    ///
+    /// Returns a new instance of `ContextManager<C>`.
     pub fn new(compaction_threshold: usize, compaction_model: C) -> Self {
         Self {
             compaction_threshold,
@@ -34,18 +43,43 @@ impl<C: Prompt + rig::wasm_compat::WasmCompatSend + rig::wasm_compat::WasmCompat
     }
 
     /// Registers a custom token estimator callback.
+    ///
+    /// # Arguments
+    ///
+    /// * `estimator` - A function pointer that estimates the token count of a message slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Self` with the updated estimator callback.
     pub fn with_token_estimator(mut self, estimator: fn(&[Message]) -> usize) -> Self {
         self.token_estimator = Some(estimator);
         self
     }
 
     /// Registers a custom compaction prompt formatter callback.
+    ///
+    /// # Arguments
+    ///
+    /// * `formatter` - A function pointer that takes the history JSON text representation and returns the custom prompt for the compaction LLM.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Self` with the updated prompt formatter callback.
     pub fn with_compaction_prompt_formatter(mut self, formatter: fn(&str) -> String) -> Self {
         self.compaction_prompt_formatter = Some(formatter);
         self
     }
 
     /// Estimates the total token count of the history and current prompt combined.
+    ///
+    /// # Arguments
+    ///
+    /// * `history` - The slice of current conversation messages.
+    /// * `prompt` - The new prompt text about to be sent.
+    ///
+    /// # Returns
+    ///
+    /// Returns the combined token estimate as a `usize`.
     pub fn estimate_tokens(&self, history: &[Message], prompt: &str) -> usize {
         let history_tokens = if let Some(estimator) = self.token_estimator {
             estimator(history)
@@ -57,7 +91,23 @@ impl<C: Prompt + rig::wasm_compat::WasmCompatSend + rig::wasm_compat::WasmCompat
     }
 
     /// Checks if history exceeds the threshold and compacts it in-place using the compaction model.
-    /// Returns `Ok(true)` if compaction occurred, `Ok(false)` otherwise.
+    ///
+    /// If compaction occurs:
+    /// - The conversation history is cleared and replaced with a single system message containing the summary.
+    /// - A `context_compaction` span is logged tracing token reduction.
+    ///
+    /// # Arguments
+    ///
+    /// * `history` - A mutable reference to the conversation history vector.
+    /// * `prompt` - The current prompt text being submitted.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(true)` if compaction occurred and the history was updated, or `Ok(false)` if no compaction was needed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `PromptError` if calling the compaction model fails.
     pub async fn compact_history_if_needed(
         &self,
         history: &mut Vec<Message>,

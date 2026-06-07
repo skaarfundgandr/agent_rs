@@ -5,6 +5,20 @@ use rig::streaming::StreamingChat;
 use rig::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 /// Executes a standard chat turn against the LLM.
+///
+/// # Arguments
+///
+/// * `agent` - The underlying standard Rig agent instance.
+/// * `prompt` - The user input prompt text.
+/// * `history` - The conversation history as a vector of messages.
+///
+/// # Returns
+///
+/// Returns the response text from the LLM.
+///
+/// # Errors
+///
+/// Returns a `PromptError` if the underlying model invocation fails.
 pub async fn execute_chat<
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     P: rig::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
@@ -17,6 +31,16 @@ pub async fn execute_chat<
 }
 
 /// Executes a streaming chat turn against the LLM, preparing the StreamingPromptRequest.
+///
+/// # Arguments
+///
+/// * `agent` - The underlying standard Rig agent instance.
+/// * `prompt` - The user input prompt text.
+/// * `history` - The conversation history as a vector of messages.
+///
+/// # Returns
+///
+/// Returns a `StreamingPromptRequest` which can be configured or run to obtain a stream.
 pub fn execute_stream_chat<M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static, P>(
     agent: &Agent<M, P>,
     prompt: &str,
@@ -29,3 +53,4 @@ where
 {
     agent.stream_chat(prompt, history)
 }
+

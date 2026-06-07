@@ -7,7 +7,16 @@ static LAZY_TOKENIZER: LazyLock<Result<CoreBPE, String>> = LazyLock::new(|| {
 });
 
 /// Count tokens in a plain text string using the cl100k_base BPE tokenizer.
-/// Falls back to character-based heuristic (char_count / 4) if loading fails.
+///
+/// Falls back to a character-based heuristic (char_count / 4) if loading the tokenizer fails.
+///
+/// # Arguments
+///
+/// * `text` - The plain text string slice to token-count.
+///
+/// # Returns
+///
+/// Returns the estimated token count of the string as a `usize`.
 pub fn count_string_tokens(text: &str) -> usize {
     match &*LAZY_TOKENIZER {
         Ok(bpe) => bpe.count_with_special_tokens(text),
@@ -19,6 +28,17 @@ pub fn count_string_tokens(text: &str) -> usize {
 }
 
 /// Count total tokens for a slice of Rig Messages, accounting for ChatML/API overhead (~4 tokens per message).
+///
+/// Falls back to serializing complex content types (like images and documents) to JSON strings
+/// to estimate their token usage when simple text matches are not available.
+///
+/// # Arguments
+///
+/// * `messages` - A slice of `Message` structs representing the conversation history.
+///
+/// # Returns
+///
+/// Returns the total estimated token count for the messages as a `usize`.
 pub fn count_messages_tokens(messages: &[Message]) -> usize {
     let mut total = 0;
 

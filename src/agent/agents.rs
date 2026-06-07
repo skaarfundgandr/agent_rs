@@ -15,6 +15,10 @@ const DEFAULT_MAX_TURNS: usize = 20;
 
 /// An agent wrapper that automatically compacts conversation history
 /// when it exceeds a specified token threshold.
+///
+/// Under the hood, this uses a `ContextManager` which leverages the `cl100k_base`
+/// BPE tokenizer to accurately count the tokens of the conversation history.
+/// If the threshold is crossed, a compaction model summarizes the history.
 pub struct ContextManagedAgent<M: CompletionModel, C: Prompt, P = ()>
 where
     P: rig::agent::PromptHook<M>,
@@ -30,9 +34,24 @@ impl<
 > ContextManagedAgent<M, C, P>
 {
     /// Send a chat prompt and automatically manage the context history.
+    ///
     /// The history is mutated in-place:
-    /// - If it exceeds the threshold, it is compacted into a summary.
-    /// - The new prompt and the agent's response are automatically appended.
+    /// - If the estimated token count of the history and prompt exceeds the threshold,
+    ///   the history is compacted into a summary (represented as a single system message).
+    /// - The new prompt and the agent's response are automatically appended to the history.
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - The user input prompt text.
+    /// * `history` - A mutable reference to the conversation history vector.
+    ///
+    /// # Returns
+    ///
+    /// Returns the response text from the LLM.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PromptError` if either context compaction or the chat turn fails.
     pub async fn chat(
         &self,
         prompt: &str,
@@ -67,7 +86,25 @@ impl<
     }
 
     /// Send a chat prompt and automatically manage the context history using owned history.
-    /// Returns the response and the updated history `Vec<Message>`, avoiding mutating borrowed history.
+    ///
+    /// This method avoids mutating borrowed history and returns the updated history instead.
+    /// - If the estimated token count exceeds the threshold, the history is compacted into a summary.
+    /// - The new prompt and the agent's response are automatically appended to the returned history.
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - The user input prompt text.
+    /// * `history` - The owned conversation history vector.
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing:
+    /// 1. The response text from the LLM.
+    /// 2. The updated conversation history vector.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PromptError` if either context compaction or the chat turn fails.
     pub async fn chat_with_owned_history(
         &self,
         prompt: &str,
@@ -102,7 +139,23 @@ impl<
     }
 
     /// Stream a chat prompt and automatically manage the context history.
-    /// Returns a wrapped stream yielding elements, and a Future resolving to the updated history.
+    ///
+    /// Compacts history in-place if needed, then executes a streaming chat.
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - The user input prompt text.
+    /// * `history` - A slice of current conversation messages.
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing:
+    /// 1. A stream wrapper `ContextManagedChatStream` yielding chunks from the LLM.
+    /// 2. A oneshot `Receiver` that resolves to the updated history vector once the stream is fully consumed.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PromptError` if context compaction fails.
     pub async fn stream_chat(
         &self,
         prompt: &str,
@@ -139,7 +192,23 @@ impl<
     }
 
     /// Stream a chat prompt with owned history, automatically managing context history.
-    /// Returns a wrapped stream yielding elements, and a Future resolving to the updated history.
+    ///
+    /// Compacts history if needed, then executes a streaming chat.
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - The user input prompt text.
+    /// * `history` - The owned conversation history vector.
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing:
+    /// 1. A stream wrapper `ContextManagedChatStream` yielding chunks from the LLM.
+    /// 2. A oneshot `Receiver` that resolves to the updated history vector once the stream is fully consumed.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PromptError` if context compaction fails.
     pub async fn stream_chat_with_owned_history(
         &self,
         prompt: &str,
@@ -174,26 +243,47 @@ impl<
         Ok((stream, rx))
     }
 
-    /// Register a custom token estimator callback.
+    /// Registers a custom token estimator callback.
+    ///
+    /// # Arguments
+    ///
+    /// * `estimator` - A function pointer that estimates the token count of a message slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Self` with the updated estimator callback.
     pub fn with_token_estimator(mut self, estimator: fn(&[Message]) -> usize) -> Self {
         self.context_manager = self.context_manager.with_token_estimator(estimator);
         self
     }
 
-    /// Register a custom compaction prompt formatter callback.
+    /// Registers a custom compaction prompt formatter callback.
+    ///
+    /// # Arguments
+    ///
+    /// * `formatter` - A function pointer that takes the history JSON text representation and returns the custom prompt for the compaction LLM.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Self` with the updated prompt formatter callback.
     pub fn with_compaction_prompt_formatter(mut self, formatter: fn(&str) -> String) -> Self {
         self.context_manager = self.context_manager.with_compaction_prompt_formatter(formatter);
         self
     }
 
 
-    /// Access the underlying Rig Agent
+    /// Access the underlying standard Rig Agent.
+    ///
+    /// # Returns
+    ///
+    /// Returns a reference to the inner standard Rig `Agent` instance.
     pub fn agent(&self) -> &Agent<M, P> {
         &self.inner
     }
 }
 
 /// A stream wrapper for a context-managed agent chat session.
+///
 /// Once the stream finishes and yields the `FinalResponse`, the updated history
 /// is sent to the oneshot channel which resolves to the updated history vector.
 #[must_use = "streams must be polled to completion to update history"]
@@ -204,6 +294,16 @@ pub struct ContextManagedChatStream<S, R> {
 }
 
 impl<S, R> ContextManagedChatStream<S, R> {
+    /// Creates a new `ContextManagedChatStream`.
+    ///
+    /// # Arguments
+    ///
+    /// * `inner` - The underlying stream yielding standard Rig multi-turn items.
+    /// * `history_tx` - A oneshot sender to transmit the updated history vector once the stream finishes.
+    ///
+    /// # Returns
+    ///
+    /// Returns a new instance of `ContextManagedChatStream`.
     pub fn new(inner: S, history_tx: oneshot::Sender<Vec<Message>>) -> Self {
         Self {
             inner,
@@ -240,6 +340,15 @@ where
     /// Wraps the agent in a ContextManagedAgent that will automatically
     /// compact conversation history using the provided compaction model
     /// when the estimated token count exceeds the threshold.
+    ///
+    /// # Arguments
+    ///
+    /// * `threshold` - The threshold token count above which conversation history is compacted.
+    /// * `compaction_model` - The LLM/compactor model used to summarize history.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `ContextManagedAgent` wrapping this agent.
     fn with_compaction<C: Prompt + WasmCompatSend + WasmCompatSync + 'static>(
         self,
         threshold: usize,
@@ -252,6 +361,18 @@ impl<
     P: rig::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 > AgentContextExt<M, P> for Agent<M, P>
 {
+    /// Wraps the agent in a ContextManagedAgent that will automatically
+    /// compact conversation history using the provided compaction model
+    /// when the estimated token count exceeds the threshold.
+    ///
+    /// # Arguments
+    ///
+    /// * `threshold` - The threshold token count above which conversation history is compacted.
+    /// * `compaction_model` - The LLM/compactor model used to summarize history.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `ContextManagedAgent` wrapping this agent.
     fn with_compaction<C: Prompt + WasmCompatSend + WasmCompatSync + 'static>(
         self,
         threshold: usize,
