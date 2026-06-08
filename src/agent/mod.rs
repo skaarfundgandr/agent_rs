@@ -7,7 +7,7 @@ pub mod rag;
 // pub mod react;
 pub mod tools;
 
-pub use agents::{AgentContextExt, ContextManagedAgent};
+pub use agents::{AgentContextExt, ContextManagedAgent, strip_reasoning_from_history};
 pub use embeddings::EmbeddingService;
 pub use permission::{PermissionGate, PermissionPolicy};
 

@@ -435,6 +435,38 @@ let updated_history = rx.await?;
 
 ---
 
+### `strip_reasoning_from_history()`
+
+A free function that removes `AssistantContent::Reasoning` blocks from a history vector.
+
+Reasoning blocks are ephemeral chain-of-thought from the model. They are useful for real-time display (yielded by the stream as `StreamAssistantContent::Reasoning` / `ReasoningDelta`) but waste tokens when persisted and fed back to the model on subsequent turns. Calling this function before persisting history avoids that waste.
+
+```rust
+pub fn strip_reasoning_from_history(history: Vec<Message>) -> Vec<Message>
+```
+
+Assistant messages whose content consists entirely of reasoning are dropped from the result (since a reasoning-only message would be semantically empty). Non-assistant messages pass through unchanged. The message `id` field is preserved when filtering partial content.
+
+#### Example Usage
+
+```rust
+use agent_rs_lib::agent;
+
+// Stream yields reasoning for live display — not affected by this function
+let (stream, rx) = agent.stream_chat(prompt, &history).await?;
+let display_history = consume_chat_stream(stream, rx, channel).await?;
+
+// Strip reasoning before persisting
+let persisted_history = agent::strip_reasoning_from_history(display_history);
+repo.save_session_history(session_id, &persisted_history)?;
+```
+
+The function is available at:
+- `agent_rs_lib::agent::strip_reasoning_from_history` (re-exported from `agent` module)
+- `agent_rs_lib::agent::agents::strip_reasoning_from_history` (full module path)
+
+---
+
 ## 6. Permission System
 
 > **Type reference:** See the [class diagram](diagrams/class-diagram.md) for the `PermissionPolicy` type hierarchy.
@@ -560,7 +592,7 @@ pub mod rag;
 // pub mod react;
 pub mod tools;
 
-pub use agents::{AgentContextExt, ContextManagedAgent};
+pub use agents::{AgentContextExt, ContextManagedAgent, strip_reasoning_from_history};
 pub use embeddings::EmbeddingService;
 pub use permission::{PermissionGate, PermissionPolicy};
 pub use rag::{

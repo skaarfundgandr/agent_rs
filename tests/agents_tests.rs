@@ -257,3 +257,142 @@ async fn test_context_managed_chat_stream_no_history() {
     assert!(updated_history.is_empty());
 }
 
+#[test]
+fn test_strip_reasoning_mixed_content_keeps_text_and_tool_call() {
+    use rig::message::{ToolCall, ToolFunction};
+    use rig::message::Reasoning;
+
+    let history = vec![
+        Message::User {
+            content: rig::OneOrMany::one(UserContent::text("hello")),
+        },
+        Message::Assistant {
+            id: None,
+            content: rig::OneOrMany::many(vec![
+                AssistantContent::Reasoning(Reasoning::new("thinking...")),
+                AssistantContent::text("Hi there!"),
+                AssistantContent::ToolCall(ToolCall::new(
+                    "call_1".to_string(),
+                    ToolFunction::new("search".to_string(), serde_json::json!({})),
+                )),
+            ]).unwrap(),
+        },
+    ];
+
+    let result = agent_rs_lib::agent::strip_reasoning_from_history(history);
+    assert_eq!(result.len(), 2);
+
+    // User message unchanged
+    assert!(matches!(result[0], Message::User { .. }));
+
+    // Assistant message: reasoning stripped, text and tool call preserved
+    if let Message::Assistant { content, .. } = &result[1] {
+        assert_eq!(content.iter().count(), 2);
+        assert!(matches!(content.first_ref(), AssistantContent::Text(_)));
+        let second = content.iter().nth(1).unwrap();
+        assert!(matches!(second, AssistantContent::ToolCall(_)));
+    } else {
+        panic!("Expected assistant message");
+    }
+}
+
+#[test]
+fn test_strip_reasoning_drops_pure_reasoning_message() {
+    use rig::message::Reasoning;
+
+    let history = vec![
+        Message::User {
+            content: rig::OneOrMany::one(UserContent::text("hello")),
+        },
+        Message::Assistant {
+            id: None,
+            content: rig::OneOrMany::one(
+                AssistantContent::Reasoning(Reasoning::new("just thinking")),
+            ),
+        },
+    ];
+
+    let result = agent_rs_lib::agent::strip_reasoning_from_history(history);
+    assert_eq!(result.len(), 1);
+    assert!(matches!(result[0], Message::User { .. }));
+}
+
+#[test]
+fn test_strip_reasoning_passes_through_non_assistant_messages() {
+    let history = vec![
+        Message::System {
+            content: "You are helpful.".to_string(),
+        },
+        Message::User {
+            content: rig::OneOrMany::one(UserContent::text("hello")),
+        },
+    ];
+
+    let result = agent_rs_lib::agent::strip_reasoning_from_history(history.clone());
+    assert_eq!(result.len(), 2);
+    assert_eq!(result, history);
+}
+
+#[test]
+fn test_strip_reasoning_empty_input() {
+    let result = agent_rs_lib::agent::strip_reasoning_from_history(vec![]);
+    assert!(result.is_empty());
+}
+
+#[test]
+fn test_strip_reasoning_multiple_assistant_messages_independently_filtered() {
+    use rig::message::Reasoning;
+
+    let history = vec![
+        Message::User {
+            content: rig::OneOrMany::one(UserContent::text("first")),
+        },
+        Message::Assistant {
+            id: None,
+            content: rig::OneOrMany::many(vec![
+                AssistantContent::Reasoning(Reasoning::new("thinking")),
+                AssistantContent::text("response 1"),
+            ]).unwrap(),
+        },
+        Message::User {
+            content: rig::OneOrMany::one(UserContent::text("second")),
+        },
+        Message::Assistant {
+            id: None,
+            content: rig::OneOrMany::one(
+                AssistantContent::Reasoning(Reasoning::new("more thinking")),
+            ),
+        },
+    ];
+
+    let result = agent_rs_lib::agent::strip_reasoning_from_history(history);
+    // First assistant: reasoning stripped, text kept → still present
+    // Second assistant: pure reasoning → dropped
+    assert_eq!(result.len(), 3);
+    assert!(matches!(result[0], Message::User { .. }));
+    assert!(matches!(result[1], Message::Assistant { .. }));
+    assert!(matches!(result[2], Message::User { .. }));
+}
+
+#[test]
+fn test_strip_reasoning_preserves_assistant_id() {
+    use rig::message::Reasoning;
+
+    let history = vec![Message::Assistant {
+        id: Some("msg_123".to_string()),
+        content: rig::OneOrMany::many(vec![
+            AssistantContent::Reasoning(Reasoning::new("thinking")),
+            AssistantContent::text("result"),
+        ]).unwrap(),
+    }];
+
+    let result = agent_rs_lib::agent::strip_reasoning_from_history(history);
+    assert_eq!(result.len(), 1);
+    if let Message::Assistant { id, content, .. } = &result[0] {
+        assert_eq!(id.as_deref(), Some("msg_123"));
+        assert_eq!(content.iter().count(), 1);
+    } else {
+        panic!("Expected assistant message");
+    }
+}
+
