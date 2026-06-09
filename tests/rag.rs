@@ -2,7 +2,7 @@ use agent_rs_lib::agent::embeddings::EmbeddingService;
 use agent_rs_lib::agent::rag::{
     DocumentLoader, RagPipeline, TextLoader, TextSplitter, WordSplitter,
 };
-use rig::embeddings::{Embedding, EmbeddingModel};
+use rig_core::embeddings::{Embedding, EmbeddingModel};
 use std::fs;
 use std::result::Result as StdResult;
 
@@ -25,7 +25,7 @@ impl EmbeddingModel for MockEmbeddingModel {
     async fn embed_texts(
         &self,
         texts: impl IntoIterator<Item = String> + Send,
-    ) -> StdResult<Vec<Embedding>, rig::embeddings::EmbeddingError> {
+    ) -> StdResult<Vec<Embedding>, rig_core::embeddings::EmbeddingError> {
         Ok(texts
             .into_iter()
             .map(|text| Embedding {
@@ -85,9 +85,9 @@ async fn test_rag_pipeline_building() {
         .await
         .expect("Should build RAG index successfully");
 
-    // The index implements rig::vector_store::VectorStoreIndex
+    // The index implements rig_core::vector_store::VectorStoreIndex
     // Let's do a top_n search to check compatibility
-    use rig::vector_store::{VectorStoreIndex, request::VectorSearchRequest};
+    use rig_core::vector_store::{VectorStoreIndex, request::VectorSearchRequest};
     let req = VectorSearchRequest::builder()
         .query("Rust programming")
         .samples(1)
@@ -125,7 +125,7 @@ async fn test_rag_pipeline_custom_formatter() {
         .expect("Should build store with custom formatter");
 
     let index = store.index(MockEmbeddingModel);
-    use rig::vector_store::{VectorStoreIndex, request::VectorSearchRequest};
+    use rig_core::vector_store::{VectorStoreIndex, request::VectorSearchRequest};
     let req = VectorSearchRequest::builder()
         .query("custom")
         .samples(1)

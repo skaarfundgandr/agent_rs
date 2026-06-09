@@ -1,4 +1,4 @@
-use rig::message::{AssistantContent, Message, UserContent};
+use rig_core::message::{AssistantContent, Message, UserContent};
 use std::sync::LazyLock;
 use tiktoken_rs::{cl100k_base, CoreBPE};
 

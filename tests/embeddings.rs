@@ -1,7 +1,7 @@
 use agent_rs_lib::agent::embeddings::EmbeddingService;
-use rig::Embed;
-use rig::embeddings::embed::{EmbedError, TextEmbedder};
-use rig::embeddings::{Embedding, EmbeddingModel};
+use rig_core::Embed;
+use rig_core::embeddings::embed::{EmbedError, TextEmbedder};
+use rig_core::embeddings::{Embedding, EmbeddingModel};
 use std::result::Result as StdResult;
 
 #[derive(Clone)]
@@ -23,7 +23,7 @@ impl EmbeddingModel for MockEmbeddingModel {
     async fn embed_texts(
         &self,
         texts: impl IntoIterator<Item = String> + Send,
-    ) -> StdResult<Vec<Embedding>, rig::embeddings::EmbeddingError> {
+    ) -> StdResult<Vec<Embedding>, rig_core::embeddings::EmbeddingError> {
         Ok(texts
             .into_iter()
             .map(|text| Embedding {

@@ -1,9 +1,9 @@
 use agent_rs_lib::agent::memory::context::ContextManager;
 use agent_rs_lib::agent::memory::tokenizer::{count_messages_tokens, count_string_tokens};
-use rig::OneOrMany;
-use rig::completion::{Prompt, PromptError};
-use rig::message::{AssistantContent, Message, UserContent};
-use rig::wasm_compat::WasmCompatSend;
+use rig_core::OneOrMany;
+use rig_core::completion::{Prompt, PromptError};
+use rig_core::message::{AssistantContent, Message, UserContent};
+use rig_core::wasm_compat::WasmCompatSend;
 
 #[derive(Clone)]
 struct MockCompactor {
@@ -49,11 +49,11 @@ fn test_count_messages_tokens_basic() {
             content: "You are a helpful assistant.".to_string(),
         },
         Message::User {
-            content: rig::OneOrMany::one(UserContent::text("Hello")),
+            content: rig_core::OneOrMany::one(UserContent::text("Hello")),
         },
         Message::Assistant {
             id: None,
-            content: rig::OneOrMany::one(AssistantContent::text("Hi there!")),
+            content: rig_core::OneOrMany::one(AssistantContent::text("Hi there!")),
         },
     ];
 
@@ -70,15 +70,15 @@ fn test_count_messages_tokens_basic() {
 fn test_count_messages_tokens_complex_fallback() {
     // We will test serialization fallback for complex content
     // Create a UserContent::Image
-    let img = rig::completion::message::Image {
-        data: rig::completion::message::DocumentSourceKind::String("dGVzdA==".to_string()),
+    let img = rig_core::completion::message::Image {
+        data: rig_core::completion::message::DocumentSourceKind::String("dGVzdA==".to_string()),
         media_type: None,
         detail: None,
         additional_params: None,
     };
     let messages = vec![
         Message::User {
-            content: rig::OneOrMany::one(UserContent::Image(img)),
+            content: rig_core::OneOrMany::one(UserContent::Image(img)),
         },
     ];
 
@@ -97,7 +97,7 @@ async fn test_context_manager_no_compaction_under_threshold() {
 
     let mut history = vec![
         Message::User {
-            content: rig::OneOrMany::one(UserContent::text("Short message")),
+            content: rig_core::OneOrMany::one(UserContent::text("Short message")),
         },
     ];
 
@@ -129,7 +129,7 @@ async fn test_context_manager_compaction_above_threshold() {
 
     let mut history = vec![
         Message::User {
-            content: rig::OneOrMany::one(UserContent::text(
+            content: rig_core::OneOrMany::one(UserContent::text(
                 "A very long message that is guaranteed to exceed the 15 token threshold",
             )),
         },
@@ -162,7 +162,7 @@ async fn test_context_manager_custom_compaction_prompt() {
 
     let mut history = vec![
         Message::User {
-            content: rig::OneOrMany::one(UserContent::text(
+            content: rig_core::OneOrMany::one(UserContent::text(
                 "A very long message that is guaranteed to exceed the 15 token threshold",
             )),
         },
@@ -186,17 +186,17 @@ async fn test_context_manager_custom_compaction_prompt() {
 async fn test_context_managed_chat_stream() {
     use futures::StreamExt;
     use tokio::sync::oneshot;
-    use rig::agent::MultiTurnStreamItem;
-    use rig::completion::Usage;
+    use rig_core::agent::MultiTurnStreamItem;
+    use rig_core::completion::Usage;
     use agent_rs_lib::agent::agents::ContextManagedChatStream;
 
     let final_history = vec![
         Message::User {
-            content: rig::OneOrMany::one(UserContent::text("Hello")),
+            content: rig_core::OneOrMany::one(UserContent::text("Hello")),
         },
         Message::Assistant {
             id: None,
-            content: rig::OneOrMany::one(AssistantContent::text("Hi there!")),
+            content: rig_core::OneOrMany::one(AssistantContent::text("Hi there!")),
         },
     ];
 
@@ -234,8 +234,8 @@ async fn test_context_managed_chat_stream() {
 async fn test_context_managed_chat_stream_no_history() {
     use futures::StreamExt;
     use tokio::sync::oneshot;
-    use rig::agent::MultiTurnStreamItem;
-    use rig::completion::Usage;
+    use rig_core::agent::MultiTurnStreamItem;
+    use rig_core::completion::Usage;
     use agent_rs_lib::agent::agents::ContextManagedChatStream;
 
     let final_item: MultiTurnStreamItem<()> = MultiTurnStreamItem::final_response(
@@ -260,16 +260,16 @@ async fn test_context_managed_chat_stream_no_history() {
 
 #[test]
 fn test_strip_reasoning_mixed_content_keeps_text_and_tool_call() {
-    use rig::message::{ToolCall, ToolFunction};
-    use rig::message::Reasoning;
+    use rig_core::message::{ToolCall, ToolFunction};
+    use rig_core::message::Reasoning;
 
     let history = vec![
         Message::User {
-            content: rig::OneOrMany::one(UserContent::text("hello")),
+            content: rig_core::OneOrMany::one(UserContent::text("hello")),
         },
         Message::Assistant {
             id: None,
-            content: rig::OneOrMany::many(vec![
+            content: rig_core::OneOrMany::many(vec![
                 AssistantContent::Reasoning(Reasoning::new("thinking...")),
                 AssistantContent::text("Hi there!"),
                 AssistantContent::ToolCall(ToolCall::new(
@@ -299,15 +299,15 @@ fn test_strip_reasoning_mixed_content_keeps_text_and_tool_call() {
 
 #[test]
 fn test_strip_reasoning_drops_pure_reasoning_message() {
-    use rig::message::Reasoning;
+    use rig_core::message::Reasoning;
 
     let history = vec![
         Message::User {
-            content: rig::OneOrMany::one(UserContent::text("hello")),
+            content: rig_core::OneOrMany::one(UserContent::text("hello")),
         },
         Message::Assistant {
             id: None,
-            content: rig::OneOrMany::one(
+            content: rig_core::OneOrMany::one(
                 AssistantContent::Reasoning(Reasoning::new("just thinking")),
             ),
         },
@@ -325,7 +325,7 @@ fn test_strip_reasoning_passes_through_non_assistant_messages() {
             content: "You are helpful.".to_string(),
         },
         Message::User {
-            content: rig::OneOrMany::one(UserContent::text("hello")),
+            content: rig_core::OneOrMany::one(UserContent::text("hello")),
         },
     ];
 
@@ -342,25 +342,25 @@ fn test_strip_reasoning_empty_input() {
 
 #[test]
 fn test_strip_reasoning_multiple_assistant_messages_independently_filtered() {
-    use rig::message::Reasoning;
+    use rig_core::message::Reasoning;
 
     let history = vec![
         Message::User {
-            content: rig::OneOrMany::one(UserContent::text("first")),
+            content: rig_core::OneOrMany::one(UserContent::text("first")),
         },
         Message::Assistant {
             id: None,
-            content: rig::OneOrMany::many(vec![
+            content: rig_core::OneOrMany::many(vec![
                 AssistantContent::Reasoning(Reasoning::new("thinking")),
                 AssistantContent::text("response 1"),
             ]).unwrap(),
         },
         Message::User {
-            content: rig::OneOrMany::one(UserContent::text("second")),
+            content: rig_core::OneOrMany::one(UserContent::text("second")),
         },
         Message::Assistant {
             id: None,
-            content: rig::OneOrMany::one(
+            content: rig_core::OneOrMany::one(
                 AssistantContent::Reasoning(Reasoning::new("more thinking")),
             ),
         },
@@ -377,11 +377,11 @@ fn test_strip_reasoning_multiple_assistant_messages_independently_filtered() {
 
 #[test]
 fn test_strip_reasoning_preserves_assistant_id() {
-    use rig::message::Reasoning;
+    use rig_core::message::Reasoning;
 
     let history = vec![Message::Assistant {
         id: Some("msg_123".to_string()),
-        content: rig::OneOrMany::many(vec![
+        content: rig_core::OneOrMany::many(vec![
             AssistantContent::Reasoning(Reasoning::new("thinking")),
             AssistantContent::text("result"),
         ]).unwrap(),

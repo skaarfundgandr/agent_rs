@@ -6,7 +6,7 @@ use agent_rs_lib::agent::tools::document::{
 use agent_rs_lib::agent::tools::glob::{GlobSearchArgs, GlobSearchTool};
 use agent_rs_lib::agent::tools::search::{GrepSearchArgs, GrepSearchTool};
 use agent_rs_lib::security::SandboxConfig;
-use rig::tool::Tool;
+use rig_core::tool::Tool;
 use std::collections::HashSet;
 use std::fs;
 

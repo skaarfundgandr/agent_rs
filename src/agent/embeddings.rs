@@ -1,13 +1,13 @@
 use std::cmp::max;
 
 use anyhow::{Context, Result, bail};
-use rig::embeddings::{Embedding, EmbeddingModel, embed::to_texts};
-use rig::{Embed, OneOrMany, client::EmbeddingsClient};
+use rig_core::embeddings::{Embedding, EmbeddingModel, embed::to_texts};
+use rig_core::{Embed, OneOrMany, client::EmbeddingsClient};
 
 /// A small, reusable embedding service for library consumers.
 ///
 /// This type is intentionally generic over the Rig embedding model so it can be used with any
-/// provider that implements `rig::embeddings::EmbeddingModel`.
+/// provider that implements `rig_core::embeddings::EmbeddingModel`.
 ///
 /// Prefer constructing the underlying provider outside this module and then passing the embedding
 /// model into [`EmbeddingService::new`].

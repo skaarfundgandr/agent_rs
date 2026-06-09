@@ -1,8 +1,8 @@
-use rig::agent::{Agent, StreamingPromptRequest};
-use rig::completion::{Chat, CompletionModel, PromptError};
-use rig::message::Message;
-use rig::streaming::StreamingChat;
-use rig::wasm_compat::{WasmCompatSend, WasmCompatSync};
+use rig_core::agent::{Agent, StreamingPromptRequest};
+use rig_core::completion::{Chat, CompletionModel, PromptError};
+use rig_core::message::Message;
+use rig_core::streaming::StreamingChat;
+use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 /// Executes a standard chat turn against the LLM.
 ///
@@ -21,7 +21,7 @@ use rig::wasm_compat::{WasmCompatSend, WasmCompatSync};
 /// Returns a `PromptError` if the underlying model invocation fails.
 pub async fn execute_chat<
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: rig::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
+    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 >(
     agent: &Agent<M, P>,
     prompt: &str,
@@ -47,9 +47,9 @@ pub fn execute_stream_chat<M: CompletionModel + WasmCompatSend + WasmCompatSync 
     history: Vec<Message>,
 ) -> StreamingPromptRequest<M, P>
 where
-    M::StreamingResponse: rig::completion::GetTokenUsage,
+    M::StreamingResponse: rig_core::completion::GetTokenUsage,
     Agent<M, P>: StreamingChat<M, M::StreamingResponse, Hook = P>,
-    P: rig::agent::PromptHook<M> + 'static,
+    P: rig_core::agent::PromptHook<M> + 'static,
 {
     agent.stream_chat(prompt, history)
 }

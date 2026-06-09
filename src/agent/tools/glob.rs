@@ -1,8 +1,8 @@
 use crate::agent::permission::PermissionPolicy;
 use crate::domain::errors::DocumentError;
 use crate::security::{SandboxConfig, validate_sandboxed_path};
-use rig::completion::ToolDefinition;
-use rig::tool::Tool;
+use rig_core::completion::ToolDefinition;
+use rig_core::tool::Tool;
 use serde_json::json;
 use std::path::Path;
 

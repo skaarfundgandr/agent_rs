@@ -1,7 +1,7 @@
 use crate::domain::errors::CompactError;
-use rig::completion::{Prompt, ToolDefinition};
-use rig::tool::Tool;
-use rig::wasm_compat::{WasmCompatSend, WasmCompatSync};
+use rig_core::completion::{Prompt, ToolDefinition};
+use rig_core::tool::Tool;
+use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 

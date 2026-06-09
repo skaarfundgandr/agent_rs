@@ -1,9 +1,9 @@
 use futures::stream::Stream;
-use rig::agent::{Agent, MultiTurnStreamItem, StreamingError};
-use rig::completion::{CompletionModel, Prompt, PromptError};
-use rig::message::Message;
-use rig::streaming::StreamingChat;
-use rig::wasm_compat::{WasmCompatSend, WasmCompatSync};
+use rig_core::agent::{Agent, MultiTurnStreamItem, StreamingError};
+use rig_core::completion::{CompletionModel, Prompt, PromptError};
+use rig_core::message::Message;
+use rig_core::streaming::StreamingChat;
+use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::sync::oneshot;
@@ -21,7 +21,7 @@ const DEFAULT_MAX_TURNS: usize = 20;
 /// If the threshold is crossed, a compaction model summarizes the history.
 pub struct ContextManagedAgent<M: CompletionModel, C: Prompt, P = ()>
 where
-    P: rig::agent::PromptHook<M>,
+    P: rig_core::agent::PromptHook<M>,
 {
     inner: Agent<M, P>,
     context_manager: ContextManager<C>,
@@ -30,7 +30,7 @@ where
 impl<
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
-    P: rig::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
+    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 > ContextManagedAgent<M, C, P>
 {
     /// Send a chat prompt and automatically manage the context history.
@@ -152,7 +152,7 @@ impl<
         PromptError,
     >
     where
-        M::StreamingResponse: rig::completion::GetTokenUsage,
+        M::StreamingResponse: rig_core::completion::GetTokenUsage,
         Agent<M, P>: StreamingChat<M, M::StreamingResponse, Hook = P>,
     {
         let mut cloned_history = history.to_vec();
@@ -208,7 +208,7 @@ impl<
         PromptError,
     >
     where
-        M::StreamingResponse: rig::completion::GetTokenUsage,
+        M::StreamingResponse: rig_core::completion::GetTokenUsage,
         Agent<M, P>: StreamingChat<M, M::StreamingResponse, Hook = P>,
     {
         self.context_manager
@@ -290,10 +290,10 @@ pub fn strip_reasoning_from_history(history: Vec<Message>) -> Vec<Message> {
                 let filtered: Vec<_> = content
                     .into_iter()
                     .filter(|item| {
-                        !matches!(item, rig::message::AssistantContent::Reasoning(_))
+                        !matches!(item, rig_core::message::AssistantContent::Reasoning(_))
                     })
                     .collect();
-                match rig::OneOrMany::many(filtered) {
+                match rig_core::OneOrMany::many(filtered) {
                     Ok(new_content) => Some(Message::Assistant {
                         id,
                         content: new_content,
@@ -368,7 +368,7 @@ where
 /// Extension trait to easily add context management to an existing rig Agent
 pub trait AgentContextExt<M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static, P = ()>
 where
-    P: rig::agent::PromptHook<M>,
+    P: rig_core::agent::PromptHook<M>,
 {
     /// Wraps the agent in a ContextManagedAgent that will automatically
     /// compact conversation history using the provided compaction model
@@ -391,7 +391,7 @@ where
 
 impl<
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: rig::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
+    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 > AgentContextExt<M, P> for Agent<M, P>
 {
     /// Wraps the agent in a ContextManagedAgent that will automatically

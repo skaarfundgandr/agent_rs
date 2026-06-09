@@ -16,7 +16,7 @@ strip = true
 [dependencies]
 anyhow = "1.0.102"
 dotenvy = "0.15.7"
-rig = { version = "0.38.1", features = ["rmcp"] }
+rig-core = { version = "0.38.1", features = ["rmcp"] }
 rmcp = { version = "1.7.0", features = [
     "client",
     "macros",

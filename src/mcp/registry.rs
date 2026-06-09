@@ -6,9 +6,9 @@ use crate::domain::mcp::{
 use crate::mcp::client::McpClient;
 use anyhow::{Context, Result, bail};
 use reqwest::header::{HeaderName, HeaderValue};
-use rig::completion::ToolDefinition;
-use rig::tool::{ToolDyn, ToolError, rmcp::McpTool as RigMcpTool};
-use rig::wasm_compat::WasmBoxedFuture;
+use rig_core::completion::ToolDefinition;
+use rig_core::tool::{ToolDyn, ToolError, rmcp::McpTool as RigMcpTool};
+use rig_core::wasm_compat::WasmBoxedFuture;
 use rmcp::service::{RoleClient, RunningService, ServiceExt};
 use rmcp::transport::child_process::TokioChildProcess;
 use rmcp::transport::streamable_http_client::{

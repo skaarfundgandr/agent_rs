@@ -2,7 +2,7 @@ use crate::domain::config::McpConfig;
 use crate::domain::mcp::{McpServerDef, ResolvedMcpServer};
 use crate::mcp::registry::{McpRegistry, McpRegistryRuntime};
 use anyhow::Result;
-use rig::tool::ToolDyn;
+use rig_core::tool::ToolDyn;
 use std::str::FromStr;
 
 /// Client manager that holds MCP server configurations and handles connecting to them.

@@ -1,5 +1,5 @@
-use rig::completion::{Prompt, PromptError};
-use rig::message::Message;
+use rig_core::completion::{Prompt, PromptError};
+use rig_core::message::Message;
 use std::future::IntoFuture;
 use tracing::Instrument;
 
@@ -22,7 +22,7 @@ fn default_compaction_prompt_formatter(history_text: &str) -> String {
     )
 }
 
-impl<C: Prompt + rig::wasm_compat::WasmCompatSend + rig::wasm_compat::WasmCompatSync + 'static> ContextManager<C> {
+impl<C: Prompt + rig_core::wasm_compat::WasmCompatSend + rig_core::wasm_compat::WasmCompatSync + 'static> ContextManager<C> {
     /// Creates a new `ContextManager` with a threshold and a compaction LLM.
     ///
     /// # Arguments

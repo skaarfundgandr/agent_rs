@@ -2,7 +2,7 @@ use crate::agent::embeddings::EmbeddingService;
 pub use crate::domain::rag::{Chunk, ChunkingOptions, Document, RagSource, RagSourceType};
 use anyhow::{Context, Result, bail};
 use pdf_extract::extract_text;
-use rig::{
+use rig_core::{
     OneOrMany, embeddings::EmbeddingModel, vector_store::in_memory_store::InMemoryVectorStore,
 };
 use std::collections::HashMap;
@@ -249,7 +249,7 @@ impl RagPipeline {
     pub async fn build_index<M: EmbeddingModel + Clone>(
         &self,
         embedding_service: &EmbeddingService<M>,
-    ) -> Result<rig::vector_store::in_memory_store::InMemoryVectorIndex<M, String>> {
+    ) -> Result<rig_core::vector_store::in_memory_store::InMemoryVectorIndex<M, String>> {
         let model = embedding_service.model().clone();
         let store = self.build_store(embedding_service).await?;
         Ok(store.index(model))
@@ -260,7 +260,7 @@ impl RagPipeline {
         &self,
         embedding_service: &EmbeddingService<M>,
         formatter: F,
-    ) -> Result<rig::vector_store::in_memory_store::InMemoryVectorIndex<M, String>>
+    ) -> Result<rig_core::vector_store::in_memory_store::InMemoryVectorIndex<M, String>>
     where
         F: Fn(&Chunk) -> String,
     {
@@ -358,7 +358,7 @@ impl<M: EmbeddingModel> RagStoreBuilder<M> {
     /// Build the vector store and return an index for the given model.
     pub async fn build_index(
         self,
-    ) -> Result<rig::vector_store::in_memory_store::InMemoryVectorIndex<M, String>>
+    ) -> Result<rig_core::vector_store::in_memory_store::InMemoryVectorIndex<M, String>>
     where
         M: Clone,
     {
