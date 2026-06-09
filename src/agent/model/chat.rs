@@ -25,7 +25,7 @@ pub async fn execute_chat<
 >(
     agent: &Agent<M, P>,
     prompt: &str,
-    history: Vec<Message>,
+    history: &mut Vec<Message>,
 ) -> Result<String, PromptError> {
     agent.chat(prompt, history).await
 }

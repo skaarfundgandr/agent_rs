@@ -1,5 +1,6 @@
 use agent_rs_lib::agent::memory::context::ContextManager;
 use agent_rs_lib::agent::memory::tokenizer::{count_messages_tokens, count_string_tokens};
+use rig::OneOrMany;
 use rig::completion::{Prompt, PromptError};
 use rig::message::{AssistantContent, Message, UserContent};
 use rig::wasm_compat::WasmCompatSend;
@@ -200,7 +201,7 @@ async fn test_context_managed_chat_stream() {
     ];
 
     let final_item: MultiTurnStreamItem<()> = MultiTurnStreamItem::final_response_with_history(
-        "Hi there!",
+        OneOrMany::one(AssistantContent::text("Hi there!")),
         Usage::new(),
         Some(final_history.clone()),
     );
@@ -210,7 +211,7 @@ async fn test_context_managed_chat_stream() {
     ]);
 
     let (tx, rx) = oneshot::channel();
-    let mut managed_stream = ContextManagedChatStream::new(inner_stream, tx);
+    let mut managed_stream = ContextManagedChatStream::new(inner_stream, tx, vec![]);
 
     while let Some(item) = managed_stream.next().await {
         assert!(item.is_ok());
@@ -238,7 +239,7 @@ async fn test_context_managed_chat_stream_no_history() {
     use agent_rs_lib::agent::agents::ContextManagedChatStream;
 
     let final_item: MultiTurnStreamItem<()> = MultiTurnStreamItem::final_response(
-        "Hi there!",
+        OneOrMany::one(AssistantContent::text("Hi there!")),
         Usage::new(),
     );
 
@@ -247,7 +248,7 @@ async fn test_context_managed_chat_stream_no_history() {
     ]);
 
     let (tx, rx) = oneshot::channel();
-    let mut managed_stream = ContextManagedChatStream::new(inner_stream, tx);
+    let mut managed_stream = ContextManagedChatStream::new(inner_stream, tx, vec![]);
 
     while let Some(item) = managed_stream.next().await {
         assert!(item.is_ok());

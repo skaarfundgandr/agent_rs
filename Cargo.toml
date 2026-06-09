@@ -1,6 +1,6 @@
 [package]
 name = "agent_rs"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 
 [lib]
@@ -16,8 +16,8 @@ strip = true
 [dependencies]
 anyhow = "1.0.102"
 dotenvy = "0.15.7"
-rig-core = { version = "0.36.0", features = ["rmcp"] }
-rmcp = { version = "1.6.0", features = [
+rig = { version = "0.38.1", features = ["rmcp"] }
+rmcp = { version = "1.7.0", features = [
     "client",
     "macros",
     "transport-streamable-http-client-reqwest",

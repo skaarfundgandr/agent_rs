@@ -67,17 +67,7 @@ impl<
 
             // 2. Call the model
             let response =
-                crate::agent::model::chat::execute_chat(&self.inner, prompt, history.clone())
-                    .await?;
-
-            // 3. Append user and assistant messages
-            history.push(Message::User {
-                content: rig::OneOrMany::one(rig::message::UserContent::text(prompt)),
-            });
-            history.push(Message::Assistant {
-                content: rig::OneOrMany::one(rig::message::AssistantContent::text(&response)),
-                id: None,
-            });
+                crate::agent::model::chat::execute_chat(&self.inner, prompt, history).await?;
 
             Ok(response)
         }
@@ -120,17 +110,7 @@ impl<
 
             // 2. Call the model
             let response =
-                crate::agent::model::chat::execute_chat(&self.inner, prompt, history.clone())
-                    .await?;
-
-            // 3. Append user and assistant messages
-            history.push(Message::User {
-                content: rig::OneOrMany::one(rig::message::UserContent::text(prompt)),
-            });
-            history.push(Message::Assistant {
-                content: rig::OneOrMany::one(rig::message::AssistantContent::text(&response)),
-                id: None,
-            });
+                crate::agent::model::chat::execute_chat(&self.inner, prompt, &mut history).await?;
 
             Ok((response, history))
         }
@@ -180,13 +160,16 @@ impl<
             .compact_history_if_needed(&mut cloned_history, prompt)
             .await?;
 
+        // Snapshot the compacted history for later merging with current-turn messages
+        let original_history = cloned_history.clone();
+
         let rig_stream =
             crate::agent::model::chat::execute_stream_chat(&self.inner, prompt, cloned_history)
                 .multi_turn(self.inner.default_max_turns.unwrap_or(DEFAULT_MAX_TURNS))
                 .await;
 
         let (tx, rx) = oneshot::channel();
-        let stream = ContextManagedChatStream::new(rig_stream, tx);
+        let stream = ContextManagedChatStream::new(rig_stream, tx, original_history);
 
         Ok((stream, rx))
     }
@@ -232,13 +215,16 @@ impl<
             .compact_history_if_needed(&mut history, prompt)
             .await?;
 
+        // Snapshot the compacted history for later merging with current-turn messages
+        let original_history = history.clone();
+
         let rig_stream =
             crate::agent::model::chat::execute_stream_chat(&self.inner, prompt, history)
                 .multi_turn(self.inner.default_max_turns.unwrap_or(DEFAULT_MAX_TURNS))
                 .await;
 
         let (tx, rx) = oneshot::channel();
-        let stream = ContextManagedChatStream::new(rig_stream, tx);
+        let stream = ContextManagedChatStream::new(rig_stream, tx, original_history);
 
         Ok((stream, rx))
     }
@@ -323,11 +309,12 @@ pub fn strip_reasoning_from_history(history: Vec<Message>) -> Vec<Message> {
 /// A stream wrapper for a context-managed agent chat session.
 ///
 /// Once the stream finishes and yields the `FinalResponse`, the updated history
-/// is sent to the oneshot channel which resolves to the updated history vector.
+/// (original history + current-turn messages) is sent to the oneshot channel.
 #[must_use = "streams must be polled to completion to update history"]
 pub struct ContextManagedChatStream<S, R> {
     inner: S,
     history_tx: Option<oneshot::Sender<Vec<Message>>>,
+    original_history: Vec<Message>,
     _phantom: std::marker::PhantomData<R>,
 }
 
@@ -338,14 +325,20 @@ impl<S, R> ContextManagedChatStream<S, R> {
     ///
     /// * `inner` - The underlying stream yielding standard Rig multi-turn items.
     /// * `history_tx` - A oneshot sender to transmit the updated history vector once the stream finishes.
+    /// * `original_history` - The conversation history snapshot sent to the LLM for this turn.
     ///
     /// # Returns
     ///
     /// Returns a new instance of `ContextManagedChatStream`.
-    pub fn new(inner: S, history_tx: oneshot::Sender<Vec<Message>>) -> Self {
+    pub fn new(
+        inner: S,
+        history_tx: oneshot::Sender<Vec<Message>>,
+        original_history: Vec<Message>,
+    ) -> Self {
         Self {
             inner,
             history_tx: Some(history_tx),
+            original_history,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -363,8 +356,10 @@ where
         let poll_res = Pin::new(&mut this.inner).poll_next(cx);
         if let Poll::Ready(Some(Ok(MultiTurnStreamItem::FinalResponse(final_res)))) = &poll_res
             && let Some(tx) = this.history_tx.take() {
-                let history_to_send = final_res.history().map(|h| h.to_vec()).unwrap_or_default();
-                let _ = tx.send(history_to_send);
+                let current_turn = final_res.history().map(|h| h.to_vec()).unwrap_or_default();
+                let mut full_history = this.original_history.clone();
+                full_history.extend(current_turn);
+                let _ = tx.send(full_history);
             }
         poll_res
     }
