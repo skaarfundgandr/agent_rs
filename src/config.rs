@@ -3,7 +3,7 @@ use crate::domain::mcp::{
     McpServerDef, McpStdioTransportSpec, McpStreamableHttpTransportSpec, McpTransportSpec,
     ResolvedMcpServer,
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use std::path::Path;
 use std::str::FromStr;
 use url::Url;
@@ -164,11 +164,21 @@ impl McpServerDef {
         };
 
         let mut command = std::process::Command::new(&transport.command);
-        command.args(&transport.args);
-        command.envs(&transport.env);
+        command
+            .args(&transport.args)
+            .envs(&transport.env)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
 
         if let Some(cwd) = transport.cwd {
             command.current_dir(cwd);
+        }
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         }
 
         Ok(command)

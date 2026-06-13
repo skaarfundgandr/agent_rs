@@ -310,12 +310,19 @@ async fn collect_registered_tools(
 
 fn build_stdio_command(spec: &McpStdioTransportSpec) -> Result<Command> {
     let mut process = Command::new(&spec.command);
-    process.args(&spec.args);
-    process.envs(&spec.env);
+    process
+        .args(&spec.args)
+        .envs(&spec.env)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
 
     if let Some(cwd) = &spec.cwd {
         process.current_dir(cwd);
     }
+
+    #[cfg(windows)]
+    process.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
 
     Ok(process)
 }
