@@ -1,7 +1,8 @@
 use crate::agent::permission::PermissionPolicy;
-use crate::agent::rag::extract_pdf_text;
 use crate::domain::errors::DocumentError;
 use crate::security::SandboxConfig;
+use anyhow::{Context, Result};
+use pdf_extract::extract_text;
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
@@ -187,4 +188,8 @@ impl Tool for WriteDocumentTool {
 
         Ok(format!("Successfully wrote to {}", args.path))
     }
+}
+
+pub fn extract_pdf_text<P: AsRef<Path>>(path: P) -> Result<String> {
+    extract_text(path).context("Failed to extract text from PDF")
 }

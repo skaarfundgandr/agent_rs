@@ -1,8 +1,13 @@
+#![cfg(feature = "rag")]
+
 use std::cmp::max;
 
 use anyhow::{Context, Result, bail};
 use rig_core::embeddings::{Embedding, EmbeddingModel, embed::to_texts};
 use rig_core::{Embed, OneOrMany, client::EmbeddingsClient};
+
+use crate::rag::{ErasedEmbedder, QueryFuture, TextsFuture};
+use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 /// A small, reusable embedding service for library consumers.
 ///
@@ -199,4 +204,44 @@ where
     C: EmbeddingsClient,
 {
     EmbeddingService::new(client.embedding_model_with_ndims(model, ndims))
+}
+
+impl<M> ErasedEmbedder for EmbeddingService<M>
+where
+    M: EmbeddingModel + WasmCompatSend + WasmCompatSync + 'static,
+{
+    fn ndims(&self) -> usize {
+        self.model.ndims()
+    }
+
+    fn embed_query<'a>(&'a self, text: &'a str) -> QueryFuture<'a> {
+        Box::pin(async move {
+            let e = self.embed_text(text).await?;
+            Ok(e.vec.into_iter().map(|v| v as f32).collect())
+        })
+    }
+
+    fn embed_texts<'a>(&'a self, texts: Vec<String>) -> TextsFuture<'a> {
+        Box::pin(async move {
+            let embeddings = self.embed_texts(texts).await?;
+            Ok(embeddings
+                .into_iter()
+                .map(|e| e.vec.into_iter().map(|v| v as f32).collect())
+                .collect())
+        })
+    }
+}
+
+impl EmbeddingService<rig_fastembed::EmbeddingModel> {
+    /// Convenience constructor for a local `fastembed` model.
+    ///
+    /// Downloads the model from Hugging Face on first call (requires network
+    /// or a pre-populated cache via `FASTEMBED_CACHE_DIR`).
+    pub fn from_fastembed(
+        model: rig_fastembed::FastembedModel,
+    ) -> Result<Self, rig_fastembed::FastembedError> {
+        let client = rig_fastembed::Client::new();
+        let model = client.embedding_model(&model)?;
+        Ok(Self::new(model))
+    }
 }

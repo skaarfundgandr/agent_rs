@@ -1,6 +1,9 @@
+#![cfg(feature = "rag")]
+
 use crate::agent::permission::PermissionPolicy;
 use crate::domain::errors::DocumentError;
 use crate::domain::rag::{RagSource, RagSourceType};
+use crate::rag::{ErasedEmbedder, RagPipeline};
 use crate::security::{SandboxConfig, validate_sandboxed_path};
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
@@ -174,9 +177,11 @@ pub struct ManageRagArgs {
 ///
 /// After modifying the registry, the consumer should rebuild the RAG index
 /// from the updated source list via [`RagSourceRegistry::sources()`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ManageRagTool {
     registry: Arc<Mutex<RagSourceRegistry>>,
+    pipeline: Arc<RagPipeline>,
+    embedder: Arc<dyn ErasedEmbedder>,
     sandbox: SandboxConfig,
     policy: PermissionPolicy,
 }
@@ -192,11 +197,15 @@ impl ManageRagTool {
     /// * `policy` - Permission policy evaluated before each tool invocation.
     pub fn new(
         registry: Arc<Mutex<RagSourceRegistry>>,
+        pipeline: Arc<RagPipeline>,
+        embedder: Arc<dyn ErasedEmbedder>,
         sandbox: SandboxConfig,
         policy: PermissionPolicy,
     ) -> Self {
         Self {
             registry,
+            pipeline,
+            embedder,
             sandbox,
             policy,
         }
@@ -277,11 +286,23 @@ impl Tool for ManageRagTool {
                     )
                 })?;
                 let path = Path::new(&path_str);
-                let mut registry = self
-                    .registry
-                    .lock()
-                    .map_err(|e| DocumentError::Rag(e.to_string()))?;
-                registry.add_source(path, &self.sandbox)
+
+                let confirmation = {
+                    let mut registry = self
+                        .registry
+                        .lock()
+                        .map_err(|e| DocumentError::Rag(e.to_string()))?;
+                    registry.add_source(path, &self.sandbox)?
+                };
+
+                let canonical = validate_sandboxed_path(&self.sandbox, path)?;
+                let added = self
+                    .pipeline
+                    .add_source_dyn(&canonical, self.embedder.as_ref())
+                    .await
+                    .map_err(|e| DocumentError::Rag(format!("pipeline add failed: {e}")))?;
+
+                Ok(format!("{confirmation} (indexed {added} chunks)"))
             }
             "remove" => {
                 let path_str = args.path.ok_or_else(|| {
@@ -291,11 +312,26 @@ impl Tool for ManageRagTool {
                 })?;
                 let path = Path::new(&path_str);
                 let canonical = validate_sandboxed_path(&self.sandbox, path)?;
-                let mut registry = self
-                    .registry
-                    .lock()
-                    .map_err(|e| DocumentError::Rag(e.to_string()))?;
-                registry.remove_source(&canonical)
+
+                let confirmation = {
+                    let mut registry = self
+                        .registry
+                        .lock()
+                        .map_err(|e| DocumentError::Rag(e.to_string()))?;
+                    registry.remove_source(&canonical)?
+                };
+
+                let source_name = canonical
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default();
+                let removed = self
+                    .pipeline
+                    .remove_source(source_name)
+                    .await
+                    .map_err(|e| DocumentError::Rag(format!("pipeline remove failed: {e}")))?;
+
+                Ok(format!("{confirmation} (removed {removed} chunks)"))
             }
             "list" => {
                 let registry = self
