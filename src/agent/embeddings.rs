@@ -23,16 +23,32 @@ pub struct EmbeddingService<M> {
 
 impl<M> EmbeddingService<M> {
     /// Create a new embedding service from a concrete Rig embedding model.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - The concrete Rig embedding model to wrap.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `EmbeddingService`.
     pub fn new(model: M) -> Self {
         Self { model }
     }
 
     /// Consume the service and return the inner model.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped Rig embedding model.
     pub fn into_inner(self) -> M {
         self.model
     }
 
     /// Access the wrapped model.
+    ///
+    /// # Returns
+    ///
+    /// Returns a reference to the wrapped Rig embedding model.
     pub fn model(&self) -> &M {
         &self.model
     }
@@ -43,16 +59,36 @@ where
     M: EmbeddingModel,
 {
     /// Number of dimensions produced by the underlying embedding model.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of dimensions as a `usize`.
     pub fn ndims(&self) -> usize {
         self.model.ndims()
     }
 
     /// Maximum number of texts the provider accepts in a single request.
+    ///
+    /// # Returns
+    ///
+    /// Returns the maximum documents count as a `usize`.
     pub fn max_documents(&self) -> usize {
         max(1, M::MAX_DOCUMENTS)
     }
 
     /// Embed a single text value.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The text slice or reference to embed.
+    ///
+    /// # Returns
+    ///
+    /// Returns the computed `Embedding` vector.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the model invocation fails.
     pub async fn embed_text(&self, text: impl AsRef<str>) -> Result<Embedding> {
         self.model
             .embed_text(text.as_ref())
@@ -63,6 +99,18 @@ where
     /// Embed a list of plain text inputs.
     ///
     /// Inputs are batched to respect the provider's request limit while preserving order.
+    ///
+    /// # Arguments
+    ///
+    /// * `texts` - An iterator of text values to embed.
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of computed `Embedding` vectors in the same order.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if embedding any batch fails, or if the provider returns an unexpected number of embeddings.
     pub async fn embed_texts<I, S>(&self, texts: I) -> Result<Vec<Embedding>>
     where
         I: IntoIterator<Item = S>,
@@ -100,6 +148,18 @@ where
     }
 
     /// Embed a single document implementing Rig's `Embed` trait.
+    ///
+    /// # Arguments
+    ///
+    /// * `document` - The document instance implementing `Embed`.
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing the original document and its computed `Embedding` vector(s).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if extracting text or embedding the document fails.
     pub async fn embed_document<T>(&self, document: T) -> Result<(T, OneOrMany<Embedding>)>
     where
         T: Embed,
@@ -115,6 +175,18 @@ where
     ///
     /// This preserves the original document order and the order of embedded text fragments within
     /// each document.
+    ///
+    /// # Arguments
+    ///
+    /// * `documents` - An iterator of document instances implementing `Embed`.
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of tuples containing each original document and its corresponding computed `Embedding` vector(s).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any document produces no text, or if embedding the batch fails.
     pub async fn embed_documents<T, I>(
         &self,
         documents: I,
@@ -184,6 +256,15 @@ where
 }
 
 /// Convenience helper that builds an [`EmbeddingService`] from any Rig embedding-capable client.
+///
+/// # Arguments
+///
+/// * `client` - The Rig client reference.
+/// * `model` - The identifier name of the embedding model.
+///
+/// # Returns
+///
+/// Returns an `EmbeddingService` configured with the client's embedding model.
 pub fn service_from_client<C>(
     client: &C,
     model: impl Into<String>,
@@ -195,6 +276,16 @@ where
 }
 
 /// Convenience helper that builds an [`EmbeddingService`] from a model name and explicit dimensions.
+///
+/// # Arguments
+///
+/// * `client` - The Rig client reference.
+/// * `model` - The identifier name of the embedding model.
+/// * `ndims` - The explicit dimensions of the model.
+///
+/// # Returns
+///
+/// Returns an `EmbeddingService` configured with the client's embedding model.
 pub fn service_from_client_with_ndims<C>(
     client: &C,
     model: impl Into<String>,
@@ -237,6 +328,18 @@ impl EmbeddingService<rig_fastembed::EmbeddingModel> {
     ///
     /// Downloads the model from Hugging Face on first call (requires network
     /// or a pre-populated cache via `FASTEMBED_CACHE_DIR`).
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - The fastembed model enum variant selecting which model to load.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `EmbeddingService` using the fastembed model.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `FastembedError` if loading or downloading the model fails.
     pub fn from_fastembed(
         model: rig_fastembed::FastembedModel,
     ) -> Result<Self, rig_fastembed::FastembedError> {

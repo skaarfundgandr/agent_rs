@@ -37,6 +37,14 @@ pub struct SandboxConfig {
 impl SandboxConfig {
     /// Creates a sandbox configuration with a single root.
     ///
+    /// # Arguments
+    ///
+    /// * `root` - The directory path to use as the sandbox root.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `SandboxConfig`.
+    ///
     /// # Errors
     ///
     /// Returns [`DocumentError::Io`] if the root cannot be canonicalized
@@ -49,6 +57,14 @@ impl SandboxConfig {
     ///
     /// The first root is the primary (default target for new file writes).
     /// All roots must be canonicalizable at construction time.
+    ///
+    /// # Arguments
+    ///
+    /// * `roots` - A vector of directory paths to use as allowed roots.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `SandboxConfig`.
     ///
     /// # Errors
     ///
@@ -76,28 +92,48 @@ impl SandboxConfig {
     }
 
     /// Returns the primary (first) root.
+    ///
+    /// # Returns
+    ///
+    /// Returns a reference to the primary sandbox root `Path`.
     pub fn primary(&self) -> &Path {
         &self.roots[0]
     }
 
     /// Returns the original (non-canonicalized) roots as provided.
     /// Use for display paths and user-facing operations.
+    ///
+    /// # Returns
+    ///
+    /// Returns a slice of the original, non-canonicalized sandbox root paths.
     pub fn roots(&self) -> &[PathBuf] {
         &self.roots
     }
 
     /// Returns all canonicalized roots.
     /// Use for security validation.
+    ///
+    /// # Returns
+    ///
+    /// Returns a slice of the canonicalized sandbox root paths.
     pub fn canonical_roots(&self) -> &[PathBuf] {
         &self.canonical_roots
     }
 
     /// Returns the number of configured roots.
+    ///
+    /// # Returns
+    ///
+    /// Returns the count of sandbox roots.
     pub fn len(&self) -> usize {
         self.roots.len()
     }
 
     /// Returns `true` if no roots are configured (should never happen).
+    ///
+    /// # Returns
+    ///
+    /// Returns `true` if there are no roots configured, `false` otherwise.
     pub fn is_empty(&self) -> bool {
         self.roots.is_empty()
     }
@@ -149,6 +185,15 @@ impl TryFrom<&str> for SandboxConfig {
 /// For **existing** paths: returns the first root where the file exists.
 /// For **non-existent** paths (writes): walks up the tree to find the nearest
 /// existing ancestor under any root, using the primary root as default.
+///
+/// # Arguments
+///
+/// * `sandbox` - The sandbox configuration containing allowed roots.
+/// * `user_path` - The target path provided by the user.
+///
+/// # Returns
+///
+/// Returns the canonicalized target path if it lies within the sandbox.
 ///
 /// # Errors
 ///
@@ -228,6 +273,15 @@ fn try_resolve_within_root(
 ///
 /// Uses canonical roots for comparison to handle Windows `\\?\` prefix
 /// correctly. Falls back to non-canonical comparison for non-existent paths.
+///
+/// # Arguments
+///
+/// * `sandbox` - The sandbox configuration containing allowed roots.
+/// * `path` - The path to check containing root for.
+///
+/// # Returns
+///
+/// Returns `Some(&PathBuf)` of the containing sandbox root, or `None` if not found.
 pub fn find_containing_root<'a>(sandbox: &'a SandboxConfig, path: &Path) -> Option<&'a PathBuf> {
     // Try canonical comparison first (works for existing, canonicalized paths)
     let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
@@ -246,6 +300,15 @@ pub fn find_containing_root<'a>(sandbox: &'a SandboxConfig, path: &Path) -> Opti
 /// Tries canonical comparison first (cheap, works for already-canonical paths
 /// returned from [`validate_sandboxed_path`]). Falls back to original-root
 /// comparison for non-existent paths without a canonicalize syscall.
+///
+/// # Arguments
+///
+/// * `sandbox` - The sandbox configuration.
+/// * `path` - The absolute/relative path to convert.
+///
+/// # Returns
+///
+/// Returns the relative display path as a `String`.
 pub fn relative_display_path(sandbox: &SandboxConfig, path: &Path) -> String {
     // Canonical comparison first — works for paths returned from
     // validate_sandboxed_path (already canonicalized, no extra syscall)

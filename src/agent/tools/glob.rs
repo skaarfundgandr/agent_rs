@@ -31,7 +31,16 @@ pub struct GlobSearchTool {
 }
 
 impl GlobSearchTool {
-    /// Creates a new `GlobSearchTool` restricted to `sandbox`.
+    /// Creates a new `GlobSearchTool` restricted to the given sandbox.
+    ///
+    /// # Arguments
+    ///
+    /// * `sandbox` - The sandbox configuration containing allowed roots.
+    /// * `policy` - The permission policy to evaluate before glob searching.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `GlobSearchTool`.
     pub fn new(sandbox: SandboxConfig, policy: PermissionPolicy) -> Self {
         Self { sandbox, policy }
     }

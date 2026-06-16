@@ -24,6 +24,7 @@ pub struct WriteDocumentArgs {
     pub append: Option<bool>,
 }
 
+/// Tool for reading document or text files within the sandbox.
 #[derive(Debug, Clone)]
 pub struct ReadDocumentTool {
     sandbox: SandboxConfig,
@@ -32,6 +33,17 @@ pub struct ReadDocumentTool {
 }
 
 impl ReadDocumentTool {
+    /// Creates a new `ReadDocumentTool` restricted to the given sandbox and file extensions.
+    ///
+    /// # Arguments
+    ///
+    /// * `sandbox` - The sandbox configuration containing allowed roots.
+    /// * `allowed_extensions` - The set of allowed file extensions (without leading dots).
+    /// * `policy` - The permission policy to evaluate before reading files.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `ReadDocumentTool`.
     pub fn new(
         sandbox: SandboxConfig,
         allowed_extensions: HashSet<String>,
@@ -101,6 +113,7 @@ impl Tool for ReadDocumentTool {
     }
 }
 
+/// Tool for writing or editing document/text files within the sandbox.
 #[derive(Debug, Clone)]
 pub struct WriteDocumentTool {
     sandbox: SandboxConfig,
@@ -109,6 +122,17 @@ pub struct WriteDocumentTool {
 }
 
 impl WriteDocumentTool {
+    /// Creates a new `WriteDocumentTool` restricted to the given sandbox and file extensions.
+    ///
+    /// # Arguments
+    ///
+    /// * `sandbox` - The sandbox configuration containing allowed roots.
+    /// * `allowed_extensions` - The set of allowed file extensions (without leading dots).
+    /// * `policy` - The permission policy to evaluate before writing files.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `WriteDocumentTool`.
     pub fn new(
         sandbox: SandboxConfig,
         allowed_extensions: HashSet<String>,
@@ -190,6 +214,19 @@ impl Tool for WriteDocumentTool {
     }
 }
 
+/// Extract text content from a PDF file.
+///
+/// # Arguments
+///
+/// * `path` - The file path to the PDF document.
+///
+/// # Returns
+///
+/// Returns the extracted text as a `Result<String>`.
+///
+/// # Errors
+///
+/// Returns an error if the PDF file cannot be parsed or read.
 pub fn extract_pdf_text<P: AsRef<Path>>(path: P) -> Result<String> {
     extract_text(path).context("Failed to extract text from PDF")
 }

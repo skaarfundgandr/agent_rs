@@ -10,6 +10,7 @@ pub struct CompactArgs {
     pub text: String,
 }
 
+/// Tool that compacts conversation history using a compaction LLM.
 pub struct CompactTool<M: Prompt + WasmCompatSend + WasmCompatSync + 'static> {
     model: M,
 }
@@ -21,6 +22,15 @@ impl<M: Prompt + WasmCompatSend + WasmCompatSync + 'static> std::fmt::Debug for 
 }
 
 impl<M: Prompt + WasmCompatSend + WasmCompatSync + 'static> CompactTool<M> {
+    /// Creates a new `CompactTool` with the given LLM model.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - The LLM model implementing `Prompt` used to generate the summary.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `CompactTool`.
     pub fn new(model: M) -> Self {
         Self { model }
     }

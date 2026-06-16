@@ -11,6 +11,14 @@ use url::Url;
 impl McpConfig {
     /// Load, parse, and validate an MCP configuration from a JSON file.
     ///
+    /// # Arguments
+    ///
+    /// * `path` - The file path to the JSON configuration file.
+    ///
+    /// # Returns
+    ///
+    /// Returns the parsed and validated `McpConfig` instance.
+    ///
     /// # Errors
     ///
     /// This function will return an error if:
@@ -27,6 +35,14 @@ impl McpConfig {
     }
 
     /// Validate the MCP configuration settings, checking for server transport specifications.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the configuration is valid.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no MCP servers are defined, or if any defined server fails validation.
     pub fn validate(&self) -> Result<()> {
         if self.mcp_servers.is_empty() {
             bail!("no MCP servers were defined under `mcpServers`");
@@ -42,11 +58,31 @@ impl McpConfig {
     }
 
     /// Retrieve the server definition for a specific MCP server by name.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The unique identifier name of the MCP server.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(&McpServerDef)` if a server with the given name exists, or `None` otherwise.
     pub fn server(&self, name: &str) -> Option<&McpServerDef> {
         self.mcp_servers.get(name)
     }
 
     /// Resolve transport specifications for a single named server.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The unique identifier name of the MCP server to resolve.
+    ///
+    /// # Returns
+    ///
+    /// Returns the `ResolvedMcpServer` containing the resolved transport specifications.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the server is not found in the configuration, or if its transport specs cannot be parsed or validated.
     pub fn resolved_server(&self, name: &str) -> Result<ResolvedMcpServer> {
         let server = self
             .server(name)
@@ -59,6 +95,14 @@ impl McpConfig {
     }
 
     /// Resolve transport specifications for all configured MCP servers.
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of `ResolvedMcpServer` instances, one for each configured server.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any of the configured servers fail to resolve or validate their transport settings.
     pub fn resolved_servers(&self) -> Result<Vec<ResolvedMcpServer>> {
         self.mcp_servers
             .iter()
@@ -74,6 +118,14 @@ impl McpConfig {
 
 impl McpServerDef {
     /// Detect the transport kind (Stdio or StreamableHttp) based on properties.
+    ///
+    /// # Returns
+    ///
+    /// Returns the detected `McpTransportKind`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the server definition mixes stdio fields (`command`) with HTTP fields (`url`), or if neither is defined.
     pub fn transport_kind(&self) -> Result<crate::domain::mcp::McpTransportKind> {
         if let Some(transport_type) = self.transport_type {
             return Ok(transport_type);
@@ -92,6 +144,16 @@ impl McpServerDef {
     }
 
     /// Validate the server definition to check that configuration fields match the transport spec.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the server definition is valid.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - A stdio server lacks a `command` or defines a `url`.
+    /// - An HTTP server lacks a `url`, has an invalid URL format, or defines a `command`.
     pub fn validate(&self) -> Result<()> {
         match self.transport_kind()? {
             crate::domain::mcp::McpTransportKind::Stdio => {
@@ -121,6 +183,14 @@ impl McpServerDef {
     }
 
     /// Generate an `McpTransportSpec` based on configuration values.
+    ///
+    /// # Returns
+    ///
+    /// Returns the constructed `McpTransportSpec`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the transport kind cannot be determined, or if the properties are invalid (e.g. invalid URL).
     pub fn transport_spec(&self) -> Result<McpTransportSpec> {
         match self.transport_kind()? {
             crate::domain::mcp::McpTransportKind::Stdio => {
@@ -155,6 +225,14 @@ impl McpServerDef {
     }
 
     /// Build a stdio process `Command` configured with environmental variables, arguments, and working directory.
+    ///
+    /// # Returns
+    ///
+    /// Returns a configured `std::process::Command` ready to be spawned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if this server is configured for HTTP (as HTTP servers do not support stdio commands) or if the spec is invalid.
     pub fn build_stdio_command(&self) -> Result<std::process::Command> {
         let transport = match self.transport_spec()? {
             McpTransportSpec::Stdio(transport) => transport,
@@ -187,6 +265,10 @@ impl McpServerDef {
 
 impl McpTransportSpec {
     /// Return the transport kind corresponding to this specification.
+    ///
+    /// # Returns
+    ///
+    /// Returns the `McpTransportKind` associated with this transport spec.
     pub fn kind(&self) -> crate::domain::mcp::McpTransportKind {
         match self {
             Self::Stdio(_) => crate::domain::mcp::McpTransportKind::Stdio,

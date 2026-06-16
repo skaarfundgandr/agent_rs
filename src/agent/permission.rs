@@ -1,16 +1,32 @@
 use std::fmt;
 use std::sync::Arc;
 
+/// Trait representing an execution gate that dynamically checks permissions for tool invocations.
 #[async_trait::async_trait]
 pub trait PermissionGate: Send + Sync {
+    /// Checks whether the tool with the given name is permitted to execute.
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - The identifier name of the tool requesting execution.
+    /// * `description` - A description of the action the tool wants to perform.
+    ///
+    /// # Returns
+    ///
+    /// Returns `true` if the tool is allowed to execute, or `false` otherwise.
     async fn check_permission(&self, tool_name: &str, description: &str) -> bool;
 }
 
+/// Policy defining how tool execution permissions are evaluated.
 #[derive(Clone)]
 pub enum PermissionPolicy {
+    /// Automatically allows every tool execution.
     AllowAll,
+    /// Automatically denies every tool execution.
     DenyAll,
+    /// Prompts the user interactively on stderr/stdin for permission.
     CliPrompt,
+    /// Delegates validation to a custom user-defined `PermissionGate`.
     Custom(Arc<dyn PermissionGate>),
 }
 
@@ -26,6 +42,16 @@ impl fmt::Debug for PermissionPolicy {
 }
 
 impl PermissionPolicy {
+    /// Evaluates the policy for a given tool invocation.
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - The identifier name of the tool requesting execution.
+    /// * `description` - A description of the action the tool wants to perform.
+    ///
+    /// # Returns
+    ///
+    /// Returns `true` if the policy allows the execution, or `false` otherwise.
     pub async fn evaluate(&self, tool_name: &str, description: &str) -> bool {
         match self {
             PermissionPolicy::AllowAll => true,

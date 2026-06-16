@@ -108,6 +108,18 @@ impl RagSourceRegistry {
     }
 
     /// Removes a source by its canonical path.
+    ///
+    /// # Arguments
+    ///
+    /// * `canonical_path` - The canonicalized file or directory path to remove.
+    ///
+    /// # Returns
+    ///
+    /// Returns a confirmation message as a `String` if successful.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DocumentError::Rag`] if the source is not found in the registry.
     pub fn remove_source(&mut self, canonical_path: &Path) -> Result<String, DocumentError> {
         let before = self.sources.len();
         self.sources.retain(|s| s.path != canonical_path);
@@ -127,11 +139,19 @@ impl RagSourceRegistry {
     }
 
     /// Returns all registered sources.
+    ///
+    /// # Returns
+    ///
+    /// Returns a slice of all currently registered `RagSource`s.
     pub fn sources(&self) -> &[RagSource] {
         &self.sources
     }
 
     /// Returns a formatted list of all sources.
+    ///
+    /// # Returns
+    ///
+    /// Returns a formatted string listing all registered sources, or a message indicating none are registered.
     pub fn list_sources(&self) -> String {
         if self.sources.is_empty() {
             return "No sources registered.".to_string();
@@ -151,6 +171,10 @@ impl RagSourceRegistry {
     }
 
     /// Returns `true` if no sources are registered.
+    ///
+    /// # Returns
+    ///
+    /// Returns `true` if the registry has no sources, `false` otherwise.
     pub fn is_empty(&self) -> bool {
         self.sources.is_empty()
     }

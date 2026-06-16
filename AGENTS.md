@@ -88,7 +88,7 @@ Tests in `tests/` (6 files): `embeddings.rs`, `rag.rs`, `tool_tests.rs`, `mcp_cl
 
 ## Docs
 
-- `docs/api_docs.md` — full API reference (379 lines)
+- `docs/api/` — API reference docs (split by section). See [API Reference Overview](docs/api/README.md)
 - `docs/migration-0.2.0.md` — migration guide
 - `docs/diagrams/` — architecture diagrams (C4, class, sequence, state, module dependency)
 - `ROADMAP.md` — project roadmap and known gaps

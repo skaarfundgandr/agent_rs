@@ -32,7 +32,17 @@ pub struct GrepSearchTool {
 }
 
 impl GrepSearchTool {
-    /// Creates a new `GrepSearchTool` restricted to `sandbox` and the given extension allowlist.
+    /// Creates a new `GrepSearchTool` restricted to the given sandbox and extension allowlist.
+    ///
+    /// # Arguments
+    ///
+    /// * `sandbox` - The sandbox configuration containing allowed roots.
+    /// * `allowed_extensions` - The set of allowed file extensions (without leading dots).
+    /// * `policy` - The permission policy to evaluate before grep searching.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `GrepSearchTool`.
     pub fn new(
         sandbox: SandboxConfig,
         allowed_extensions: HashSet<String>,

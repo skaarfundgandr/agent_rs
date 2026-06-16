@@ -26,7 +26,16 @@ pub struct ListDirectoryTool {
 }
 
 impl ListDirectoryTool {
-    /// Creates a new `ListDirectoryTool` restricted to `sandbox_root`.
+    /// Creates a new `ListDirectoryTool` restricted to the given sandbox.
+    ///
+    /// # Arguments
+    ///
+    /// * `sandbox` - The sandbox configuration containing allowed roots.
+    /// * `policy` - The permission policy to evaluate before listing directories.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `ListDirectoryTool`.
     pub fn new(sandbox: SandboxConfig, policy: PermissionPolicy) -> Self {
         Self { sandbox, policy }
     }

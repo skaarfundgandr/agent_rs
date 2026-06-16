@@ -278,6 +278,14 @@ impl<
 /// Reasoning is still yielded by the stream for real-time display —
 /// this function only affects the history vector.
 ///
+/// # Arguments
+///
+/// * `history` - The conversation history vector containing messages to filter.
+///
+/// # Returns
+///
+/// Returns a new conversation history vector with all reasoning content blocks removed.
+///
 /// # Example
 ///
 /// ```ignore

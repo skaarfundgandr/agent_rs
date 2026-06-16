@@ -27,6 +27,14 @@ pub struct McpRegistry {
 
 impl McpRegistry {
     /// Create a registry from a validated config.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The validated `McpConfig` instance.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `McpRegistry`.
     pub fn new(config: McpConfig) -> Self {
         Self {
             client: McpClient::new(config),
@@ -34,46 +42,118 @@ impl McpRegistry {
     }
 
     /// Create a registry from a configuration file path.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The file path to the JSON configuration file.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `McpRegistry`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the config file cannot be read, parsed, or validated.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {
         Ok(Self::new(McpConfig::from_path(path)?))
     }
 
     /// Create a registry from an existing client wrapper.
+    ///
+    /// # Arguments
+    ///
+    /// * `client` - The existing `McpClient`.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `McpRegistry`.
     pub fn from_client(client: McpClient) -> Self {
         Self { client }
     }
 
     /// Access the underlying parsed config.
+    ///
+    /// # Returns
+    ///
+    /// Returns a reference to the `McpConfig`.
     pub fn config(&self) -> &McpConfig {
         self.client.config()
     }
 
     /// Validate the registry configuration.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if valid.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration validation fails.
     pub fn validate(&self) -> Result<()> {
         self.client.validate()
     }
 
     /// Get a server definition by name.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The unique identifier name of the server.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(&McpServerDef)` if found, or `None` otherwise.
     pub fn server(&self, name: &str) -> Option<&McpServerDef> {
         self.client.get_server_def(name)
     }
 
     /// Resolve a single MCP server into a normalized transport spec.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The unique identifier name of the server.
+    ///
+    /// # Returns
+    ///
+    /// Returns the resolved transport specifications.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the server is not found or fails to resolve.
     pub fn resolved_server(&self, name: &str) -> Result<ResolvedMcpServer> {
         self.client.get_resolved_server(name)
     }
 
     /// Resolve every configured server into transport specs.
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of resolved transport specifications.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any server configuration fails to resolve.
     pub fn resolved_servers(&self) -> Result<Vec<ResolvedMcpServer>> {
         self.client.config().resolved_servers()
     }
 
     /// Return the configured server names.
+    ///
+    /// # Returns
+    ///
+    /// Returns an iterator yielding the name string slices of all configured servers.
     pub fn server_names(&self) -> impl Iterator<Item = &str> {
         self.client.server_names()
     }
 
     /// Connect to all configured MCP servers and collect their tools.
+    ///
+    /// # Returns
+    ///
+    /// Returns the active `McpRegistryRuntime`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if connection or validation fails, or if a duplicate tool name is found across servers.
     pub async fn connect(&self) -> Result<McpRegistryRuntime> {
         self.validate()?;
 
@@ -108,6 +188,14 @@ impl McpRegistry {
     }
 
     /// Connect to all configured MCP servers and return Rig-compatible boxed tools.
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of boxed dynamic Rig `ToolDyn` objects.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if connection, tool discovery, or instantiation fails.
     pub async fn tools(&self) -> Result<Vec<Box<dyn ToolDyn>>> {
         Ok(self.connect().await?.into_tools())
     }
@@ -122,26 +210,50 @@ pub struct McpRegistryRuntime {
 
 impl McpRegistryRuntime {
     /// Registered servers in connection order.
+    ///
+    /// # Returns
+    ///
+    /// Returns a slice of the connected `RegisteredMcpServer` instances.
     pub fn servers(&self) -> &[RegisteredMcpServer] {
         &self.servers
     }
 
     /// Look up a server by name.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The unique identifier name of the server.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(&RegisteredMcpServer)` if found, or `None` otherwise.
     pub fn server(&self, name: &str) -> Option<&RegisteredMcpServer> {
         self.servers.iter().find(|server| server.name == name)
     }
 
     /// Registered tools in connection order.
+    ///
+    /// # Returns
+    ///
+    /// Returns a slice of the discovered `RegisteredMcpTool`s.
     pub fn tools(&self) -> &[RegisteredMcpTool] {
         &self.tools
     }
 
     /// Convenience iterator over tool names.
+    ///
+    /// # Returns
+    ///
+    /// Returns an iterator yielding the names of all discovered tools.
     pub fn tool_names(&self) -> impl Iterator<Item = &str> {
         self.tools.iter().map(|tool| tool.tool_name.as_str())
     }
 
     /// Convert the runtime registry into boxed Rig tools.
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of boxed dynamic Rig `ToolDyn` objects.
     pub fn into_tools(self) -> Vec<Box<dyn ToolDyn>> {
         self.tools
             .into_iter()
@@ -187,10 +299,20 @@ impl RegisteredMcpTool {
         }
     }
 
+    /// Retrieve the name of the server this tool belongs to.
+    ///
+    /// # Returns
+    ///
+    /// Returns a string slice representing the server name.
     pub fn server_name(&self) -> &str {
         &self.server_name
     }
 
+    /// Retrieve the name of the tool.
+    ///
+    /// # Returns
+    ///
+    /// Returns a string slice representing the tool name.
     pub fn tool_name(&self) -> &str {
         &self.tool_name
     }

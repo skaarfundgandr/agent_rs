@@ -162,7 +162,7 @@ mod rag_main {
             .temperature(0.6)
             .build();
 
-        let chatbot = ChatBotBuilder::new().agent(agent).build();
+        let chatbot = ChatBotBuilder::new().agent(agent).show_usage().build();
 
         // ---------- run with graceful shutdown ----------
         let pipeline_for_save = Arc::clone(&pipeline);
