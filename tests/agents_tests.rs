@@ -76,11 +76,9 @@ fn test_count_messages_tokens_complex_fallback() {
         detail: None,
         additional_params: None,
     };
-    let messages = vec![
-        Message::User {
-            content: rig_core::OneOrMany::one(UserContent::Image(img)),
-        },
-    ];
+    let messages = vec![Message::User {
+        content: rig_core::OneOrMany::one(UserContent::Image(img)),
+    }];
 
     let count = count_messages_tokens(&messages);
     // Since it serializes the image variant to string, it should be > 4 overhead tokens.
@@ -95,11 +93,9 @@ async fn test_context_manager_no_compaction_under_threshold() {
     // Threshold set high (1000 tokens)
     let manager = ContextManager::new(1000, compactor);
 
-    let mut history = vec![
-        Message::User {
-            content: rig_core::OneOrMany::one(UserContent::text("Short message")),
-        },
-    ];
+    let mut history = vec![Message::User {
+        content: rig_core::OneOrMany::one(UserContent::text("Short message")),
+    }];
 
     let compacted = manager
         .compact_history_if_needed(&mut history, "Short prompt")
@@ -127,13 +123,11 @@ async fn test_context_manager_compaction_above_threshold() {
     // Threshold set low (15 tokens)
     let manager = ContextManager::new(15, compactor);
 
-    let mut history = vec![
-        Message::User {
-            content: rig_core::OneOrMany::one(UserContent::text(
-                "A very long message that is guaranteed to exceed the 15 token threshold",
-            )),
-        },
-    ];
+    let mut history = vec![Message::User {
+        content: rig_core::OneOrMany::one(UserContent::text(
+            "A very long message that is guaranteed to exceed the 15 token threshold",
+        )),
+    }];
 
     let compacted = manager
         .compact_history_if_needed(&mut history, "Another prompt")
@@ -155,18 +149,16 @@ async fn test_context_manager_custom_compaction_prompt() {
         response: "Fallback".to_string(),
     };
     // Threshold low (15 tokens)
-    let manager = ContextManager::new(15, compactor)
-        .with_compaction_prompt_formatter(|history_text| {
+    let manager =
+        ContextManager::new(15, compactor).with_compaction_prompt_formatter(|history_text| {
             format!("CUSTOM HEADER: {}", history_text)
         });
 
-    let mut history = vec![
-        Message::User {
-            content: rig_core::OneOrMany::one(UserContent::text(
-                "A very long message that is guaranteed to exceed the 15 token threshold",
-            )),
-        },
-    ];
+    let mut history = vec![Message::User {
+        content: rig_core::OneOrMany::one(UserContent::text(
+            "A very long message that is guaranteed to exceed the 15 token threshold",
+        )),
+    }];
 
     let compacted = manager
         .compact_history_if_needed(&mut history, "Another prompt")
@@ -184,11 +176,11 @@ async fn test_context_manager_custom_compaction_prompt() {
 
 #[tokio::test]
 async fn test_context_managed_chat_stream() {
+    use agent_rs_lib::agent::agents::ContextManagedChatStream;
     use futures::StreamExt;
-    use tokio::sync::oneshot;
     use rig_core::agent::MultiTurnStreamItem;
     use rig_core::completion::Usage;
-    use agent_rs_lib::agent::agents::ContextManagedChatStream;
+    use tokio::sync::oneshot;
 
     let final_history = vec![
         Message::User {
@@ -206,9 +198,7 @@ async fn test_context_managed_chat_stream() {
         Some(final_history.clone()),
     );
 
-    let inner_stream = futures::stream::iter(vec![
-        Ok(final_item),
-    ]);
+    let inner_stream = futures::stream::iter(vec![Ok(final_item)]);
 
     let (tx, rx) = oneshot::channel();
     let mut managed_stream = ContextManagedChatStream::new(inner_stream, tx, vec![]);
@@ -232,20 +222,18 @@ async fn test_context_managed_chat_stream() {
 
 #[tokio::test]
 async fn test_context_managed_chat_stream_no_history() {
+    use agent_rs_lib::agent::agents::ContextManagedChatStream;
     use futures::StreamExt;
-    use tokio::sync::oneshot;
     use rig_core::agent::MultiTurnStreamItem;
     use rig_core::completion::Usage;
-    use agent_rs_lib::agent::agents::ContextManagedChatStream;
+    use tokio::sync::oneshot;
 
     let final_item: MultiTurnStreamItem<()> = MultiTurnStreamItem::final_response(
         OneOrMany::one(AssistantContent::text("Hi there!")),
         Usage::new(),
     );
 
-    let inner_stream = futures::stream::iter(vec![
-        Ok(final_item),
-    ]);
+    let inner_stream = futures::stream::iter(vec![Ok(final_item)]);
 
     let (tx, rx) = oneshot::channel();
     let mut managed_stream = ContextManagedChatStream::new(inner_stream, tx, vec![]);
@@ -260,8 +248,8 @@ async fn test_context_managed_chat_stream_no_history() {
 
 #[test]
 fn test_strip_reasoning_mixed_content_keeps_text_and_tool_call() {
-    use rig_core::message::{ToolCall, ToolFunction};
     use rig_core::message::Reasoning;
+    use rig_core::message::{ToolCall, ToolFunction};
 
     let history = vec![
         Message::User {
@@ -276,7 +264,8 @@ fn test_strip_reasoning_mixed_content_keeps_text_and_tool_call() {
                     "call_1".to_string(),
                     ToolFunction::new("search".to_string(), serde_json::json!({})),
                 )),
-            ]).unwrap(),
+            ])
+            .unwrap(),
         },
     ];
 
@@ -307,9 +296,9 @@ fn test_strip_reasoning_drops_pure_reasoning_message() {
         },
         Message::Assistant {
             id: None,
-            content: rig_core::OneOrMany::one(
-                AssistantContent::Reasoning(Reasoning::new("just thinking")),
-            ),
+            content: rig_core::OneOrMany::one(AssistantContent::Reasoning(Reasoning::new(
+                "just thinking",
+            ))),
         },
     ];
 
@@ -353,16 +342,17 @@ fn test_strip_reasoning_multiple_assistant_messages_independently_filtered() {
             content: rig_core::OneOrMany::many(vec![
                 AssistantContent::Reasoning(Reasoning::new("thinking")),
                 AssistantContent::text("response 1"),
-            ]).unwrap(),
+            ])
+            .unwrap(),
         },
         Message::User {
             content: rig_core::OneOrMany::one(UserContent::text("second")),
         },
         Message::Assistant {
             id: None,
-            content: rig_core::OneOrMany::one(
-                AssistantContent::Reasoning(Reasoning::new("more thinking")),
-            ),
+            content: rig_core::OneOrMany::one(AssistantContent::Reasoning(Reasoning::new(
+                "more thinking",
+            ))),
         },
     ];
 
@@ -384,7 +374,8 @@ fn test_strip_reasoning_preserves_assistant_id() {
         content: rig_core::OneOrMany::many(vec![
             AssistantContent::Reasoning(Reasoning::new("thinking")),
             AssistantContent::text("result"),
-        ]).unwrap(),
+        ])
+        .unwrap(),
     }];
 
     let result = agent_rs_lib::agent::strip_reasoning_from_history(history);
@@ -396,4 +387,3 @@ fn test_strip_reasoning_preserves_assistant_id() {
         panic!("Expected assistant message");
     }
 }
-

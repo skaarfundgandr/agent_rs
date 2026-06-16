@@ -1,3 +1,5 @@
+#![cfg(feature = "rag")]
+
 use agent_rs_lib::agent::embeddings::EmbeddingService;
 use rig_core::Embed;
 use rig_core::embeddings::embed::{EmbedError, TextEmbedder};
