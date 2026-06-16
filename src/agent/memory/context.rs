@@ -22,7 +22,13 @@ fn default_compaction_prompt_formatter(history_text: &str) -> String {
     )
 }
 
-impl<C: Prompt + rig_core::wasm_compat::WasmCompatSend + rig_core::wasm_compat::WasmCompatSync + 'static> ContextManager<C> {
+impl<
+    C: Prompt
+        + rig_core::wasm_compat::WasmCompatSend
+        + rig_core::wasm_compat::WasmCompatSync
+        + 'static,
+> ContextManager<C>
+{
     /// Creates a new `ContextManager` with a threshold and a compaction LLM.
     ///
     /// # Arguments
@@ -128,7 +134,9 @@ impl<C: Prompt + rig_core::wasm_compat::WasmCompatSend + rig_core::wasm_compat::
                 None => default_compaction_prompt_formatter(&history_text),
             };
 
-            let summary = self.compaction_model.prompt(&compaction_prompt)
+            let summary = self
+                .compaction_model
+                .prompt(&compaction_prompt)
                 .into_future()
                 .instrument(compaction_span)
                 .await?;

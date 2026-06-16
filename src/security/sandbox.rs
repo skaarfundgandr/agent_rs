@@ -262,4 +262,3 @@ pub fn relative_display_path(sandbox: &SandboxConfig, path: &Path) -> String {
     }
     path.to_string_lossy().into_owned()
 }
-

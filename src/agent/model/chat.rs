@@ -53,4 +53,3 @@ where
 {
     agent.stream_chat(prompt, history)
 }
-

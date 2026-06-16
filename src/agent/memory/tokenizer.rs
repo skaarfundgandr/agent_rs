@@ -1,10 +1,9 @@
 use rig_core::message::{AssistantContent, Message, UserContent};
 use std::sync::LazyLock;
-use tiktoken_rs::{cl100k_base, CoreBPE};
+use tiktoken_rs::{CoreBPE, cl100k_base};
 
-static LAZY_TOKENIZER: LazyLock<Result<CoreBPE, String>> = LazyLock::new(|| {
-    cl100k_base().map_err(|e| e.to_string())
-});
+static LAZY_TOKENIZER: LazyLock<Result<CoreBPE, String>> =
+    LazyLock::new(|| cl100k_base().map_err(|e| e.to_string()));
 
 /// Count tokens in a plain text string using the cl100k_base BPE tokenizer.
 ///
@@ -21,7 +20,10 @@ pub fn count_string_tokens(text: &str) -> usize {
     match &*LAZY_TOKENIZER {
         Ok(bpe) => bpe.count_with_special_tokens(text),
         Err(e) => {
-            tracing::warn!("Failed to load cl100k_base tokenizer: {}. Falling back to character heuristic.", e);
+            tracing::warn!(
+                "Failed to load cl100k_base tokenizer: {}. Falling back to character heuristic.",
+                e
+            );
             text.chars().count() / 4
         }
     }
@@ -61,7 +63,10 @@ pub fn count_messages_tokens(messages: &[Message]) -> usize {
                                     total += count_string_tokens(&serialized);
                                 }
                                 Err(err) => {
-                                    tracing::warn!("Failed to serialize UserContent for token estimation: {:?}", err);
+                                    tracing::warn!(
+                                        "Failed to serialize UserContent for token estimation: {:?}",
+                                        err
+                                    );
                                 }
                             }
                         }
@@ -82,7 +87,10 @@ pub fn count_messages_tokens(messages: &[Message]) -> usize {
                                     total += count_string_tokens(&serialized);
                                 }
                                 Err(err) => {
-                                    tracing::warn!("Failed to serialize AssistantContent for token estimation: {:?}", err);
+                                    tracing::warn!(
+                                        "Failed to serialize AssistantContent for token estimation: {:?}",
+                                        err
+                                    );
                                 }
                             }
                         }

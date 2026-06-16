@@ -253,10 +253,11 @@ impl<
     ///
     /// Returns `Self` with the updated prompt formatter callback.
     pub fn with_compaction_prompt_formatter(mut self, formatter: fn(&str) -> String) -> Self {
-        self.context_manager = self.context_manager.with_compaction_prompt_formatter(formatter);
+        self.context_manager = self
+            .context_manager
+            .with_compaction_prompt_formatter(formatter);
         self
     }
-
 
     /// Access the underlying standard Rig Agent.
     ///
@@ -355,12 +356,13 @@ where
         let this = self.get_mut();
         let poll_res = Pin::new(&mut this.inner).poll_next(cx);
         if let Poll::Ready(Some(Ok(MultiTurnStreamItem::FinalResponse(final_res)))) = &poll_res
-            && let Some(tx) = this.history_tx.take() {
-                let current_turn = final_res.history().map(|h| h.to_vec()).unwrap_or_default();
-                let mut full_history = this.original_history.clone();
-                full_history.extend(current_turn);
-                let _ = tx.send(full_history);
-            }
+            && let Some(tx) = this.history_tx.take()
+        {
+            let current_turn = final_res.history().map(|h| h.to_vec()).unwrap_or_default();
+            let mut full_history = this.original_history.clone();
+            full_history.extend(current_turn);
+            let _ = tx.send(full_history);
+        }
         poll_res
     }
 }

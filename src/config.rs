@@ -3,7 +3,7 @@ use crate::domain::mcp::{
     McpServerDef, McpStdioTransportSpec, McpStreamableHttpTransportSpec, McpTransportSpec,
     ResolvedMcpServer,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::path::Path;
 use std::str::FromStr;
 use url::Url;

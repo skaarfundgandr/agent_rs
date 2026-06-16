@@ -91,10 +91,7 @@ impl Tool for GlobSearchTool {
 
         if let Some(ref directory) = args.directory {
             // Search within a specific validated directory
-            let dir_path = validate_sandboxed_path(
-                &self.sandbox,
-                Path::new(directory),
-            )?;
+            let dir_path = validate_sandboxed_path(&self.sandbox, Path::new(directory))?;
             let full_pattern = dir_path.join(pattern);
             let pattern_str = full_pattern.to_string_lossy();
 
