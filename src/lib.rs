@@ -2,4 +2,5 @@ pub mod agent;
 pub mod config;
 pub mod domain;
 pub mod mcp;
+pub mod rag;
 pub mod security;
