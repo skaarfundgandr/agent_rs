@@ -37,7 +37,6 @@ Whether you're building a CLI-based research assistant or a complex automated wo
 *   **Environment Variables(Optional):** An `.env` file with the following keys:
     ```env
     API_KEY=your_api_key_here
-    EMBEDDING_MODEL=text-embedding-embeddinggemma-300m-qa
     CHAT_MODEL=google/gemma-4-e4b
     ```
 
@@ -91,25 +90,32 @@ cargo run
 ### Code Example: Building a Custom Agent
 ```rust
 use std::path::Path;
+use std::sync::Arc;
 use agent_rs_lib::agent::embeddings::EmbeddingService;
-use agent_rs_lib::agent::rag::{DocumentLoader, PdfLoader, RagPipeline, WordSplitter};
+use agent_rs_lib::rag::RagPipeline;
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    // 1. Initialize Embeddings
-    let embedding_service = EmbeddingService::new(client.embedding_model("my-model"));
+async fn main() -> anyhow::Result<()> {
+    // 1. Initialize local fastembed embeddings
+    let service = EmbeddingService::from_fastembed("Xenova/bge-small-en-v1.5".parse()?)?;
+    let dim = service.ndims();
 
-    // 2. Load and chunk a PDF file
-    let doc = PdfLoader::new().load(Path::new("./my_docs.pdf"))?;
-    let splitter = WordSplitter::new(200, 40); // 200 words, 40 words overlap
+    // 2. Open or create persistent RAG pipeline
+    let pipeline = RagPipeline::open_or_create(
+        Path::new("rag_data/rag.db"),
+        Path::new("rag_data/rag.tvim"),
+        dim,
+        4, // bit_width
+    ).await?;
 
-    // 3. Build the RAG vector index using the pipeline
-    let index = RagPipeline::new()
-        .add_document(&doc, &splitter)
-        .build_index(&embedding_service)
-        .await?;
+    // 3. Ingest a file
+    let chunks = pipeline.add_source(Path::new("./my_docs.pdf"), &service).await?;
+    pipeline.save(Path::new("rag_data/rag.tvim")).await?;
 
-    // 4. Create the Agent
+    // 4. Build rig-compatible index for agents
+    let index = pipeline.build(Arc::new(service));
+
+    // 5. Create the Agent
     let agent = client
         .agent("chat-model")
         .preamble("You are a helpful research assistant.")

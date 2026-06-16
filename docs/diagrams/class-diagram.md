@@ -166,9 +166,15 @@ classDiagram
     }
 
     class RagPipeline {
-        -Vec~Chunk~ chunks
-        +add_document(doc, splitter)
-        +build_index(embedding_service) VectorIndex
+        -Arc~RwLock~TurboIndex~~ turbo
+        -Arc~DocumentStore~ store
+        +open_or_create(db, index, dim, bit_width) Result~Self~
+        +add_source(path, service) Result~usize~
+        +add_source_dyn(path, embedder) Result~usize~
+        +remove_source(name) Result~usize~
+        +build(embedder) TurboVectorIndex
+        +save(path) Result
+        +chunk_count() Result~i64~
     }
 
     class EmbeddingService~M~ {

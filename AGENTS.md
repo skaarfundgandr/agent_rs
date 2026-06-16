@@ -16,7 +16,7 @@ cargo test                     # run all tests (some #[ignore]d — see below)
 cargo test -- --include-ignored # run ignored tests too (requires local PDF files)
 cargo clippy                   # lint (no custom clippy.toml)
 cargo doc --open               # local API docs
-cargo run --example cli_chatbot # run the CLI chatbot example
+cargo run --example cli_chatbot # run the CLI chatbot example (requires --features rag)
 ```
 
 No CI pipeline, no pre-commit hooks, no rustfmt.toml — use `cargo fmt` with defaults.
@@ -24,8 +24,11 @@ No CI pipeline, no pre-commit hooks, no rustfmt.toml — use `cargo fmt` with de
 ## Running the Example
 
 Requires `.env` with `API_KEY` and `mcp.json` (copy from `mcp.json.example`).
-Defaults: `EMBEDDING_MODEL=text-embedding-embeddinggemma-300m-qa`, `CHAT_MODEL=google/gemma-4-e4b`.
-Connects to OpenAI-compatible endpoint at `http://127.0.0.1:1234/v1` by default.
+`CHAT_MODEL` (default `google/gemma-4-e4b`) selects the chat model via the OpenAI-compatible endpoint at `http://127.0.0.1:1234/v1`.
+`FASTEMBED_MODEL` (default `Xenova/bge-small-en-v1.5`) selects the local fastembed embedding model. First run downloads from Hugging Face (~50MB for BGESmall, larger for others). Set `FASTEMBED_CACHE_DIR` to use a pre-populated cache.
+`RAG_DB_PATH` / `RAG_INDEX_PATH` (defaults `./rag_data/rag.db`, `./rag_data/rag.tvim`) — the SQLite + turbovec on-disk artifacts. They must stay in sync; deleting both is the recovery procedure if `open_or_create` errors with "out of sync".
+The old `EMBEDDING_MODEL` env var (which used the OpenAI-compatible endpoint for embeddings) is removed. Only `CHAT_MODEL` still uses that endpoint.
+turbovec requires AVX2 on x86_64. Apple Silicon and ARM64 Linux work via the SSE/NEON fallback paths the crate provides.
 `SANDBOX_ROOTS` — comma-separated list of allowed filesystem paths (first is primary, default for writes). Example: `SANDBOX_ROOTS="./,/tmp/shared,/home/user/docs"`
 
 ## Architecture
@@ -71,8 +74,9 @@ Tests in `tests/` (6 files): `embeddings.rs`, `rag.rs`, `tool_tests.rs`, `mcp_cl
 - Tools enforce sandbox via `security::sandbox::validate_sandboxed_path`: path traversal (`../`) returns `DocumentError::SandboxEscape`.
 - MCP tool name deduplication: duplicate names across servers cause a hard error at connect time.
 - `react.rs` is a stub — do not import from it. The `// pub mod react;` line in `agent/mod.rs` confirms it's excluded.
-- `RagStoreBuilder` in `rag.rs` is deprecated (v0.2.0) — use `PdfLoader` + `WordSplitter` + `RagPipeline` instead.
-- Vector store is in-memory only (`InMemoryVectorStore`/`InMemoryVectorIndex`). No persistence.
+- `RagStoreBuilder` was removed in v0.2.0 — use `PdfLoader` + `WordSplitter` + `RagPipeline` instead.
+- RAG persistence: `RagPipeline` stores chunk metadata in SQLite and vectors in turbovec (`.tvim`). Both files must stay in sync; delete both to recover from "out of sync" errors.
+- The `rag` feature gates all RAG code. Without it, RAG types are compiled out entirely.
 
 ## MCP Config
 

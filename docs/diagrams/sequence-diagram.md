@@ -48,14 +48,17 @@ sequenceDiagram
     activate Splitter
     Splitter-->>Main: chunk list
     deactivate Splitter
-    Main->>Rag: new().add_document(doc, splitter)
-    Main->>Rag: build_index(embedding_service)
+    Main->>Rag: open_or_create(db, index, dim, 4)
+    Main->>Rag: add_source(./docs/sample.pdf, service)
     activate Rag
     Rag->>Embed: embed_texts(chunks)
     Embed-->>Rag: embeddings
-    Rag->>Rag: InMemoryVectorStore to Index
-    Rag-->>Main: VectorIndex
+    Rag->>Rag: persist to SQLite + turbovec
+    Rag-->>Main: chunk count
     deactivate Rag
+    Main->>Rag: save(index_path)
+    Main->>Rag: build(embedder_arc)
+    Rag-->>Main: TurboVectorIndex
 
     Main->>Agent: new(client, tools, preamble, context(index))
     Main->>Main: ChatBotBuilder run()
