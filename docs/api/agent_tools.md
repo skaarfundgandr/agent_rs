@@ -39,7 +39,7 @@ Lists the contents of a directory within the sandbox root. Directories are prefi
 ---
 
 ## `GlobSearchTool`
-Finds files and directories matching a glob pattern within the sandbox root. Uses the [`glob`](https://crates.io/crates/glob) crate. Rejects absolute patterns and path traversals containing `..`. Returns up to 100 results.
+Finds files and directories matching a glob pattern within the sandbox root. Uses the [`glob`](https://crates.io/crates/glob) crate. Rejects absolute patterns and path traversals containing parent directory components (`..`). Uses a robust component check to avoid false-positives on dotted filenames (e.g., `v1.2..3.txt`). Returns up to 100 results.
 - **Name**: `glob_search`
 - **Constructor**: `GlobSearchTool::new(sandbox: SandboxConfig, policy: PermissionPolicy)`
 - **Arguments**: `GlobSearchArgs { pattern: String, directory: Option<String> }` (pattern relative to sandbox root, e.g. `"src/**/*.rs"`; optional `directory` narrows the search to a specific subdirectory)
@@ -47,7 +47,7 @@ Finds files and directories matching a glob pattern within the sandbox root. Use
 ---
 
 ## `GrepSearchTool`
-Searches for a substring pattern in workspace text files within the sandbox root. Only searches files whose extension is in the configured allowlist. Results are returned in `path:line: content` format, capped at 100 matches.
+Searches for a substring pattern in workspace text files within the sandbox root. Only searches files whose extension is in the configured allowlist. Recursion depth is capped at a maximum of 10 directories to prevent stack overflow. Results are returned in `path:line: content` format, capped at 100 matches.
 - **Name**: `grep_search`
 - **Constructor**: `GrepSearchTool::new(sandbox: SandboxConfig, allowed_extensions: HashSet<String>, policy: PermissionPolicy)`
 - **Arguments**: `GrepSearchArgs { query: String, path: Option<String>, case_sensitive: Option<bool> }`

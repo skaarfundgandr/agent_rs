@@ -31,10 +31,10 @@ Manages connections and tool listing for the configured MCP servers.
   Initializes the client from a path to an `mcp.json` file.
 * **`new(config: McpConfig) -> Self`**
   Constructs a new client using an existing configuration struct.
-* **`async connect(self) -> Result<McpRegistryRuntime>`**
-  Establishes standard I/O processes or HTTP streams with all configured MCP servers.
-* **`async tools(self) -> Result<Vec<Box<dyn ToolDyn>>>`**
-  Connects to all servers and returns all exposed endpoints as a list of dynamic Rig `ToolDyn` objects.
+* **`async connect(self, policy: PermissionPolicy) -> Result<McpRegistryRuntime>`**
+  Establishes standard I/O processes or HTTP streams with all configured MCP servers. The provided policy is wrapped around each discovered tool.
+* **`async tools(self, policy: PermissionPolicy) -> Result<Vec<Box<dyn ToolDyn>>>`**
+  Connects to all servers and returns all exposed endpoints as a list of dynamic Rig `ToolDyn` objects, with each tool wrapped in a permission policy check.
 
 ---
 
@@ -49,10 +49,10 @@ Registry that resolves MCP server definitions from `mcp.json` into Rig tools and
   Creates a registry from a configuration file path.
 * **`from_client(client: McpClient) -> Self`**
   Creates a registry from an existing client manager.
-* **`async connect(&self) -> Result<McpRegistryRuntime>`**
-  Connects to all configured MCP servers and collects their tools.
-* **`async tools(&self) -> Result<Vec<Box<dyn ToolDyn>>>`**
-  Connects to all configured MCP servers and returns Rig-compatible boxed tools.
+* **`async connect(&self, policy: PermissionPolicy) -> Result<McpRegistryRuntime>`**
+  Connects to all configured MCP servers and collects their tools, wrapping each in the provided policy.
+* **`async tools(&self, policy: PermissionPolicy) -> Result<Vec<Box<dyn ToolDyn>>>`**
+  Connects to all configured MCP servers and returns Rig-compatible boxed tools wrapped in the provided policy.
 
 ---
 
@@ -72,17 +72,22 @@ Runtime registry returned after connecting to the MCP servers, holding the activ
 * **`into_tools(self) -> Vec<Box<dyn ToolDyn>>`**
   Converts the runtime registry into boxed Rig tools.
 
+---
+
 ### Example Usage: Loading MCP Tools
 
 ```rust
 use agent_rs_lib::config::McpConfig;
 use agent_rs_lib::mcp::client::McpClient;
+use agent_rs_lib::agent::permission::PermissionPolicy;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Read and connect to MCP servers defined in mcp.json
     let client = McpClient::from_config_path("./mcp.json")?;
-    let mcp_tools = client.tools().await?;
+    
+    // Connect and load tools with an AllowAll permission policy
+    let mcp_tools = client.tools(PermissionPolicy::AllowAll).await?;
     
     println!("Loaded {} tools from MCP servers.", mcp_tools.len());
     Ok(())
