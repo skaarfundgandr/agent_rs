@@ -147,6 +147,7 @@ impl Default for SandboxConfig {
     /// Panics if the current directory cannot be determined or canonicalized.
     /// This is acceptable because the current directory is always a valid
     /// concept in a running process.
+    #[allow(clippy::expect_used)]
     fn default() -> Self {
         Self::single(".").expect("current directory is always a valid sandbox root")
     }

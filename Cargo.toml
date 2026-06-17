@@ -1,6 +1,9 @@
 [package]
 name = "agent_rs"
 version = "0.3.0"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/skaarfundgandr/agent_rs"
 edition = "2024"
 
 [lib]
@@ -12,6 +15,13 @@ lto = true
 codegen-units = 1
 opt-level = 3
 strip = true
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "forbid"
+unimplemented = "forbid"
 
 [dependencies]
 anyhow = "1.0.102"
