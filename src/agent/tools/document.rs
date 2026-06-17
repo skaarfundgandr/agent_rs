@@ -1,6 +1,6 @@
 use crate::agent::permission::{PermissionPolicy, PermissionResult};
 use crate::domain::errors::DocumentError;
-use crate::security::SandboxConfig;
+use crate::security::{SharedSandbox, validate_sandboxed_path_shared};
 use anyhow::{Context, Result};
 use pdf_extract::extract_text;
 use rig_core::completion::ToolDefinition;
@@ -9,8 +9,7 @@ use serde_json::json;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
-
-use crate::security::validate_sandboxed_path;
+use std::sync::Arc;
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct ReadDocumentArgs {
@@ -27,7 +26,7 @@ pub struct WriteDocumentArgs {
 /// Tool for reading document or text files within the sandbox.
 #[derive(Debug, Clone)]
 pub struct ReadDocumentTool {
-    sandbox: SandboxConfig,
+    sandbox: Arc<SharedSandbox>,
     allowed_extensions: HashSet<String>,
     policy: PermissionPolicy,
 }
@@ -45,7 +44,7 @@ impl ReadDocumentTool {
     ///
     /// Returns the initialized `ReadDocumentTool`.
     pub fn new(
-        sandbox: SandboxConfig,
+        sandbox: Arc<SharedSandbox>,
         allowed_extensions: HashSet<String>,
         policy: PermissionPolicy,
     ) -> Self {
@@ -106,7 +105,7 @@ impl Tool for ReadDocumentTool {
             }
         }
 
-        let path = validate_sandboxed_path(&self.sandbox, Path::new(&args.path))?;
+        let path = validate_sandboxed_path_shared(&self.sandbox, Path::new(&args.path))?;
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
         if !self.allowed_extensions.contains(extension) {
@@ -126,7 +125,7 @@ impl Tool for ReadDocumentTool {
 /// Tool for writing or editing document/text files within the sandbox.
 #[derive(Debug, Clone)]
 pub struct WriteDocumentTool {
-    sandbox: SandboxConfig,
+    sandbox: Arc<SharedSandbox>,
     allowed_extensions: HashSet<String>,
     policy: PermissionPolicy,
 }
@@ -144,7 +143,7 @@ impl WriteDocumentTool {
     ///
     /// Returns the initialized `WriteDocumentTool`.
     pub fn new(
-        sandbox: SandboxConfig,
+        sandbox: Arc<SharedSandbox>,
         allowed_extensions: HashSet<String>,
         policy: PermissionPolicy,
     ) -> Self {
@@ -213,7 +212,7 @@ impl Tool for WriteDocumentTool {
             }
         }
 
-        let path = validate_sandboxed_path(&self.sandbox, Path::new(&args.path))?;
+        let path = validate_sandboxed_path_shared(&self.sandbox, Path::new(&args.path))?;
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
         if !self.allowed_extensions.contains(extension) {

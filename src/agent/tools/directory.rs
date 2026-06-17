@@ -1,11 +1,12 @@
 use crate::agent::permission::{PermissionPolicy, PermissionResult};
 use crate::domain::errors::DocumentError;
-use crate::security::{SandboxConfig, validate_sandboxed_path};
+use crate::security::{SharedSandbox, validate_sandboxed_path_shared};
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 /// Arguments for the `list_directory` tool.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -21,7 +22,7 @@ pub struct ListDirectoryArgs {
 /// within each group.
 #[derive(Debug, Clone)]
 pub struct ListDirectoryTool {
-    sandbox: SandboxConfig,
+    sandbox: Arc<SharedSandbox>,
     policy: PermissionPolicy,
 }
 
@@ -36,7 +37,7 @@ impl ListDirectoryTool {
     /// # Returns
     ///
     /// Returns the initialized `ListDirectoryTool`.
-    pub fn new(sandbox: SandboxConfig, policy: PermissionPolicy) -> Self {
+    pub fn new(sandbox: Arc<SharedSandbox>, policy: PermissionPolicy) -> Self {
         Self { sandbox, policy }
     }
 }
@@ -82,7 +83,7 @@ impl Tool for ListDirectoryTool {
             }
         }
 
-        let path = validate_sandboxed_path(&self.sandbox, Path::new(&relative_path))?;
+        let path = validate_sandboxed_path_shared(&self.sandbox, Path::new(&relative_path))?;
 
         if !path.is_dir() {
             return Err(std::io::Error::new(

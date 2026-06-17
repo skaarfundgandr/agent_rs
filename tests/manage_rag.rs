@@ -1,10 +1,11 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg(feature = "rag")]
 
 use agent_rs_lib::agent::embeddings::EmbeddingService;
 use agent_rs_lib::agent::permission::PermissionPolicy;
 use agent_rs_lib::agent::tools::{ManageRagTool, RagSourceRegistry};
 use agent_rs_lib::rag::{ErasedEmbedder, RagPipeline};
-use agent_rs_lib::security::SandboxConfig;
+use agent_rs_lib::security::{SandboxConfig, SharedSandbox};
 use rig_core::embeddings::{Embedding, EmbeddingModel};
 use rig_core::tool::Tool;
 use std::collections::HashSet;
@@ -45,7 +46,7 @@ fn build_tool(
     sandbox_root: &std::path::Path,
     pipeline: Arc<RagPipeline>,
 ) -> (Arc<Mutex<RagSourceRegistry>>, ManageRagTool) {
-    let sandbox = SandboxConfig::single(sandbox_root).unwrap();
+    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(sandbox_root).unwrap()));
     let registry = Arc::new(Mutex::new(RagSourceRegistry::new(HashSet::from(
         ["txt", "md"].map(String::from),
     ))));
@@ -54,7 +55,7 @@ fn build_tool(
         Arc::clone(&registry),
         pipeline,
         embedder,
-        sandbox,
+        Arc::clone(&sandbox),
         PermissionPolicy::AllowAll,
     );
     (registry, tool)

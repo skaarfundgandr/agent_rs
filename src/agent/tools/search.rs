@@ -1,12 +1,13 @@
 use crate::agent::permission::{PermissionPolicy, PermissionResult};
 use crate::domain::errors::DocumentError;
-use crate::security::{SandboxConfig, relative_display_path, validate_sandboxed_path};
+use crate::security::{SandboxConfig, SharedSandbox, relative_display_path, validate_sandboxed_path_shared};
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 /// Arguments for the `grep_search` tool.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -26,7 +27,7 @@ pub struct GrepSearchArgs {
 /// Supports case-insensitive (default) and case-sensitive modes.
 #[derive(Debug, Clone)]
 pub struct GrepSearchTool {
-    sandbox: SandboxConfig,
+    sandbox: Arc<SharedSandbox>,
     allowed_extensions: HashSet<String>,
     policy: PermissionPolicy,
 }
@@ -44,7 +45,7 @@ impl GrepSearchTool {
     ///
     /// Returns the initialized `GrepSearchTool`.
     pub fn new(
-        sandbox: SandboxConfig,
+        sandbox: Arc<SharedSandbox>,
         allowed_extensions: HashSet<String>,
         policy: PermissionPolicy,
     ) -> Self {
@@ -117,18 +118,19 @@ impl Tool for GrepSearchTool {
             }
         }
 
-        let path = validate_sandboxed_path(&self.sandbox, Path::new(&relative_path))?;
+        let path = validate_sandboxed_path_shared(&self.sandbox, Path::new(&relative_path))?;
 
         let case_sensitive = args.case_sensitive.unwrap_or(false);
         let max_results = 100;
         let mut results = Vec::new();
 
+        let snapshot = self.sandbox.snapshot();
         search_recursive(
             &path,
             &args.query,
             case_sensitive,
             &self.allowed_extensions,
-            &self.sandbox,
+            &snapshot,
             &mut results,
             max_results,
             10,

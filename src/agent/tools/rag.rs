@@ -4,7 +4,7 @@ use crate::agent::permission::{PermissionPolicy, PermissionResult};
 use crate::domain::errors::DocumentError;
 use crate::domain::rag::{RagSource, RagSourceType};
 use crate::rag::{ErasedEmbedder, RagPipeline};
-use crate::security::{SandboxConfig, validate_sandboxed_path};
+use crate::security::{SharedSandbox, validate_sandboxed_path_shared};
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
@@ -66,9 +66,9 @@ impl RagSourceRegistry {
     pub fn add_source(
         &mut self,
         path: &Path,
-        sandbox: &SandboxConfig,
+        sandbox: &SharedSandbox,
     ) -> Result<String, DocumentError> {
-        let canonical = validate_sandboxed_path(sandbox, path)?;
+        let canonical = validate_sandboxed_path_shared(sandbox, path)?;
 
         if self.sources.iter().any(|s| s.path == canonical) {
             return Err(DocumentError::Rag(format!(
@@ -206,7 +206,7 @@ pub struct ManageRagTool {
     registry: Arc<Mutex<RagSourceRegistry>>,
     pipeline: Arc<RagPipeline>,
     embedder: Arc<dyn ErasedEmbedder>,
-    sandbox: SandboxConfig,
+    sandbox: Arc<SharedSandbox>,
     policy: PermissionPolicy,
 }
 
@@ -223,7 +223,7 @@ impl ManageRagTool {
         registry: Arc<Mutex<RagSourceRegistry>>,
         pipeline: Arc<RagPipeline>,
         embedder: Arc<dyn ErasedEmbedder>,
-        sandbox: SandboxConfig,
+        sandbox: Arc<SharedSandbox>,
         policy: PermissionPolicy,
     ) -> Self {
         Self {
@@ -329,7 +329,7 @@ impl Tool for ManageRagTool {
                     registry.add_source(path, &self.sandbox)?
                 };
 
-                let canonical = validate_sandboxed_path(&self.sandbox, path)?;
+                let canonical = validate_sandboxed_path_shared(&self.sandbox, path)?;
                 let added = self
                     .pipeline
                     .add_source_dyn(&canonical, self.embedder.as_ref())
@@ -345,7 +345,7 @@ impl Tool for ManageRagTool {
                     )
                 })?;
                 let path = Path::new(&path_str);
-                let canonical = validate_sandboxed_path(&self.sandbox, path)?;
+                let canonical = validate_sandboxed_path_shared(&self.sandbox, path)?;
 
                 let confirmation = {
                     let mut registry = self

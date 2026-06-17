@@ -11,7 +11,7 @@ mod rag_main {
     use agent_rs_lib::config::McpConfig;
     use agent_rs_lib::mcp::client::McpClient;
     use agent_rs_lib::rag::{ErasedEmbedder, RagPipeline};
-    use agent_rs_lib::security::SandboxConfig;
+    use agent_rs_lib::security::{SandboxConfig, SharedSandbox};
     use anyhow::Result;
     use dotenvy::dotenv;
     use rig_core::integrations::cli_chatbot::ChatBotBuilder;
@@ -22,6 +22,16 @@ mod rag_main {
     use std::env;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
+
+    fn build_shared_sandbox() -> Result<Arc<SharedSandbox>> {
+        let config = match env::var("SANDBOX_ROOTS") {
+            Ok(s) if !s.trim().is_empty() => {
+                SandboxConfig::new(s.split(',').map(|p| PathBuf::from(p.trim())).collect())?
+            }
+            _ => SandboxConfig::single("./")?,
+        };
+        Ok(Arc::new(SharedSandbox::from(config)))
+    }
 
     pub async fn run() -> Result<()> {
         dotenv().ok();
@@ -117,36 +127,31 @@ mod rag_main {
         let grep_extensions = HashSet::from(["txt", "md"].map(String::from));
         let rag_registry = Arc::new(Mutex::new(RagSourceRegistry::new(rag_extensions)));
 
-        let sandbox = match env::var("SANDBOX_ROOTS") {
-            Ok(s) if !s.trim().is_empty() => {
-                SandboxConfig::new(s.split(',').map(|p| PathBuf::from(p.trim())).collect())?
-            }
-            _ => SandboxConfig::single("./")?,
-        };
+        let shared_sandbox = build_shared_sandbox()?;
 
         let internal_tools: Vec<Box<dyn ToolDyn>> = vec![
             Box::new(ReadDocumentTool::new(
-                sandbox.clone(),
+                Arc::clone(&shared_sandbox),
                 read_extensions,
                 policy.clone(),
             )),
             Box::new(WriteDocumentTool::new(
-                sandbox.clone(),
+                Arc::clone(&shared_sandbox),
                 write_extensions,
                 policy.clone(),
             )),
-            Box::new(ListDirectoryTool::new(sandbox.clone(), policy.clone())),
+            Box::new(ListDirectoryTool::new(Arc::clone(&shared_sandbox), policy.clone())),
             Box::new(GrepSearchTool::new(
-                sandbox.clone(),
+                Arc::clone(&shared_sandbox),
                 grep_extensions,
                 policy.clone(),
             )),
-            Box::new(GlobSearchTool::new(sandbox.clone(), policy.clone())),
+            Box::new(GlobSearchTool::new(Arc::clone(&shared_sandbox), policy.clone())),
             Box::new(ManageRagTool::new(
                 rag_registry,
                 Arc::clone(&pipeline),
                 Arc::clone(&embedder_arc),
-                sandbox,
+                Arc::clone(&shared_sandbox),
                 policy,
             )),
         ];

@@ -1,10 +1,11 @@
 use crate::agent::permission::{PermissionPolicy, PermissionResult};
 use crate::domain::errors::DocumentError;
-use crate::security::{SandboxConfig, validate_sandboxed_path};
+use crate::security::{SharedSandbox, validate_sandboxed_path_shared};
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
 use std::path::{Component, Path};
+use std::sync::Arc;
 
 /// Arguments for the `glob_search` tool.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -26,7 +27,7 @@ pub struct GlobSearchArgs {
 /// When multiple roots are configured, searches all roots and deduplicates.
 #[derive(Debug, Clone)]
 pub struct GlobSearchTool {
-    sandbox: SandboxConfig,
+    sandbox: Arc<SharedSandbox>,
     policy: PermissionPolicy,
 }
 
@@ -41,7 +42,7 @@ impl GlobSearchTool {
     /// # Returns
     ///
     /// Returns the initialized `GlobSearchTool`.
-    pub fn new(sandbox: SandboxConfig, policy: PermissionPolicy) -> Self {
+    pub fn new(sandbox: Arc<SharedSandbox>, policy: PermissionPolicy) -> Self {
         Self { sandbox, policy }
     }
 }
@@ -112,7 +113,7 @@ impl Tool for GlobSearchTool {
 
         if let Some(ref directory) = args.directory {
             // Search within a specific validated directory
-            let dir_path = validate_sandboxed_path(&self.sandbox, Path::new(directory))?;
+            let dir_path = validate_sandboxed_path_shared(&self.sandbox, Path::new(directory))?;
             let full_pattern = dir_path.join(pattern);
             let pattern_str = full_pattern.to_string_lossy();
 
@@ -138,7 +139,8 @@ impl Tool for GlobSearchTool {
             }
         } else {
             // No directory specified — search from all sandbox roots
-            for canonical_root in self.sandbox.canonical_roots() {
+            let snapshot = self.sandbox.snapshot();
+            for canonical_root in snapshot.canonical_roots() {
                 let full_pattern = canonical_root.join(pattern);
                 let pattern_str = full_pattern.to_string_lossy();
 
