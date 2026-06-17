@@ -558,6 +558,50 @@ async fn test_sandbox_config_try_from() {
 }
 
 #[tokio::test]
+async fn test_glob_search_dotted_filename_accepted() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    fs::write(temp_dir.path().join("v1.2..3.txt"), "data").unwrap();
+    let tool = GlobSearchTool::new(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+        PermissionPolicy::AllowAll,
+    );
+    let args = GlobSearchArgs {
+        pattern: "v1.2..3.txt".to_string(),
+        directory: None,
+    };
+    let result = tool.call(args).await.unwrap();
+    assert!(result.contains("v1.2..3.txt"));
+}
+
+#[tokio::test]
+async fn test_grep_max_depth_limit() {
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    let mut current = temp_dir.path().to_path_buf();
+    for i in 0..12 {
+        current = current.join(format!("d{i}"));
+        fs::create_dir(&current).unwrap();
+        fs::write(current.join("target.txt"), "needle").unwrap();
+    }
+
+    let allowed = HashSet::from(["txt"].map(String::from));
+    let tool = GrepSearchTool::new(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+        allowed,
+        PermissionPolicy::AllowAll,
+    );
+
+    let args = GrepSearchArgs {
+        query: "needle".to_string(),
+        path: None,
+        case_sensitive: None,
+    };
+    let result = tool.call(args).await.unwrap();
+    assert!(result.contains("needle"));
+    assert!(!result.contains("d11/target.txt"));
+}
+
+#[tokio::test]
 async fn test_sandbox_config_default() {
     let sandbox = SandboxConfig::default();
     assert_eq!(sandbox.len(), 1);

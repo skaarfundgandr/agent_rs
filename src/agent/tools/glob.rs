@@ -1,10 +1,10 @@
-use crate::agent::permission::PermissionPolicy;
+use crate::agent::permission::{PermissionPolicy, PermissionResult};
 use crate::domain::errors::DocumentError;
 use crate::security::{SandboxConfig, validate_sandboxed_path};
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
-use std::path::Path;
+use std::path::{Component, Path};
 
 /// Arguments for the `glob_search` tool.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -80,14 +80,26 @@ impl Tool for GlobSearchTool {
             args.pattern,
             args.directory.as_deref().unwrap_or(".")
         );
-        if !self.policy.evaluate(Self::NAME, &description).await {
-            return Err(DocumentError::PermissionDenied(description));
+        match self.policy.evaluate(Self::NAME, &description).await {
+            PermissionResult::Allow => {}
+            PermissionResult::Deny { reason } => {
+                return Err(DocumentError::PermissionDenied(format!(
+                    "{description}: {reason}"
+                )));
+            }
+            PermissionResult::DeferToUser => {
+                return Err(DocumentError::PermissionDenied(format!(
+                    "{description}: defer-to-user not yet supported"
+                )));
+            }
         }
 
         let pattern = &args.pattern;
 
         // Safety: Reject absolute patterns or path traversals containing '..'
-        if pattern.contains("..") || Path::new(pattern).is_absolute() {
+        if Path::new(pattern).components().any(|c| matches!(c, Component::ParentDir))
+            || Path::new(pattern).is_absolute()
+        {
             return Err(DocumentError::SandboxEscape(format!(
                 "Access denied: Absolute patterns or path traversals containing '..' are not allowed: {}",
                 pattern

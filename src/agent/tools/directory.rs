@@ -1,4 +1,4 @@
-use crate::agent::permission::PermissionPolicy;
+use crate::agent::permission::{PermissionPolicy, PermissionResult};
 use crate::domain::errors::DocumentError;
 use crate::security::{SandboxConfig, validate_sandboxed_path};
 use rig_core::completion::ToolDefinition;
@@ -68,8 +68,18 @@ impl Tool for ListDirectoryTool {
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let relative_path = args.path.clone().unwrap_or_else(|| ".".to_string());
         let description = format!("Wants to list directory content at [{relative_path}]");
-        if !self.policy.evaluate(Self::NAME, &description).await {
-            return Err(DocumentError::PermissionDenied(description));
+        match self.policy.evaluate(Self::NAME, &description).await {
+            PermissionResult::Allow => {}
+            PermissionResult::Deny { reason } => {
+                return Err(DocumentError::PermissionDenied(format!(
+                    "{description}: {reason}"
+                )));
+            }
+            PermissionResult::DeferToUser => {
+                return Err(DocumentError::PermissionDenied(format!(
+                    "{description}: defer-to-user not yet supported"
+                )));
+            }
         }
 
         let path = validate_sandboxed_path(&self.sandbox, Path::new(&relative_path))?;

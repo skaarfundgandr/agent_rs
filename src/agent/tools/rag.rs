@@ -1,6 +1,6 @@
 #![cfg(feature = "rag")]
 
-use crate::agent::permission::PermissionPolicy;
+use crate::agent::permission::{PermissionPolicy, PermissionResult};
 use crate::domain::errors::DocumentError;
 use crate::domain::rag::{RagSource, RagSourceType};
 use crate::rag::{ErasedEmbedder, RagPipeline};
@@ -298,8 +298,18 @@ impl Tool for ManageRagTool {
             }
         };
 
-        if !self.policy.evaluate(Self::NAME, &description).await {
-            return Err(DocumentError::PermissionDenied(description));
+        match self.policy.evaluate(Self::NAME, &description).await {
+            PermissionResult::Allow => {}
+            PermissionResult::Deny { reason } => {
+                return Err(DocumentError::PermissionDenied(format!(
+                    "{description}: {reason}"
+                )));
+            }
+            PermissionResult::DeferToUser => {
+                return Err(DocumentError::PermissionDenied(format!(
+                    "{description}: defer-to-user not yet supported"
+                )));
+            }
         }
 
         match args.action.as_str() {

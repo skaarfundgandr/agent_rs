@@ -1,4 +1,4 @@
-use crate::agent::permission::PermissionPolicy;
+use crate::agent::permission::{PermissionPolicy, PermissionResult};
 use crate::domain::errors::DocumentError;
 use crate::security::{SandboxConfig, relative_display_path, validate_sandboxed_path};
 use rig_core::completion::ToolDefinition;
@@ -103,8 +103,18 @@ impl Tool for GrepSearchTool {
             "Wants to search for substring '{}' at [{}]",
             args.query, relative_path
         );
-        if !self.policy.evaluate(Self::NAME, &description).await {
-            return Err(DocumentError::PermissionDenied(description));
+        match self.policy.evaluate(Self::NAME, &description).await {
+            PermissionResult::Allow => {}
+            PermissionResult::Deny { reason } => {
+                return Err(DocumentError::PermissionDenied(format!(
+                    "{description}: {reason}"
+                )));
+            }
+            PermissionResult::DeferToUser => {
+                return Err(DocumentError::PermissionDenied(format!(
+                    "{description}: defer-to-user not yet supported"
+                )));
+            }
         }
 
         let path = validate_sandboxed_path(&self.sandbox, Path::new(&relative_path))?;
@@ -121,6 +131,8 @@ impl Tool for GrepSearchTool {
             &self.sandbox,
             &mut results,
             max_results,
+            10,
+            0,
         )?;
 
         if results.is_empty() {
@@ -140,6 +152,7 @@ impl Tool for GrepSearchTool {
 }
 
 /// Recursively walks `target` and searches each file for `query`.
+#[allow(clippy::too_many_arguments)]
 fn search_recursive(
     target: &Path,
     query: &str,
@@ -148,8 +161,14 @@ fn search_recursive(
     sandbox: &SandboxConfig,
     results: &mut Vec<String>,
     max_results: usize,
+    max_depth: usize,
+    current_depth: usize,
 ) -> Result<(), std::io::Error> {
     if results.len() >= max_results {
+        return Ok(());
+    }
+
+    if current_depth > max_depth {
         return Ok(());
     }
 
@@ -166,6 +185,8 @@ fn search_recursive(
                     sandbox,
                     results,
                     max_results,
+                    max_depth,
+                    current_depth + 1,
                 )?;
             } else {
                 search_file(
@@ -232,8 +253,10 @@ fn search_file(
     for (line_num, line) in content.lines().enumerate() {
         let matches = if case_sensitive {
             line.contains(query)
+        } else if let Some(ref ql) = query_lower {
+            line.to_lowercase().contains(ql)
         } else {
-            line.to_lowercase().contains(query_lower.as_ref().unwrap())
+            false // This should be unreachable since query_lower is only None if case_sensitive is true
         };
 
         if matches {
