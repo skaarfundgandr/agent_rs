@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use agent_rs_lib::domain::config::McpConfig;
 use agent_rs_lib::domain::mcp::{McpServerDef, McpTransportKind, McpTransportSpec};
 use serde_json::json;

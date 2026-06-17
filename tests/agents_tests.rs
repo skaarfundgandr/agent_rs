@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use agent_rs_lib::agent::memory::context::ContextManager;
 use agent_rs_lib::agent::memory::tokenizer::{count_messages_tokens, count_string_tokens};
 use rig_core::OneOrMany;

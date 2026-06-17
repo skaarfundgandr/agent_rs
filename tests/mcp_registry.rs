@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use agent_rs_lib::domain::config::McpConfig;
 use agent_rs_lib::domain::mcp::McpTransportKind;
 use agent_rs_lib::mcp::registry::McpRegistry;
