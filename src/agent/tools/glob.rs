@@ -1,6 +1,6 @@
-use crate::agent::permission::{PermissionPolicy, PermissionResult};
+use crate::agent::permission::PermissionPolicy;
 use crate::domain::errors::DocumentError;
-use crate::security::{SharedSandbox, validate_sandboxed_path_shared};
+use crate::security::SharedSandbox;
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
@@ -81,19 +81,6 @@ impl Tool for GlobSearchTool {
             args.pattern,
             args.directory.as_deref().unwrap_or(".")
         );
-        match self.policy.evaluate(Self::NAME, &description).await {
-            PermissionResult::Allow => {}
-            PermissionResult::Deny { reason } => {
-                return Err(DocumentError::PermissionDenied(format!(
-                    "{description}: {reason}"
-                )));
-            }
-            PermissionResult::DeferToUser => {
-                return Err(DocumentError::PermissionDenied(format!(
-                    "{description}: defer-to-user not yet supported"
-                )));
-            }
-        }
 
         let pattern = &args.pattern;
 
@@ -107,13 +94,24 @@ impl Tool for GlobSearchTool {
             )));
         }
 
+        // Gate is the sole authority; on Allow the sandbox check is bypassed.
+        // The matching logic below iterates multiple roots when no `directory`
+        // is given, so we evaluate the gate once here rather than per-branch.
+        self.sandbox
+            .check_permission(&self.policy, Self::NAME, &description)
+            .await?;
+
         let mut matches = Vec::new();
         let mut seen = std::collections::HashSet::new();
         let max_results = 100;
 
         if let Some(ref directory) = args.directory {
-            // Search within a specific validated directory
-            let dir_path = validate_sandboxed_path_shared(&self.sandbox, Path::new(directory))?;
+            // Search within a specific directory. The gate has already
+            // approved; resolve the directory without static sandbox rejection
+            // (multi-root search for existing matches, primary root otherwise).
+            let dir_path = self
+                .sandbox
+                .resolve_path_unchecked(Path::new(directory));
             let full_pattern = dir_path.join(pattern);
             let pattern_str = full_pattern.to_string_lossy();
 

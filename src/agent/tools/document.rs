@@ -1,6 +1,6 @@
-use crate::agent::permission::{PermissionPolicy, PermissionResult};
+use crate::agent::permission::PermissionPolicy;
 use crate::domain::errors::DocumentError;
-use crate::security::{SharedSandbox, validate_sandboxed_path_shared};
+use crate::security::SharedSandbox;
 use anyhow::{Context, Result};
 use pdf_extract::extract_text;
 use rig_core::completion::ToolDefinition;
@@ -91,21 +91,10 @@ impl Tool for ReadDocumentTool {
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let description = format!("Wants to read file asset at [{}]", args.path);
-        match self.policy.evaluate(Self::NAME, &description).await {
-            PermissionResult::Allow => {}
-            PermissionResult::Deny { reason } => {
-                return Err(DocumentError::PermissionDenied(format!(
-                    "{description}: {reason}"
-                )));
-            }
-            PermissionResult::DeferToUser => {
-                return Err(DocumentError::PermissionDenied(format!(
-                    "{description}: defer-to-user not yet supported"
-                )));
-            }
-        }
-
-        let path = validate_sandboxed_path_shared(&self.sandbox, Path::new(&args.path))?;
+        let path = self
+            .sandbox
+            .resolve_path_with_permission(&self.policy, Self::NAME, &description, Path::new(&args.path))
+            .await?;
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
         if !self.allowed_extensions.contains(extension) {
@@ -198,21 +187,10 @@ impl Tool for WriteDocumentTool {
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let description = format!("Wants to modify/write file asset at [{}]", args.path);
-        match self.policy.evaluate(Self::NAME, &description).await {
-            PermissionResult::Allow => {}
-            PermissionResult::Deny { reason } => {
-                return Err(DocumentError::PermissionDenied(format!(
-                    "{description}: {reason}"
-                )));
-            }
-            PermissionResult::DeferToUser => {
-                return Err(DocumentError::PermissionDenied(format!(
-                    "{description}: defer-to-user not yet supported"
-                )));
-            }
-        }
-
-        let path = validate_sandboxed_path_shared(&self.sandbox, Path::new(&args.path))?;
+        let path = self
+            .sandbox
+            .resolve_path_with_permission(&self.policy, Self::NAME, &description, Path::new(&args.path))
+            .await?;
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
         if !self.allowed_extensions.contains(extension) {

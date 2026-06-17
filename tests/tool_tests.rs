@@ -85,12 +85,17 @@ async fn test_write_document() {
 
 #[tokio::test]
 async fn test_sandbox_escape_read() {
+    // Under the new permission-gate design, `AllowAll` + an out-of-sandbox path
+    // BYPASSES the sandbox check (gate is the sole authority — see the bug
+    // report in `.opencode/agentrs-permission-bug-report.md`). The safety
+    // primitive is therefore "a denying gate stops the escape", which we test
+    // here via `DenyAll`.
     let temp_dir = tempfile::tempdir().unwrap();
     let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
     let tool = ReadDocumentTool::new(
         Arc::clone(&sandbox),
         HashSet::from(["txt", "md", "pdf"].map(String::from)),
-        PermissionPolicy::AllowAll,
+        PermissionPolicy::DenyAll,
     );
 
     let args = ReadDocumentArgs {
@@ -104,9 +109,9 @@ async fn test_sandbox_escape_read() {
     assert!(
         matches!(
             err,
-            agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
+            agent_rs_lib::domain::errors::DocumentError::PermissionDenied(_)
         ),
-        "Expected SandboxEscape error, got {:?}",
+        "Expected PermissionDenied error (gate denied), got {:?}",
         err
     );
 }
@@ -118,7 +123,7 @@ async fn test_sandbox_escape_write() {
     let tool = WriteDocumentTool::new(
         Arc::clone(&sandbox),
         HashSet::from(["txt", "md"].map(String::from)),
-        PermissionPolicy::AllowAll,
+        PermissionPolicy::DenyAll,
     );
 
     let args = WriteDocumentArgs {
@@ -134,9 +139,9 @@ async fn test_sandbox_escape_write() {
     assert!(
         matches!(
             err,
-            agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
+            agent_rs_lib::domain::errors::DocumentError::PermissionDenied(_)
         ),
-        "Expected SandboxEscape error, got {:?}",
+        "Expected PermissionDenied error (gate denied), got {:?}",
         err
     );
 }
@@ -166,11 +171,13 @@ async fn test_list_directory() {
 
 #[tokio::test]
 async fn test_list_directory_sandbox_escape() {
+    // See `test_sandbox_escape_read` for the rationale: a denying gate is the
+    // safety primitive; AllowAll + escape bypasses the sandbox by design.
     let temp_dir = tempfile::tempdir().unwrap();
     let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
     let tool = ListDirectoryTool::new(
         Arc::clone(&sandbox),
-        PermissionPolicy::AllowAll,
+        PermissionPolicy::DenyAll,
     );
 
     let args = ListDirectoryArgs {
@@ -178,10 +185,14 @@ async fn test_list_directory_sandbox_escape() {
     };
     let err = tool.call(args).await.expect_err("should reject escape");
 
-    assert!(matches!(
-        err,
-        agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
-    ));
+    assert!(
+        matches!(
+            err,
+            agent_rs_lib::domain::errors::DocumentError::PermissionDenied(_)
+        ),
+        "Expected PermissionDenied error (gate denied), got {:?}",
+        err
+    );
 }
 
 #[tokio::test]
@@ -230,13 +241,14 @@ async fn test_grep_search() {
 
 #[tokio::test]
 async fn test_grep_search_sandbox_escape() {
+    // See `test_sandbox_escape_read` for the rationale.
     let temp_dir = tempfile::tempdir().unwrap();
     let allowed = HashSet::from(["txt", "md"].map(String::from));
     let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
     let tool = GrepSearchTool::new(
         Arc::clone(&sandbox),
         allowed,
-        PermissionPolicy::AllowAll,
+        PermissionPolicy::DenyAll,
     );
 
     let args = GrepSearchArgs {
@@ -246,10 +258,14 @@ async fn test_grep_search_sandbox_escape() {
     };
     let err = tool.call(args).await.expect_err("should reject escape");
 
-    assert!(matches!(
-        err,
-        agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
-    ));
+    assert!(
+        matches!(
+            err,
+            agent_rs_lib::domain::errors::DocumentError::PermissionDenied(_)
+        ),
+        "Expected PermissionDenied error (gate denied), got {:?}",
+        err
+    );
 }
 
 #[tokio::test]
@@ -384,6 +400,7 @@ async fn test_multi_root_write_to_primary() {
 
 #[tokio::test]
 async fn test_multi_root_escape_rejected() {
+    // See `test_sandbox_escape_read` for the rationale.
     let primary = tempfile::tempdir().unwrap();
     let secondary = tempfile::tempdir().unwrap();
 
@@ -396,7 +413,7 @@ async fn test_multi_root_escape_rejected() {
     let tool = ReadDocumentTool::new(
         Arc::clone(&sandbox),
         HashSet::from(["txt"].map(String::from)),
-        PermissionPolicy::AllowAll,
+        PermissionPolicy::DenyAll,
     );
 
     // Try to escape both roots
@@ -405,10 +422,14 @@ async fn test_multi_root_escape_rejected() {
     };
     let err = tool.call(args).await.expect_err("should reject escape");
 
-    assert!(matches!(
-        err,
-        agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
-    ));
+    assert!(
+        matches!(
+            err,
+            agent_rs_lib::domain::errors::DocumentError::PermissionDenied(_)
+        ),
+        "Expected PermissionDenied error (gate denied), got {:?}",
+        err
+    );
 }
 
 #[tokio::test]

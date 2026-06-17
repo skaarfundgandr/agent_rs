@@ -1,6 +1,6 @@
-use crate::agent::permission::{PermissionPolicy, PermissionResult};
+use crate::agent::permission::PermissionPolicy;
 use crate::domain::errors::DocumentError;
-use crate::security::{SharedSandbox, validate_sandboxed_path_shared};
+use crate::security::SharedSandbox;
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
@@ -69,21 +69,10 @@ impl Tool for ListDirectoryTool {
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let relative_path = args.path.clone().unwrap_or_else(|| ".".to_string());
         let description = format!("Wants to list directory content at [{relative_path}]");
-        match self.policy.evaluate(Self::NAME, &description).await {
-            PermissionResult::Allow => {}
-            PermissionResult::Deny { reason } => {
-                return Err(DocumentError::PermissionDenied(format!(
-                    "{description}: {reason}"
-                )));
-            }
-            PermissionResult::DeferToUser => {
-                return Err(DocumentError::PermissionDenied(format!(
-                    "{description}: defer-to-user not yet supported"
-                )));
-            }
-        }
-
-        let path = validate_sandboxed_path_shared(&self.sandbox, Path::new(&relative_path))?;
+        let path = self
+            .sandbox
+            .resolve_path_with_permission(&self.policy, Self::NAME, &description, Path::new(&relative_path))
+            .await?;
 
         if !path.is_dir() {
             return Err(std::io::Error::new(

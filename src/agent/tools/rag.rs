@@ -1,10 +1,10 @@
 #![cfg(feature = "rag")]
 
-use crate::agent::permission::{PermissionPolicy, PermissionResult};
+use crate::agent::permission::PermissionPolicy;
 use crate::domain::errors::DocumentError;
 use crate::domain::rag::{RagSource, RagSourceType};
 use crate::rag::{ErasedEmbedder, RagPipeline};
-use crate::security::{SharedSandbox, validate_sandboxed_path_shared};
+use crate::security::SharedSandbox;
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
@@ -68,7 +68,7 @@ impl RagSourceRegistry {
         path: &Path,
         sandbox: &SharedSandbox,
     ) -> Result<String, DocumentError> {
-        let canonical = validate_sandboxed_path_shared(sandbox, path)?;
+        let canonical = sandbox.resolve_path_unchecked(path);
 
         if self.sources.iter().any(|s| s.path == canonical) {
             return Err(DocumentError::Rag(format!(
@@ -298,19 +298,11 @@ impl Tool for ManageRagTool {
             }
         };
 
-        match self.policy.evaluate(Self::NAME, &description).await {
-            PermissionResult::Allow => {}
-            PermissionResult::Deny { reason } => {
-                return Err(DocumentError::PermissionDenied(format!(
-                    "{description}: {reason}"
-                )));
-            }
-            PermissionResult::DeferToUser => {
-                return Err(DocumentError::PermissionDenied(format!(
-                    "{description}: defer-to-user not yet supported"
-                )));
-            }
-        }
+        // The gate is the sole source of truth: on Allow, sandbox containment
+        // is bypassed (the path is resolved via `resolve_path_unchecked`).
+        self.sandbox
+            .check_permission(&self.policy, Self::NAME, &description)
+            .await?;
 
         match args.action.as_str() {
             "add" => {
@@ -329,7 +321,7 @@ impl Tool for ManageRagTool {
                     registry.add_source(path, &self.sandbox)?
                 };
 
-                let canonical = validate_sandboxed_path_shared(&self.sandbox, path)?;
+                let canonical = self.sandbox.resolve_path_unchecked(path);
                 let added = self
                     .pipeline
                     .add_source_dyn(&canonical, self.embedder.as_ref())
@@ -345,7 +337,7 @@ impl Tool for ManageRagTool {
                     )
                 })?;
                 let path = Path::new(&path_str);
-                let canonical = validate_sandboxed_path_shared(&self.sandbox, path)?;
+                let canonical = self.sandbox.resolve_path_unchecked(path);
 
                 let confirmation = {
                     let mut registry = self
