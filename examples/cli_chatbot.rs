@@ -89,8 +89,20 @@ mod rag_main {
         let index = pipeline.build(Arc::clone(&embedder_arc));
 
         // ---------- MCP tools + internal tools ----------
+        let policy = match env::var("PERMISSION_POLICY").as_deref() {
+            Ok("deny") => PermissionPolicy::DenyAll,
+            Ok("prompt") => PermissionPolicy::CliPrompt,
+            _ => {
+                eprintln!(
+                    "WARNING: PERMISSION_POLICY not set; defaulting to CliPrompt. \
+                     Set PERMISSION_POLICY=allow|deny|prompt to silence this warning."
+                );
+                PermissionPolicy::CliPrompt
+            }
+        };
+
         let mut tools = McpClient::new(McpConfig::from_path("./mcp.json").unwrap())
-            .tools()
+            .tools(policy.clone())
             .await?;
 
         let compaction_agent = chat_client
@@ -104,12 +116,6 @@ mod rag_main {
         let write_extensions = HashSet::from(["txt", "md"].map(String::from));
         let grep_extensions = HashSet::from(["txt", "md"].map(String::from));
         let rag_registry = Arc::new(Mutex::new(RagSourceRegistry::new(rag_extensions)));
-
-        let policy = match env::var("PERMISSION_POLICY").as_deref() {
-            Ok("deny") => PermissionPolicy::DenyAll,
-            Ok("prompt") => PermissionPolicy::CliPrompt,
-            _ => PermissionPolicy::AllowAll,
-        };
 
         let sandbox = match env::var("SANDBOX_ROOTS") {
             Ok(s) if !s.trim().is_empty() => {

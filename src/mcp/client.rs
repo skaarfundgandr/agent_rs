@@ -1,3 +1,4 @@
+use crate::agent::permission::PermissionPolicy;
 use crate::domain::config::McpConfig;
 use crate::domain::mcp::{McpServerDef, ResolvedMcpServer};
 use crate::mcp::registry::{McpRegistry, McpRegistryRuntime};
@@ -106,6 +107,10 @@ impl McpClient {
 
     /// Establish connections with all configured MCP servers and return a runtime registry.
     ///
+    /// # Arguments
+    ///
+    /// * `policy` - The `PermissionPolicy` instance to evaluate permissions for discovered tools.
+    ///
     /// # Returns
     ///
     /// Returns the active `McpRegistryRuntime` containing the connected servers.
@@ -113,16 +118,20 @@ impl McpClient {
     /// # Errors
     ///
     /// Returns an error if connection or validation fails.
-    pub async fn connect(self) -> Result<McpRegistryRuntime> {
+    pub async fn connect(self, policy: PermissionPolicy) -> Result<McpRegistryRuntime> {
         let registry = McpRegistry::from_client(self);
 
-        match registry.connect().await {
+        match registry.connect(policy).await {
             Ok(runtime) => Ok(runtime),
             Err(e) => Err(e),
         }
     }
 
     /// Connect to all configured servers and return a collection of all exposed tools.
+    ///
+    /// # Arguments
+    ///
+    /// * `policy` - The `PermissionPolicy` instance to evaluate permissions for discovered tools.
     ///
     /// # Returns
     ///
@@ -131,8 +140,8 @@ impl McpClient {
     /// # Errors
     ///
     /// Returns an error if connection or tool discovery fails.
-    pub async fn tools(self) -> Result<Vec<Box<dyn ToolDyn>>> {
-        Ok(self.connect().await?.into_tools())
+    pub async fn tools(self, policy: PermissionPolicy) -> Result<Vec<Box<dyn ToolDyn>>> {
+        Ok(self.connect(policy).await?.into_tools())
     }
 }
 
