@@ -40,7 +40,7 @@ src/
 ├── lib.rs               # re-exports: agent, config, domain, mcp
 ├── config.rs            # McpConfig loader + validation
 ├── security/
-│   └── sandbox.rs       # SandboxConfig, validate_sandboxed_path, find_containing_root, relative_display_path
+│   └── sandbox.rs       # SandboxConfig, SharedSandbox, validate_sandboxed_path, find_containing_root, relative_display_path (+ _shared variants)
 ├── agent/
 │   ├── embeddings.rs    # EmbeddingService<M> — generic over Rig EmbeddingModel
 │   ├── rag.rs           # DocumentLoader, WordSplitter, RagPipeline (in-memory only)
@@ -63,7 +63,7 @@ Internal tools (filesystem, RAG, compact) are added to the same tool vec in `cli
 
 ## Testing
 
-Tests in `tests/` (6 files): `embeddings.rs`, `rag.rs`, `tool_tests.rs`, `mcp_client.rs`, `mcp_registry.rs`.
+Tests in `tests/` (13 files): `agents_tests.rs`, `document_store.rs`, `embeddings.rs`, `manage_rag.rs`, `mcp_client.rs`, `mcp_registry.rs`, `permission.rs`, `rag.rs`, `sandbox_tests.rs`, `shared_sandbox.rs`, `tool_tests.rs`, `turbo_index.rs` (plus `mod.rs`).
 - `test_read_pdf` in `tool_tests.rs` is `#[ignore]` — needs a local PDF file, will fail in CI.
 - Tool tests use `tempfile` for sandbox isolation.
 - MCP tests need live MCP servers or will fail — not safe to run blindly.
@@ -72,6 +72,7 @@ Tests in `tests/` (6 files): `embeddings.rs`, `rag.rs`, `tool_tests.rs`, `mcp_cl
 
 - All fallible operations use `anyhow::Result`. Domain errors use `thiserror`.
 - Tools enforce sandbox via `security::sandbox::validate_sandboxed_path`: path traversal (`../`) returns `DocumentError::SandboxEscape`.
+- Tools that enforce sandbox hold an `Arc<SharedSandbox>` rather than a `SandboxConfig`. Call `SharedSandbox::set` to hot-swap roots at runtime; subsequent tool calls will validate against the new roots.
 - MCP tool name deduplication: duplicate names across servers cause a hard error at connect time.
 - `react.rs` is a stub — do not import from it. The `// pub mod react;` line in `agent/mod.rs` confirms it's excluded.
 - `RagStoreBuilder` was removed in v0.2.0 — use `PdfLoader` + `WordSplitter` + `RagPipeline` instead.

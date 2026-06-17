@@ -37,6 +37,71 @@ pub struct SandboxConfig {
 
 ---
 
+## `SharedSandbox`
+
+Thread-safe, cheaply-cloneable handle to a `SandboxConfig` that supports runtime hot-swapping of sandbox roots. Wraps `Arc<RwLock<SandboxConfig>>`.
+
+```rust
+pub struct SharedSandbox { /* private */ }
+```
+
+### Methods
+* **`new(initial: SandboxConfig) -> Self`** — wraps an initial config.
+* **`snapshot(&self) -> SandboxConfig`** — clones the current config under a read lock. Cheap (two `Vec<PathBuf>`); held lock is brief.
+* **`set(&self, new_config: SandboxConfig) -> Result<(), DocumentError>`** — replaces the inner config after re-canonicalizing all roots. Returns `Rag` if the new config has no roots, `Io` if any root cannot be canonicalized.
+
+### Trait Implementations
+* `Clone` — clones the `Arc` (cheap), shares the same inner config.
+* `Default` — uses `"."` as a single root, same as `SandboxConfig::default()`.
+* `From<SandboxConfig>` and `From<&SandboxConfig>` — convenient conversion.
+
+### When to use
+Use `SharedSandbox` when sandbox roots may change after tools are constructed (e.g., an operator-facing reload mechanism). Tools that hold an `Arc<SharedSandbox>` automatically pick up the new roots on the next call. For one-shot sandboxes, plain `SandboxConfig` is simpler.
+
+### Poisoning
+Uses `std::sync::RwLock`. A panic while holding a write lock will poison the lock; subsequent `snapshot`/`set` calls panic. This is deliberate — a poisoned sandbox indicates a logic error that should be surfaced.
+
+---
+
+## `validate_sandboxed_path_shared()`
+
+```rust
+pub fn validate_sandboxed_path_shared(
+    sandbox: &SharedSandbox,
+    user_path: &Path,
+) -> Result<PathBuf, DocumentError>
+```
+
+Snapshot-then-validate variant of `validate_sandboxed_path`. See the non-shared version for the algorithm.
+
+---
+
+## `find_containing_root_shared()`
+
+```rust
+pub fn find_containing_root_shared(
+    sandbox: &SharedSandbox,
+    path: &Path,
+) -> Option<PathBuf>
+```
+
+Snapshot-then-find variant of `find_containing_root`. **Returns `Option<PathBuf>` (owned), not `Option<&PathBuf>`,** because the snapshot is a temporary that cannot be safely borrowed.
+
+---
+
+## `relative_display_path_shared()`
+
+```rust
+pub fn relative_display_path_shared(
+    sandbox: &SharedSandbox,
+    path: &Path,
+) -> String
+```
+
+Snapshot-then-display variant of `relative_display_path`.
+
+---
+
 ## `validate_sandboxed_path()`
 
 ```rust
