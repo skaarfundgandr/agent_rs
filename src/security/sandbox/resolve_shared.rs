@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 
 use crate::domain::errors::DocumentError;
 
-use super::config::SandboxConfig;
 use super::resolve::{find_containing_root, relative_display_path, validate_sandboxed_path};
 use super::shared::SharedSandbox;
 
