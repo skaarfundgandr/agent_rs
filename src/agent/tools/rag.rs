@@ -298,11 +298,20 @@ impl Tool for ManageRagTool {
             }
         };
 
-        // The gate is the sole source of truth: on Allow, sandbox containment
-        // is bypassed (the path is resolved via `resolve_path_unchecked`).
-        self.sandbox
-            .check_permission(&self.policy, Self::NAME, &description)
-            .await?;
+        // In-sandbox paths are auto-allowed; the `list` action needs no gate
+        // (it only reads the in-memory registry). Consult the gate only for
+        // out-of-sandbox add/remove paths.
+        let needs_gate = if args.action.as_str() == "list" {
+            false
+        } else {
+            let p = args.path.as_deref().unwrap_or("");
+            crate::security::validate_sandboxed_path_shared(&self.sandbox, Path::new(p)).is_err()
+        };
+        if needs_gate {
+            self.sandbox
+                .check_permission(&self.policy, Self::NAME, &description)
+                .await?;
+        }
 
         match args.action.as_str() {
             "add" => {

@@ -147,6 +147,108 @@ async fn test_sandbox_escape_write() {
 }
 
 #[tokio::test]
+async fn test_in_sandbox_read_skips_gate_with_denyall() {
+    // In-sandbox paths are auto-allowed — the gate is NOT consulted, so even a
+    // `DenyAll` policy must let the read through.
+    let temp_dir = tempfile::tempdir().unwrap();
+    fs::write(temp_dir.path().join("in_sandbox.txt"), "hello").unwrap();
+    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let tool = ReadDocumentTool::new(
+        Arc::clone(&sandbox),
+        HashSet::from(["txt"].map(String::from)),
+        PermissionPolicy::DenyAll,
+    );
+
+    let args = ReadDocumentArgs {
+        path: "in_sandbox.txt".to_string(),
+    };
+    let result = tool.call(args).await.expect("in-sandbox read should bypass the gate");
+    assert_eq!(result, "hello");
+}
+
+#[tokio::test]
+async fn test_in_sandbox_write_skips_gate_with_denyall() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let tool = WriteDocumentTool::new(
+        Arc::clone(&sandbox),
+        HashSet::from(["txt"].map(String::from)),
+        PermissionPolicy::DenyAll,
+    );
+
+    let args = WriteDocumentArgs {
+        path: "new_file.txt".to_string(),
+        content: "written without a prompt".to_string(),
+        append: None,
+    };
+    tool.call(args).await.expect("in-sandbox write should bypass the gate");
+
+    let content = fs::read_to_string(temp_dir.path().join("new_file.txt")).unwrap();
+    assert_eq!(content, "written without a prompt");
+}
+
+#[tokio::test]
+async fn test_in_sandbox_list_directory_skips_gate_with_denyall() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    fs::write(temp_dir.path().join("file.txt"), "x").unwrap();
+    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let tool = ListDirectoryTool::new(Arc::clone(&sandbox), PermissionPolicy::DenyAll);
+
+    let args = ListDirectoryArgs { path: None };
+    let result = tool.call(args).await.expect("in-sandbox listing should bypass the gate");
+    assert!(result.contains("file.txt"));
+}
+
+#[tokio::test]
+async fn test_in_sandbox_grep_skips_gate_with_denyall() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    fs::write(temp_dir.path().join("file.txt"), "searchable text").unwrap();
+    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let tool = GrepSearchTool::new(
+        Arc::clone(&sandbox),
+        HashSet::from(["txt"].map(String::from)),
+        PermissionPolicy::DenyAll,
+    );
+
+    let args = GrepSearchArgs {
+        query: "searchable".to_string(),
+        path: None,
+        case_sensitive: None,
+    };
+    let result = tool.call(args).await.expect("in-sandbox grep should bypass the gate");
+    assert!(result.contains("searchable text"));
+}
+
+#[tokio::test]
+async fn test_out_of_sandbox_read_still_consults_gate() {
+    // Out-of-sandbox paths still consult the gate. With `DenyAll` the read
+    // must be rejected with `PermissionDenied` (not `SandboxEscape`, since the
+    // gate is the authority for out-of-sandbox access).
+    let temp_dir = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(outside.path().join("outside.txt"), "secret").unwrap();
+    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let tool = ReadDocumentTool::new(
+        Arc::clone(&sandbox),
+        HashSet::from(["txt"].map(String::from)),
+        PermissionPolicy::DenyAll,
+    );
+
+    let args = ReadDocumentArgs {
+        path: outside.path().join("outside.txt").to_string_lossy().to_string(),
+    };
+    let err = tool.call(args).await.expect_err("out-of-sandbox read should consult the gate");
+    assert!(
+        matches!(
+            err,
+            agent_rs_lib::domain::errors::DocumentError::PermissionDenied(_)
+        ),
+        "Expected PermissionDenied for out-of-sandbox + DenyAll, got {:?}",
+        err
+    );
+}
+
+#[tokio::test]
 async fn test_list_directory() {
     let temp_dir = tempfile::tempdir().unwrap();
 

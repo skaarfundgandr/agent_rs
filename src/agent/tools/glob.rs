@@ -4,7 +4,7 @@ use crate::security::SharedSandbox;
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 /// Arguments for the `glob_search` tool.
@@ -94,24 +94,32 @@ impl Tool for GlobSearchTool {
             )));
         }
 
-        // Gate is the sole authority; on Allow the sandbox check is bypassed.
-        // The matching logic below iterates multiple roots when no `directory`
-        // is given, so we evaluate the gate once here rather than per-branch.
-        self.sandbox
-            .check_permission(&self.policy, Self::NAME, &description)
-            .await?;
+        // In-sandbox access is auto-allowed; the gate is consulted only for
+        // out-of-sandbox directories. When no `directory` is given the search
+        // iterates the sandbox roots themselves, so it is inherently in-sandbox.
+        let dir_path: Option<PathBuf> = if let Some(ref directory) = args.directory {
+            match crate::security::validate_sandboxed_path_shared(
+                &self.sandbox,
+                Path::new(directory),
+            ) {
+                Ok(resolved) => Some(resolved),
+                Err(_) => {
+                    self.sandbox
+                        .check_permission(&self.policy, Self::NAME, &description)
+                        .await?;
+                    Some(self.sandbox.resolve_path_unchecked(Path::new(directory)))
+                }
+            }
+        } else {
+            None
+        };
 
         let mut matches = Vec::new();
         let mut seen = std::collections::HashSet::new();
         let max_results = 100;
 
-        if let Some(ref directory) = args.directory {
-            // Search within a specific directory. The gate has already
-            // approved; resolve the directory without static sandbox rejection
-            // (multi-root search for existing matches, primary root otherwise).
-            let dir_path = self
-                .sandbox
-                .resolve_path_unchecked(Path::new(directory));
+        if let Some(dir_path) = dir_path {
+            // Search within a specific (resolved) directory.
             let full_pattern = dir_path.join(pattern);
             let pattern_str = full_pattern.to_string_lossy();
 

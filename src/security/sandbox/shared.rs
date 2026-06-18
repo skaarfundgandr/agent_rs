@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 use super::config::SandboxConfig;
+use super::resolve::validate_sandboxed_path;
 
 /// A thread-safe, cheaply-cloneable handle to a [`SandboxConfig`] that supports
 /// runtime hot-swapping of sandbox roots.
@@ -134,20 +135,28 @@ impl SharedSandbox {
             .unwrap_or_else(|| user_path.to_path_buf())
     }
 
-    /// Convenience wrapper: [`Self::check_permission`] then
-    /// [`Self::resolve_path_unchecked`].
+    /// Resolves `user_path`, consulting the permission gate **only** when the
+    /// path falls outside the sandbox.
     ///
-    /// Used by tools whose call-site is a linear "gate, then resolve a single
-    /// path" sequence — `ReadDocumentTool`, `WriteDocumentTool`,
-    /// `ListDirectoryTool`, `GrepSearchTool`, and the `ManageRagTool`
-    /// `add`/`remove` actions. Tools with more complex control flow
-    /// (e.g. `GlobSearchTool`'s optional `directory` argument) should call
-    /// the two methods separately so the gate is only evaluated once.
+    /// **Semantics:**
+    /// - **In-sandbox paths** are auto-allowed: the path is resolved via
+    ///   [`validate_sandboxed_path`] and returned without invoking the gate.
+    ///   This keeps routine sandboxed reads/writes prompt-free.
+    /// - **Out-of-sandbox paths** consult the gate via [`Self::check_permission`].
+    ///   On `Allow` the path is resolved with [`Self::resolve_path_unchecked`];
+    ///   on `Deny`/`DeferToUser` a [`DocumentError::PermissionDenied`] is
+    ///   returned.
+    ///
+    /// Used by tools whose call-site is a linear "resolve a single path"
+    /// sequence — `ReadDocumentTool`, `WriteDocumentTool`,
+    /// `ListDirectoryTool`, `GrepSearchTool`. Tools with more complex control
+    /// flow (e.g. `GlobSearchTool`'s optional `directory` argument) should call
+    /// [`Self::check_permission`] and [`Self::resolve_path_unchecked`] directly.
     ///
     /// # Errors
     ///
     /// Returns [`DocumentError::PermissionDenied`] when the gate returns `Deny`
-    /// or `DeferToUser`.
+    /// or `DeferToUser` for an out-of-sandbox path.
     pub async fn resolve_path_with_permission(
         &self,
         policy: &PermissionPolicy,
@@ -155,6 +164,9 @@ impl SharedSandbox {
         description: &str,
         user_path: &Path,
     ) -> Result<PathBuf, DocumentError> {
+        if let Ok(resolved) = validate_sandboxed_path(&self.snapshot(), user_path) {
+            return Ok(resolved);
+        }
         self.check_permission(policy, tool_name, description).await?;
         Ok(self.resolve_path_unchecked(user_path))
     }
