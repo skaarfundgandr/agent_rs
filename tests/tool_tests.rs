@@ -15,7 +15,9 @@ use std::sync::Arc;
 #[tokio::test]
 async fn test_read_txt() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
     let tool = ReadDocumentTool::new(
         Arc::clone(&sandbox),
         HashSet::from(["txt", "md", "pdf"].map(String::from)),
@@ -56,7 +58,9 @@ async fn test_read_pdf() {
 #[tokio::test]
 async fn test_write_document() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
     let tool = WriteDocumentTool::new(
         Arc::clone(&sandbox),
         HashSet::from(["txt", "md"].map(String::from)),
@@ -91,7 +95,9 @@ async fn test_sandbox_escape_read() {
     // primitive is therefore "a denying gate stops the escape", which we test
     // here via `DenyAll`.
     let temp_dir = tempfile::tempdir().unwrap();
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
     let tool = ReadDocumentTool::new(
         Arc::clone(&sandbox),
         HashSet::from(["txt", "md", "pdf"].map(String::from)),
@@ -119,7 +125,9 @@ async fn test_sandbox_escape_read() {
 #[tokio::test]
 async fn test_sandbox_escape_write() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
     let tool = WriteDocumentTool::new(
         Arc::clone(&sandbox),
         HashSet::from(["txt", "md"].map(String::from)),
@@ -152,7 +160,9 @@ async fn test_in_sandbox_read_skips_gate_with_denyall() {
     // `DenyAll` policy must let the read through.
     let temp_dir = tempfile::tempdir().unwrap();
     fs::write(temp_dir.path().join("in_sandbox.txt"), "hello").unwrap();
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
     let tool = ReadDocumentTool::new(
         Arc::clone(&sandbox),
         HashSet::from(["txt"].map(String::from)),
@@ -162,14 +172,19 @@ async fn test_in_sandbox_read_skips_gate_with_denyall() {
     let args = ReadDocumentArgs {
         path: "in_sandbox.txt".to_string(),
     };
-    let result = tool.call(args).await.expect("in-sandbox read should bypass the gate");
+    let result = tool
+        .call(args)
+        .await
+        .expect("in-sandbox read should bypass the gate");
     assert_eq!(result, "hello");
 }
 
 #[tokio::test]
 async fn test_in_sandbox_write_skips_gate_with_denyall() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
     let tool = WriteDocumentTool::new(
         Arc::clone(&sandbox),
         HashSet::from(["txt"].map(String::from)),
@@ -181,7 +196,9 @@ async fn test_in_sandbox_write_skips_gate_with_denyall() {
         content: "written without a prompt".to_string(),
         append: None,
     };
-    tool.call(args).await.expect("in-sandbox write should bypass the gate");
+    tool.call(args)
+        .await
+        .expect("in-sandbox write should bypass the gate");
 
     let content = fs::read_to_string(temp_dir.path().join("new_file.txt")).unwrap();
     assert_eq!(content, "written without a prompt");
@@ -191,11 +208,16 @@ async fn test_in_sandbox_write_skips_gate_with_denyall() {
 async fn test_in_sandbox_list_directory_skips_gate_with_denyall() {
     let temp_dir = tempfile::tempdir().unwrap();
     fs::write(temp_dir.path().join("file.txt"), "x").unwrap();
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
     let tool = ListDirectoryTool::new(Arc::clone(&sandbox), PermissionPolicy::DenyAll);
 
     let args = ListDirectoryArgs { path: None };
-    let result = tool.call(args).await.expect("in-sandbox listing should bypass the gate");
+    let result = tool
+        .call(args)
+        .await
+        .expect("in-sandbox listing should bypass the gate");
     assert!(result.contains("file.txt"));
 }
 
@@ -203,7 +225,9 @@ async fn test_in_sandbox_list_directory_skips_gate_with_denyall() {
 async fn test_in_sandbox_grep_skips_gate_with_denyall() {
     let temp_dir = tempfile::tempdir().unwrap();
     fs::write(temp_dir.path().join("file.txt"), "searchable text").unwrap();
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
     let tool = GrepSearchTool::new(
         Arc::clone(&sandbox),
         HashSet::from(["txt"].map(String::from)),
@@ -215,7 +239,10 @@ async fn test_in_sandbox_grep_skips_gate_with_denyall() {
         path: None,
         case_sensitive: None,
     };
-    let result = tool.call(args).await.expect("in-sandbox grep should bypass the gate");
+    let result = tool
+        .call(args)
+        .await
+        .expect("in-sandbox grep should bypass the gate");
     assert!(result.contains("searchable text"));
 }
 
@@ -227,7 +254,9 @@ async fn test_out_of_sandbox_read_still_consults_gate() {
     let temp_dir = tempfile::tempdir().unwrap();
     let outside = tempfile::tempdir().unwrap();
     fs::write(outside.path().join("outside.txt"), "secret").unwrap();
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
     let tool = ReadDocumentTool::new(
         Arc::clone(&sandbox),
         HashSet::from(["txt"].map(String::from)),
@@ -235,9 +264,16 @@ async fn test_out_of_sandbox_read_still_consults_gate() {
     );
 
     let args = ReadDocumentArgs {
-        path: outside.path().join("outside.txt").to_string_lossy().to_string(),
+        path: outside
+            .path()
+            .join("outside.txt")
+            .to_string_lossy()
+            .to_string(),
     };
-    let err = tool.call(args).await.expect_err("out-of-sandbox read should consult the gate");
+    let err = tool
+        .call(args)
+        .await
+        .expect_err("out-of-sandbox read should consult the gate");
     assert!(
         matches!(
             err,
@@ -257,11 +293,10 @@ async fn test_list_directory() {
     fs::write(temp_dir.path().join("file.txt"), "hello").unwrap();
     fs::write(temp_dir.path().join("another.md"), "world").unwrap();
 
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
-    let tool = ListDirectoryTool::new(
-        Arc::clone(&sandbox),
-        PermissionPolicy::AllowAll,
-    );
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
+    let tool = ListDirectoryTool::new(Arc::clone(&sandbox), PermissionPolicy::AllowAll);
 
     let args = ListDirectoryArgs { path: None };
     let result = tool.call(args).await.unwrap();
@@ -276,11 +311,10 @@ async fn test_list_directory_sandbox_escape() {
     // See `test_sandbox_escape_read` for the rationale: a denying gate is the
     // safety primitive; AllowAll + escape bypasses the sandbox by design.
     let temp_dir = tempfile::tempdir().unwrap();
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
-    let tool = ListDirectoryTool::new(
-        Arc::clone(&sandbox),
-        PermissionPolicy::DenyAll,
-    );
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
+    let tool = ListDirectoryTool::new(Arc::clone(&sandbox), PermissionPolicy::DenyAll);
 
     let args = ListDirectoryArgs {
         path: Some("../".to_string()),
@@ -312,12 +346,10 @@ async fn test_grep_search() {
     fs::write(sub_dir.join("file2.md"), "Another world here").unwrap();
 
     let allowed = HashSet::from(["txt", "md"].map(String::from));
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
-    let tool = GrepSearchTool::new(
-        Arc::clone(&sandbox),
-        allowed,
-        PermissionPolicy::AllowAll,
-    );
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
+    let tool = GrepSearchTool::new(Arc::clone(&sandbox), allowed, PermissionPolicy::AllowAll);
 
     // Test case insensitive search
     let args = GrepSearchArgs {
@@ -346,12 +378,10 @@ async fn test_grep_search_sandbox_escape() {
     // See `test_sandbox_escape_read` for the rationale.
     let temp_dir = tempfile::tempdir().unwrap();
     let allowed = HashSet::from(["txt", "md"].map(String::from));
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
-    let tool = GrepSearchTool::new(
-        Arc::clone(&sandbox),
-        allowed,
-        PermissionPolicy::DenyAll,
-    );
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
+    let tool = GrepSearchTool::new(Arc::clone(&sandbox), allowed, PermissionPolicy::DenyAll);
 
     let args = GrepSearchArgs {
         query: "test".to_string(),
@@ -381,11 +411,10 @@ async fn test_glob_search() {
     fs::write(sub_dir.join("file2.rs"), "fn main() {}").unwrap();
     fs::write(sub_dir.join("file3.txt"), "world").unwrap();
 
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
-    let tool = GlobSearchTool::new(
-        Arc::clone(&sandbox),
-        PermissionPolicy::AllowAll,
-    );
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
+    let tool = GlobSearchTool::new(Arc::clone(&sandbox), PermissionPolicy::AllowAll);
 
     // Match files recursively
     let args = GlobSearchArgs {
@@ -419,11 +448,10 @@ async fn test_glob_search() {
 #[tokio::test]
 async fn test_glob_search_sandbox_escape() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
-    let tool = GlobSearchTool::new(
-        Arc::clone(&sandbox),
-        PermissionPolicy::AllowAll,
-    );
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
+    let tool = GlobSearchTool::new(Arc::clone(&sandbox), PermissionPolicy::AllowAll);
 
     let args = GlobSearchArgs {
         pattern: "../**/*".to_string(),
@@ -446,11 +474,13 @@ async fn test_multi_root_read_from_secondary() {
     let primary = tempfile::tempdir().unwrap();
     let secondary = tempfile::tempdir().unwrap();
 
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::new(vec![
-        primary.path().to_path_buf(),
-        secondary.path().to_path_buf(),
-    ])
-    .unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::new(vec![
+            primary.path().to_path_buf(),
+            secondary.path().to_path_buf(),
+        ])
+        .unwrap(),
+    ));
 
     // File lives in secondary root
     fs::write(secondary.path().join("shared.txt"), "from secondary").unwrap();
@@ -473,11 +503,13 @@ async fn test_multi_root_write_to_primary() {
     let primary = tempfile::tempdir().unwrap();
     let secondary = tempfile::tempdir().unwrap();
 
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::new(vec![
-        primary.path().to_path_buf(),
-        secondary.path().to_path_buf(),
-    ])
-    .unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::new(vec![
+            primary.path().to_path_buf(),
+            secondary.path().to_path_buf(),
+        ])
+        .unwrap(),
+    ));
 
     let tool = WriteDocumentTool::new(
         Arc::clone(&sandbox),
@@ -506,11 +538,13 @@ async fn test_multi_root_escape_rejected() {
     let primary = tempfile::tempdir().unwrap();
     let secondary = tempfile::tempdir().unwrap();
 
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::new(vec![
-        primary.path().to_path_buf(),
-        secondary.path().to_path_buf(),
-    ])
-    .unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::new(vec![
+            primary.path().to_path_buf(),
+            secondary.path().to_path_buf(),
+        ])
+        .unwrap(),
+    ));
 
     let tool = ReadDocumentTool::new(
         Arc::clone(&sandbox),
@@ -542,11 +576,13 @@ async fn test_multi_root_list_directory() {
     fs::write(primary.path().join("primary.txt"), "p").unwrap();
     fs::write(secondary.path().join("secondary.txt"), "s").unwrap();
 
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::new(vec![
-        primary.path().to_path_buf(),
-        secondary.path().to_path_buf(),
-    ])
-    .unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::new(vec![
+            primary.path().to_path_buf(),
+            secondary.path().to_path_buf(),
+        ])
+        .unwrap(),
+    ));
 
     let tool = ListDirectoryTool::new(Arc::clone(&sandbox), PermissionPolicy::AllowAll);
 
@@ -573,11 +609,13 @@ async fn test_multi_root_grep() {
     fs::write(primary.path().join("main.txt"), "Hello from primary").unwrap();
     fs::write(secondary.path().join("docs.txt"), "Hello from secondary").unwrap();
 
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::new(vec![
-        primary.path().to_path_buf(),
-        secondary.path().to_path_buf(),
-    ])
-    .unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::new(vec![
+            primary.path().to_path_buf(),
+            secondary.path().to_path_buf(),
+        ])
+        .unwrap(),
+    ));
 
     let allowed = HashSet::from(["txt"].map(String::from));
     let tool = GrepSearchTool::new(Arc::clone(&sandbox), allowed, PermissionPolicy::AllowAll);
@@ -602,11 +640,13 @@ async fn test_multi_root_grep_from_secondary() {
     fs::write(primary.path().join("main.txt"), "Hello from primary").unwrap();
     fs::write(secondary.path().join("docs.txt"), "Hello from secondary").unwrap();
 
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::new(vec![
-        primary.path().to_path_buf(),
-        secondary.path().to_path_buf(),
-    ])
-    .unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::new(vec![
+            primary.path().to_path_buf(),
+            secondary.path().to_path_buf(),
+        ])
+        .unwrap(),
+    ));
 
     let allowed = HashSet::from(["txt"].map(String::from));
     let tool = GrepSearchTool::new(Arc::clone(&sandbox), allowed, PermissionPolicy::AllowAll);
@@ -630,11 +670,13 @@ async fn test_multi_root_glob_across_roots() {
     fs::write(primary.path().join("a.txt"), "hello").unwrap();
     fs::write(secondary.path().join("b.txt"), "world").unwrap();
 
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::new(vec![
-        primary.path().to_path_buf(),
-        secondary.path().to_path_buf(),
-    ])
-    .unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::new(vec![
+            primary.path().to_path_buf(),
+            secondary.path().to_path_buf(),
+        ])
+        .unwrap(),
+    ));
 
     let tool = GlobSearchTool::new(Arc::clone(&sandbox), PermissionPolicy::AllowAll);
 
@@ -653,11 +695,13 @@ async fn test_multi_root_glob_escape_rejected() {
     let primary = tempfile::tempdir().unwrap();
     let secondary = tempfile::tempdir().unwrap();
 
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::new(vec![
-        primary.path().to_path_buf(),
-        secondary.path().to_path_buf(),
-    ])
-    .unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::new(vec![
+            primary.path().to_path_buf(),
+            secondary.path().to_path_buf(),
+        ])
+        .unwrap(),
+    ));
 
     let tool = GlobSearchTool::new(Arc::clone(&sandbox), PermissionPolicy::AllowAll);
 
@@ -698,11 +742,10 @@ async fn test_sandbox_config_try_from() {
 async fn test_glob_search_dotted_filename_accepted() {
     let temp_dir = tempfile::tempdir().unwrap();
     fs::write(temp_dir.path().join("v1.2..3.txt"), "data").unwrap();
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
-    let tool = GlobSearchTool::new(
-        Arc::clone(&sandbox),
-        PermissionPolicy::AllowAll,
-    );
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
+    let tool = GlobSearchTool::new(Arc::clone(&sandbox), PermissionPolicy::AllowAll);
     let args = GlobSearchArgs {
         pattern: "v1.2..3.txt".to_string(),
         directory: None,
@@ -723,12 +766,10 @@ async fn test_grep_max_depth_limit() {
     }
 
     let allowed = HashSet::from(["txt"].map(String::from));
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(temp_dir.path()).unwrap()));
-    let tool = GrepSearchTool::new(
-        Arc::clone(&sandbox),
-        allowed,
-        PermissionPolicy::AllowAll,
-    );
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(temp_dir.path()).unwrap(),
+    ));
+    let tool = GrepSearchTool::new(Arc::clone(&sandbox), allowed, PermissionPolicy::AllowAll);
 
     let args = GrepSearchArgs {
         query: "needle".to_string(),

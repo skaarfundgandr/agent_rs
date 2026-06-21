@@ -46,7 +46,9 @@ fn build_tool(
     sandbox_root: &std::path::Path,
     pipeline: Arc<RagPipeline>,
 ) -> (Arc<Mutex<RagSourceRegistry>>, ManageRagTool) {
-    let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single(sandbox_root).unwrap()));
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(sandbox_root).unwrap(),
+    ));
     let registry = Arc::new(Mutex::new(RagSourceRegistry::new(HashSet::from(
         ["txt", "md"].map(String::from),
     ))));

@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use agent_rs_lib::domain::errors::DocumentError;
 use agent_rs_lib::security::{
-    find_containing_root, relative_display_path, validate_sandboxed_path, SandboxConfig,
+    SandboxConfig, find_containing_root, relative_display_path, validate_sandboxed_path,
 };
 use std::fs;
 use std::path::Path;
@@ -125,9 +125,10 @@ fn test_validate_nonexistent_path_under_primary() {
 fn test_empty_roots_returns_error() {
     let err = SandboxConfig::new(vec![]).unwrap_err();
     assert!(matches!(err, DocumentError::Rag(_)));
-    assert!(err
-        .to_string()
-        .contains("SandboxConfig requires at least one root"));
+    assert!(
+        err.to_string()
+            .contains("SandboxConfig requires at least one root")
+    );
 }
 
 #[test]

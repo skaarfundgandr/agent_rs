@@ -7,13 +7,17 @@ use std::sync::Arc;
 
 #[tokio::test]
 async fn allow_all_returns_allow() {
-    let result = PermissionPolicy::AllowAll.evaluate("any_tool", "any desc").await;
+    let result = PermissionPolicy::AllowAll
+        .evaluate("any_tool", "any desc")
+        .await;
     assert!(matches!(result, PermissionResult::Allow));
 }
 
 #[tokio::test]
 async fn deny_all_returns_deny_with_reason() {
-    let result = PermissionPolicy::DenyAll.evaluate("any_tool", "any desc").await;
+    let result = PermissionPolicy::DenyAll
+        .evaluate("any_tool", "any desc")
+        .await;
     match result {
         PermissionResult::Deny { reason } => assert!(!reason.is_empty()),
         other => panic!("expected Deny, got {other:?}"),
@@ -37,10 +41,12 @@ async fn custom_gate_delegates_to_gate_result() {
 #[tokio::test]
 async fn is_allow_helper() {
     assert!(PermissionResult::Allow.is_allow());
-    assert!(!PermissionResult::Deny {
-        reason: "x".to_string()
-    }
-    .is_allow());
+    assert!(
+        !PermissionResult::Deny {
+            reason: "x".to_string()
+        }
+        .is_allow()
+    );
     assert!(!PermissionResult::DeferToUser.is_allow());
 }
 
@@ -53,8 +59,8 @@ async fn policy_map_default_fallback() {
 
 #[tokio::test]
 async fn policy_map_override_takes_precedence() {
-    let map = PolicyMap::new(PermissionPolicy::DenyAll)
-        .tool("allow_this", PermissionPolicy::AllowAll);
+    let map =
+        PolicyMap::new(PermissionPolicy::DenyAll).tool("allow_this", PermissionPolicy::AllowAll);
     let result = map.evaluate("allow_this", "desc").await;
     assert!(matches!(result, PermissionResult::Allow));
 
