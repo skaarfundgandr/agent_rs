@@ -56,6 +56,63 @@ impl SharedSandbox {
         Ok(())
     }
 
+    /// Adds a root to the sandbox configuration.
+    ///
+    /// Acquires a write lock and delegates to [`SandboxConfig::add_root`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DocumentError::Io`] if the root cannot be canonicalized.
+    pub fn add_root<P: AsRef<Path>>(&self, root: P) -> Result<(), DocumentError> {
+        #[allow(clippy::expect_used)]
+        let mut guard = self.inner.write().expect("sandbox rwlock poisoned");
+        guard.add_root(root)
+    }
+
+    /// Adds multiple roots atomically (per-item atomicity).
+    ///
+    /// Acquires a write lock and delegates to [`SandboxConfig::add_roots`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the first [`DocumentError::Io`] encountered.
+    pub fn add_roots<I, P>(&self, roots: I) -> Result<(), DocumentError>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        #[allow(clippy::expect_used)]
+        let mut guard = self.inner.write().expect("sandbox rwlock poisoned");
+        guard.add_roots(roots)
+    }
+
+    /// Removes a root from the sandbox configuration.
+    ///
+    /// Acquires a write lock and delegates to [`SandboxConfig::remove_root`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DocumentError::Io`] if the root cannot be canonicalized.
+    /// Returns [`DocumentError::Sandbox`] if it is the last remaining root.
+    pub fn remove_root<P: AsRef<Path>>(&self, root: P) -> Result<(), DocumentError> {
+        #[allow(clippy::expect_used)]
+        let mut guard = self.inner.write().expect("sandbox rwlock poisoned");
+        guard.remove_root(root)
+    }
+
+    /// Checks whether a root exists in the sandbox configuration.
+    ///
+    /// Acquires a read lock and delegates to [`SandboxConfig::contains_root`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DocumentError::Io`] if the root cannot be canonicalized.
+    pub fn contains_root<P: AsRef<Path>>(&self, root: P) -> Result<bool, DocumentError> {
+        #[allow(clippy::expect_used)]
+        let guard = self.inner.read().expect("sandbox rwlock poisoned");
+        guard.contains_root(root)
+    }
+
     /// Evaluates the permission `policy` for `tool_name`/`description`.
     ///
     /// This is the gate-check half of [`Self::resolve_path_with_permission`],
@@ -167,7 +224,8 @@ impl SharedSandbox {
         if let Ok(resolved) = validate_sandboxed_path(&self.snapshot(), user_path) {
             return Ok(resolved);
         }
-        self.check_permission(policy, tool_name, description).await?;
+        self.check_permission(policy, tool_name, description)
+            .await?;
         Ok(self.resolve_path_unchecked(user_path))
     }
 }
