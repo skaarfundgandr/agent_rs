@@ -93,7 +93,12 @@ impl Tool for ReadDocumentTool {
         let description = format!("Wants to read file asset at [{}]", args.path);
         let path = self
             .sandbox
-            .resolve_path_with_permission(&self.policy, Self::NAME, &description, Path::new(&args.path))
+            .resolve_path_with_permission(
+                &self.policy,
+                Self::NAME,
+                &description,
+                Path::new(&args.path),
+            )
             .await?;
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
@@ -189,7 +194,12 @@ impl Tool for WriteDocumentTool {
         let description = format!("Wants to modify/write file asset at [{}]", args.path);
         let path = self
             .sandbox
-            .resolve_path_with_permission(&self.policy, Self::NAME, &description, Path::new(&args.path))
+            .resolve_path_with_permission(
+                &self.policy,
+                Self::NAME,
+                &description,
+                Path::new(&args.path),
+            )
             .await?;
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 

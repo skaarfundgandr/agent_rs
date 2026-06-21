@@ -106,7 +106,12 @@ impl Tool for GrepSearchTool {
         );
         let path = self
             .sandbox
-            .resolve_path_with_permission(&self.policy, Self::NAME, &description, Path::new(&relative_path))
+            .resolve_path_with_permission(
+                &self.policy,
+                Self::NAME,
+                &description,
+                Path::new(&relative_path),
+            )
             .await?;
 
         let case_sensitive = args.case_sensitive.unwrap_or(false);

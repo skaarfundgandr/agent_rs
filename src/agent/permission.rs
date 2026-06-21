@@ -113,9 +113,7 @@ impl PermissionPolicy {
                     },
                 }
             }
-            PermissionPolicy::Custom(gate) => {
-                gate.check_permission(tool_name, description).await
-            }
+            PermissionPolicy::Custom(gate) => gate.check_permission(tool_name, description).await,
         }
     }
 }

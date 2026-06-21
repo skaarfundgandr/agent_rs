@@ -83,9 +83,8 @@ impl ToolDyn for RegisteredMcpTool {
             match policy.evaluate(&tool_name, &desc).await {
                 PermissionResult::Allow => {}
                 PermissionResult::Deny { reason } => {
-                    let err = DocumentError::PermissionDenied(format!(
-                        "MCP tool {tool_name}: {reason}"
-                    ));
+                    let err =
+                        DocumentError::PermissionDenied(format!("MCP tool {tool_name}: {reason}"));
                     return Err(ToolError::ToolCallError(Box::new(err)));
                 }
                 PermissionResult::DeferToUser => {

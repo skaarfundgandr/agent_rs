@@ -140,13 +140,19 @@ mod rag_main {
                 write_extensions,
                 policy.clone(),
             )),
-            Box::new(ListDirectoryTool::new(Arc::clone(&shared_sandbox), policy.clone())),
+            Box::new(ListDirectoryTool::new(
+                Arc::clone(&shared_sandbox),
+                policy.clone(),
+            )),
             Box::new(GrepSearchTool::new(
                 Arc::clone(&shared_sandbox),
                 grep_extensions,
                 policy.clone(),
             )),
-            Box::new(GlobSearchTool::new(Arc::clone(&shared_sandbox), policy.clone())),
+            Box::new(GlobSearchTool::new(
+                Arc::clone(&shared_sandbox),
+                policy.clone(),
+            )),
             Box::new(ManageRagTool::new(
                 rag_registry,
                 Arc::clone(&pipeline),

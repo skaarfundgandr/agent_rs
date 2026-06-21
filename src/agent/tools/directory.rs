@@ -71,7 +71,12 @@ impl Tool for ListDirectoryTool {
         let description = format!("Wants to list directory content at [{relative_path}]");
         let path = self
             .sandbox
-            .resolve_path_with_permission(&self.policy, Self::NAME, &description, Path::new(&relative_path))
+            .resolve_path_with_permission(
+                &self.policy,
+                Self::NAME,
+                &description,
+                Path::new(&relative_path),
+            )
             .await?;
 
         if !path.is_dir() {

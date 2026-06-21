@@ -9,7 +9,7 @@ use crate::domain::config::McpConfig;
 use crate::domain::mcp::{McpServerDef, ResolvedMcpServer};
 use crate::mcp::client::McpClient;
 
-use super::connect::{connect_resolved_server, ConnectedMcpServer};
+use super::connect::{ConnectedMcpServer, connect_resolved_server};
 use super::runtime::McpRegistryRuntime;
 
 /// Registry that resolves MCP server definitions from `mcp.json` into Rig tools.

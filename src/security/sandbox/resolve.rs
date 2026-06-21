@@ -112,7 +112,8 @@ fn try_resolve_within_root(
 pub fn find_containing_root<'a>(sandbox: &'a SandboxConfig, path: &Path) -> Option<&'a PathBuf> {
     // Try canonical comparison first (works for existing, canonicalized paths)
     let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    for (original_root, canonical_root) in sandbox.roots().iter().zip(sandbox.canonical_roots().iter())
+    for (original_root, canonical_root) in
+        sandbox.roots().iter().zip(sandbox.canonical_roots().iter())
     {
         if canonical_path.starts_with(canonical_root) {
             return Some(original_root);
@@ -139,7 +140,8 @@ pub fn find_containing_root<'a>(sandbox: &'a SandboxConfig, path: &Path) -> Opti
 pub fn relative_display_path(sandbox: &SandboxConfig, path: &Path) -> String {
     // Canonical comparison first — works for paths returned from
     // validate_sandboxed_path (already canonicalized, no extra syscall)
-    for (original_root, canonical_root) in sandbox.roots().iter().zip(sandbox.canonical_roots().iter())
+    for (original_root, canonical_root) in
+        sandbox.roots().iter().zip(sandbox.canonical_roots().iter())
     {
         if let Ok(rel) = path.strip_prefix(canonical_root) {
             return rel.to_string_lossy().into_owned();

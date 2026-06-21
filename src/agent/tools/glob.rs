@@ -85,7 +85,9 @@ impl Tool for GlobSearchTool {
         let pattern = &args.pattern;
 
         // Safety: Reject absolute patterns or path traversals containing '..'
-        if Path::new(pattern).components().any(|c| matches!(c, Component::ParentDir))
+        if Path::new(pattern)
+            .components()
+            .any(|c| matches!(c, Component::ParentDir))
             || Path::new(pattern).is_absolute()
         {
             return Err(DocumentError::SandboxEscape(format!(
