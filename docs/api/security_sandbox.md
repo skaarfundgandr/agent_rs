@@ -30,6 +30,14 @@ pub struct SandboxConfig {
   Returns the number of configured roots.
 * **`is_empty(&self) -> bool`**
   Returns `true` if no roots are configured (should never happen).
+* **`add_root(&mut self, root: impl AsRef<Path>) -> Result<(), DocumentError>`**
+  Appends a root, canonicalizing it. If a root with the same canonical form already exists, the call is a no-op (idempotent). Returns `Io` if the path cannot be canonicalized.
+* **`add_roots(&mut self, roots: impl IntoIterator<Item = impl AsRef<Path>>) -> Result<(), DocumentError>`**
+  Batch append. Per-item atomicity: a successful `add_root` mutates before the next item is validated. A failing item after a successful one leaves partial state — callers wanting all-or-nothing must validate paths externally. Returns the first `Io` error encountered.
+* **`remove_root(&mut self, root: impl AsRef<Path>) -> Result<(), DocumentError>`**
+  Removes a root by canonical-form lookup. If not found, the call is a no-op (idempotent on miss). Removing the **last** root returns `DocumentError::Sandbox` (the sandbox invariant requires at least one root; use `set` to swap to a fresh config instead). Returns `Io` if the path cannot be canonicalized.
+* **`contains_root(&self, root: impl AsRef<Path>) -> Result<bool, DocumentError>`**
+  Strict canonical-form membership check. Returns `Ok(true)`/`Ok(false)` if the path canonicalizes, `Err(Io)` if it cannot.
 
 ### Trait Implementations
 * `Default` — uses `"."` as a single root.
@@ -48,7 +56,11 @@ pub struct SharedSandbox { /* private */ }
 ### Methods
 * **`new(initial: SandboxConfig) -> Self`** — wraps an initial config.
 * **`snapshot(&self) -> SandboxConfig`** — clones the current config under a read lock. Cheap (two `Vec<PathBuf>`); held lock is brief.
-* **`set(&self, new_config: SandboxConfig) -> Result<(), DocumentError>`** — replaces the inner config after re-canonicalizing all roots. Returns `Rag` if the new config has no roots, `Io` if any root cannot be canonicalized.
+* **`set(&self, new_config: SandboxConfig) -> Result<(), DocumentError>`** — replaces the inner config after re-canonicalizing all roots. Returns `Rag` if the new config has no roots, `Io` if any root cannot be canonicalized. **Full-replacement escape hatch** — prefer the incremental mutators below when you only want to add or remove a single root.
+* **`add_root(&self, root: impl AsRef<Path>) -> Result<(), DocumentError>`** — appends a root under a write lock. Idempotent on canonical-form dedup. Returns `Io` if the path cannot be canonicalized.
+* **`add_roots<I, P>(&self, roots: I) -> Result<(), DocumentError>`** — batch append under a single write lock. Per-item atomicity: a successful `add_root` mutates before the next item is validated. Holds the write lock for the whole iterator (block readers briefly; roots lists are small).
+* **`remove_root(&self, root: impl AsRef<Path>) -> Result<(), DocumentError>`** — removes a root under a write lock. Idempotent on miss. Returns `Io` if the path cannot be canonicalized, `Sandbox` if it would leave the sandbox empty.
+* **`contains_root(&self, root: impl AsRef<Path>) -> Result<bool, DocumentError>`** — strict canonical-form membership check under a read lock. Returns `Ok(true)`/`Ok(false)` if the path canonicalizes, `Err(Io)` otherwise.
 
 ### Trait Implementations
 * `Clone` — clones the `Arc` (cheap), shares the same inner config.

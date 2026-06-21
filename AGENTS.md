@@ -15,9 +15,12 @@ cargo check                    # fast compile check
 cargo test                     # run all tests (some #[ignore]d — see below)
 cargo test -- --include-ignored # run ignored tests too (requires local PDF files)
 cargo clippy                   # lint (no custom clippy.toml)
+cargo fmt                      # format code
 cargo doc --open               # local API docs
 cargo run --example cli_chatbot # run the CLI chatbot example (requires --features rag)
 ```
+
+!NOTE: Some commands are automatically truncated by `rtk` and `aft` e.g. `cargo test`, `git diff`.
 
 No CI pipeline, no pre-commit hooks, no rustfmt.toml — use `cargo fmt` with defaults.
 
@@ -72,7 +75,7 @@ Tests in `tests/` (13 files): `agents_tests.rs`, `document_store.rs`, `embedding
 
 - All fallible operations use `anyhow::Result`. Domain errors use `thiserror`.
 - Tools enforce sandbox via `security::sandbox::validate_sandboxed_path`: path traversal (`../`) returns `DocumentError::SandboxEscape`.
-- Tools that enforce sandbox hold an `Arc<SharedSandbox>` rather than a `SandboxConfig`. Call `SharedSandbox::set` to hot-swap roots at runtime; subsequent tool calls will validate against the new roots.
+- Tools that enforce sandbox hold an `Arc<SharedSandbox>` rather than a `SandboxConfig`. `SharedSandbox` supports incremental `add_root` / `remove_root` / `add_roots` / `contains_root` for per-root changes; `set` remains the full-replacement escape hatch when swapping the whole config.
 - MCP tool name deduplication: duplicate names across servers cause a hard error at connect time.
 - `react.rs` is a stub — do not import from it. The `// pub mod react;` line in `agent/mod.rs` confirms it's excluded.
 - `RagStoreBuilder` was removed in v0.2.0 — use `PdfLoader` + `WordSplitter` + `RagPipeline` instead.
