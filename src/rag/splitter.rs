@@ -17,6 +17,17 @@ pub struct WordSplitter {
 }
 
 impl WordSplitter {
+    /// Creates a new `WordSplitter` with the given chunk and overlap sizes.
+    ///
+    /// # Arguments
+    ///
+    /// * `chunk_words` - Maximum number of words per chunk (clamped to at least 1).
+    /// * `chunk_overlap_words` - Number of words to overlap between consecutive
+    ///   chunks (clamped to at most `chunk_words - 1`).
+    ///
+    /// # Returns
+    ///
+    /// Returns a new `WordSplitter` instance.
     pub fn new(chunk_words: usize, chunk_overlap_words: usize) -> Self {
         Self {
             chunk_words: chunk_words.max(1),

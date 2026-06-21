@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+/// Errors that can occur during document I/O, sandbox validation, or RAG operations.
 #[derive(Debug, Error)]
 pub enum DocumentError {
     #[error("IO error: {0}")]
@@ -18,6 +19,7 @@ pub enum DocumentError {
     Rag(String),
 }
 
+/// Errors that can occur during conversation history compaction.
 #[derive(Debug, Error)]
 pub enum CompactError {
     #[error("Model error: {0}")]

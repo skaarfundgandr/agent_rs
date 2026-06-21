@@ -7,8 +7,8 @@ use super::shared::SharedSandbox;
 
 /// Shared-sandbox variant of [`validate_sandboxed_path`].
 ///
-/// Snapshots the current [`SandboxConfig`] from `sandbox` and delegates to
-/// the `&SandboxConfig` version.
+/// Snapshots the current [`super::config::SandboxConfig`] from `sandbox` and
+/// delegates to the `&SandboxConfig` version.
 pub fn validate_sandboxed_path_shared(
     sandbox: &SharedSandbox,
     user_path: &Path,
@@ -29,8 +29,8 @@ pub fn find_containing_root_shared(sandbox: &SharedSandbox, path: &Path) -> Opti
 
 /// Shared-sandbox variant of [`relative_display_path`].
 ///
-/// Snapshots the current [`SandboxConfig`] from `sandbox` and delegates to
-/// the `&SandboxConfig` version.
+/// Snapshots the current [`super::config::SandboxConfig`] from `sandbox` and
+/// delegates to the `&SandboxConfig` version.
 pub fn relative_display_path_shared(sandbox: &SharedSandbox, path: &Path) -> String {
     relative_display_path(&sandbox.snapshot(), path)
 }

@@ -18,7 +18,7 @@ pub struct RagChunkRow {
 /// SQLite-backed store for RAG chunk metadata.
 ///
 /// Holds the canonical `(source, chunk_index, content)` rows. The matching
-/// turbovec vectors live in [`TurboIndex`] and are linked by `id` (the
+/// turbovec vectors live in [`crate::rag::index::TurboIndex`] and are linked by `id` (the
 /// SQLite ROWID, cast to `u64` for turbovec).
 pub struct DocumentStore {
     conn: Connection,

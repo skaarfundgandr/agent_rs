@@ -3,15 +3,22 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// A loaded document with its raw text content and associated metadata.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Document {
+    /// The full text content of the document.
     pub content: String,
+    /// Arbitrary key-value metadata (e.g. source path, file type).
     pub metadata: HashMap<String, String>,
 }
 
+/// A single chunk of text produced by splitting a [`Document`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Chunk {
+    /// The chunk text content.
     pub text: String,
+    /// Metadata inherited from the source document plus chunk-specific keys
+    /// (e.g. `chunk_index`).
     pub metadata: HashMap<String, String>,
 }
 

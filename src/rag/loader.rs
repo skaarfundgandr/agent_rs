@@ -22,6 +22,11 @@ pub trait DocumentLoader {
 pub struct PdfLoader;
 
 impl PdfLoader {
+    /// Creates a new `PdfLoader`.
+    ///
+    /// # Returns
+    ///
+    /// Returns a new `PdfLoader` instance.
     pub fn new() -> Self {
         Self
     }
@@ -52,6 +57,11 @@ impl DocumentLoader for PdfLoader {
 pub struct TextLoader;
 
 impl TextLoader {
+    /// Creates a new `TextLoader`.
+    ///
+    /// # Returns
+    ///
+    /// Returns a new `TextLoader` instance.
     pub fn new() -> Self {
         Self
     }

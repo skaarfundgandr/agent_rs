@@ -28,6 +28,11 @@ pub struct RagSource {
     pub path: PathBuf,
     pub source_type: RagSourceType,
 }
+
+pub struct ChunkingOptions {
+    pub chunk_words: usize,         // default 220
+    pub chunk_overlap_words: usize, // default 40
+}
 ```
 
 ---
@@ -41,8 +46,9 @@ pub trait DocumentLoader {
     fn load(&self, path: &Path) -> Result<Document>;
 }
 ```
-* **`PdfLoader`**: Extracts plain text from `.pdf` files.
-* **`TextLoader`**: Reads plaintext content from `.txt` and `.md` files.
+
+- **`PdfLoader`**: Extracts plain text from `.pdf` files.
+- **`TextLoader`**: Reads plaintext content from `.txt` and `.md` files.
 
 ---
 
@@ -55,8 +61,10 @@ pub trait TextSplitter {
     fn split(&self, document: &Document) -> Vec<Chunk>;
 }
 ```
-* **`WordSplitter`**: Splits document text by word boundaries using a sliding window.
+
+- **`WordSplitter`**: Splits document text by word boundaries using a sliding window.
   - Initialized via `WordSplitter::new(chunk_words: usize, chunk_overlap_words: usize)`.
+  - Default configuration: 220 words per chunk, 40 words overlap.
 
 ---
 
@@ -67,23 +75,23 @@ Persistent, on-disk RAG pipeline backed by SQLite (chunk metadata) and turbovec 
 > **Two on-disk files:** `rag_chunks` (SQLite, metadata + chunk text) and `.tvim` (turbovec, vector index). They must stay in sync; deleting both is the recovery procedure if `open_or_create` errors with "out of sync".
 
 ### Methods
-* **`open_or_create(db_path, index_path, dim, bit_width) -> Result<Self>`**
+- **`open_or_create(db_path, index_path, dim, bit_width) -> Result<Self>`**
   Opens or creates the SQLite database and turbovec index. `dim` is the embedding dimension (must match your embedder); `bit_width` controls turbovec quantization (4 = 4-bit, good default).
-* **`add_source(path, &EmbeddingService<M>) -> Result<usize>`**
+- **`add_source(path, &EmbeddingService<M>) -> Result<usize>`**
   High-level file ingestion: loads, chunks, embeds, and persists. Returns chunk count. File type is selected by extension (`.pdf` → `PdfLoader`, else `TextLoader`).
-* **`add_source_dyn(path, &dyn ErasedEmbedder) -> Result<usize>`**
+- **`add_source_dyn(path, &dyn ErasedEmbedder) -> Result<usize>`**
   Same as `add_source` but accepts a trait object — use with `Arc<dyn ErasedEmbedder>`.
-* **`remove_source(source_name) -> Result<usize>`**
+- **`remove_source(source_name) -> Result<usize>`**
   Drops every chunk whose `source` matches. Returns number removed.
-* **`build(embedder: Arc<dyn ErasedEmbedder>) -> TurboVectorIndex`**
+- **`build(embedder: Arc<dyn ErasedEmbedder>) -> TurboVectorIndex`**
   Returns a rig-compatible `VectorStoreIndex` view sharing the same underlying state.
-* **`save(&index_path) -> Result<()>`**
+- **`save(&index_path) -> Result<()>`**
   Persists the turbovec index to disk.
-* **`commit_pending(&service) -> Result<usize>`**
+- **`commit_pending(&service) -> Result<usize>`**
   Flushes staged (unpersisted) chunks into the turbovec index.
-* **`chunk_count() -> Result<i64>`**
+- **`chunk_count() -> Result<i64>`**
   Number of chunks currently persisted.
-* **`store() -> &Arc<DocumentStore>`** / **`turbo() -> &Arc<RwLock<TurboIndex>>`**
+- **`store() -> &Arc<DocumentStore>`** / **`turbo() -> &Arc<RwLock<TurboIndex>>`**
   Accessors for advanced use.
 
 **Persisted vs staged state:** Chunks inserted via `add_source` are persisted to SQLite immediately. The turbovec index is built in memory and must be flushed with `save()` or `commit_pending()` to survive restarts.
@@ -102,17 +110,23 @@ pub trait ErasedEmbedder: Send + Sync {
 }
 ```
 
+---
+
 ### Example Usage: Building a RAG Index
 
-```rust
+```rust,no_run
 use std::path::Path;
+use std::sync::Arc;
 use agent_rs_lib::agent::embeddings::EmbeddingService;
 use agent_rs_lib::rag::{DocumentLoader, PdfLoader, RagPipeline, WordSplitter};
+use agent_rs_lib::rag::ErasedEmbedder;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // 1. Initialize local fastembed embeddings
-    let service = EmbeddingService::from_fastembed("Xenova/bge-small-en-v1.5".parse()?)?;
+    let service = EmbeddingService::from_fastembed(
+        rig_fastembed::FastembedModel::AllMiniLML6V2,
+    )?;
     let dim = service.ndims();
 
     // 2. Open or create persistent RAG pipeline
@@ -131,7 +145,7 @@ async fn main() -> anyhow::Result<()> {
     pipeline.save(Path::new("rag_data/rag.tvim")).await?;
 
     // 5. Build rig-compatible index for agents
-    let index = pipeline.build(std::sync::Arc::new(service));
+    let _index = pipeline.build(Arc::new(service));
     Ok(())
 }
 ```
