@@ -20,8 +20,6 @@ cargo doc --open               # local API docs
 cargo run --example cli_chatbot # run the CLI chatbot example (requires --features rag)
 ```
 
-!NOTE: Some commands are automatically truncated by `rtk` and `aft` e.g. `cargo test`, `git diff`.
-
 No CI pipeline, no pre-commit hooks, no rustfmt.toml — use `cargo fmt` with defaults.
 
 ## Running the Example
