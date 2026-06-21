@@ -12,3 +12,4 @@ Robust, typed errors used across tools and modules.
 * `SandboxEscape(String)`: Unauthorized path traversal attempt outside the configured sandbox root folder.
 * `PermissionDenied(String)`: Tool execution denied by the configured `PermissionPolicy`.
 * `Rag(String)`: RAG registry errors — duplicate source, source not found, invalid action, or missing required arguments.
+* `Sandbox(String)`: Sandbox invariant violation (e.g. attempting to remove the last remaining root from a `SandboxConfig`).

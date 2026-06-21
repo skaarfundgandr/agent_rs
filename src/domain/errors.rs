@@ -10,6 +10,8 @@ pub enum DocumentError {
     UnsupportedExtension(String),
     #[error("Sandbox escape error: {0}")]
     SandboxEscape(String),
+    #[error("Sandbox error: {0}")]
+    Sandbox(String),
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
     #[error("RAG error: {0}")]

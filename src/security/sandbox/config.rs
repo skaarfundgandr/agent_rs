@@ -137,6 +137,80 @@ impl SandboxConfig {
     pub fn is_empty(&self) -> bool {
         self.roots.is_empty()
     }
+
+    /// Adds a single root to the sandbox configuration.
+    ///
+    /// The root is canonicalized; if its canonical form already exists, the
+    /// add is a no-op (idempotent).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DocumentError::Io`] if the root cannot be canonicalized.
+    pub fn add_root<P: AsRef<Path>>(&mut self, root: P) -> Result<(), DocumentError> {
+        let new_canonical = root.as_ref().canonicalize().map_err(DocumentError::Io)?;
+        if self.canonical_roots.iter().any(|r| r == &new_canonical) {
+            return Ok(());
+        }
+        self.roots.push(root.as_ref().to_path_buf());
+        self.canonical_roots.push(new_canonical);
+        Ok(())
+    }
+
+    /// Adds multiple roots atomically (per-item atomicity).
+    ///
+    /// A successful `add_root` mutates before the next item is validated.
+    /// A failing item after a successful one leaves partial state.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first [`DocumentError::Io`] encountered; partial
+    /// additions from prior successful items remain.
+    pub fn add_roots<I, P>(&mut self, roots: I) -> Result<(), DocumentError>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        for root in roots {
+            self.add_root(root)?;
+        }
+        Ok(())
+    }
+
+    /// Removes a root from the sandbox configuration.
+    ///
+    /// The root is canonicalized for lookup; if not found, the call is a
+    /// no-op (idempotent on miss). Removing the last root is an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DocumentError::Io`] if the root cannot be canonicalized.
+    /// Returns [`DocumentError::Sandbox`] if it is the last remaining root.
+    pub fn remove_root<P: AsRef<Path>>(&mut self, root: P) -> Result<(), DocumentError> {
+        let target = root.as_ref().canonicalize().map_err(DocumentError::Io)?;
+        let Some(i) = self.canonical_roots.iter().position(|r| r == &target) else {
+            return Ok(());
+        };
+        if self.roots.len() == 1 {
+            return Err(DocumentError::Sandbox(
+                "cannot remove the last sandbox root".to_string(),
+            ));
+        }
+        self.roots.remove(i);
+        self.canonical_roots.remove(i);
+        Ok(())
+    }
+
+    /// Checks whether a root exists in the sandbox configuration.
+    ///
+    /// The root is canonicalized for comparison.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DocumentError::Io`] if the root cannot be canonicalized.
+    pub fn contains_root<P: AsRef<Path>>(&self, root: P) -> Result<bool, DocumentError> {
+        let target = root.as_ref().canonicalize().map_err(DocumentError::Io)?;
+        Ok(self.canonical_roots.iter().any(|r| r == &target))
+    }
 }
 
 impl Default for SandboxConfig {
