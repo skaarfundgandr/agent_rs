@@ -13,3 +13,12 @@ Robust, typed errors used across tools and modules.
 * `PermissionDenied(String)`: Tool execution denied by the configured `PermissionPolicy`.
 * `Rag(String)`: RAG registry errors — duplicate source, source not found, invalid action, or missing required arguments.
 * `Sandbox(String)`: Sandbox invariant violation (e.g. attempting to remove the last remaining root from a `SandboxConfig`).
+
+## `ReActError`
+
+Returned from `ReActLoop::execute()`. Lives in `src/domain/errors.rs`.
+
+* `MaxCyclesExceeded { cycles: usize }` — the loop reached `max_cycles` without a final answer.
+* `ToolExecution { tool: String, source: Box<dyn Error + Send + Sync> }` — a tool call returned an error; the `result` field of the corresponding `Observation` will carry the error text (`is_error: true`).
+* `Model(String)` — completion error (rig's `PromptError` formatted as a string).
+* `NoToolCallsAndNoFinalAnswer { cycle: usize }` — the assistant response contained neither a tool call nor a "Final Answer:" sentinel.
