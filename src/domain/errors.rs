@@ -25,3 +25,20 @@ pub enum CompactError {
     #[error("Model error: {0}")]
     Model(String),
 }
+
+/// Errors that can occur during a ReAct loop execution.
+#[derive(Debug, Error)]
+pub enum ReActError {
+    #[error("ReAct loop exceeded max_cycles ({cycles}) without a final answer")]
+    MaxCyclesExceeded { cycles: usize },
+    #[error("Tool execution error for '{tool}': {source}")]
+    ToolExecution {
+        tool: String,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+    #[error("Model error: {0}")]
+    Model(String),
+    #[error("Model returned neither a tool call nor a final answer in cycle {cycle}")]
+    NoToolCallsAndNoFinalAnswer { cycle: usize },
+}
