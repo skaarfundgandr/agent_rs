@@ -7,3 +7,9 @@ pub mod embeddings;
 pub mod mcp_client;
 #[cfg(test)]
 pub mod mcp_registry;
+#[cfg(feature = "opentelemetry")]
+pub mod observability_tests;
+#[cfg(feature = "opentelemetry")]
+pub mod react_otel_tests;
+#[cfg(test)]
+pub mod react_tests;
