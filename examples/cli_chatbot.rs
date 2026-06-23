@@ -39,6 +39,8 @@ mod rag_main {
         // ---------- env-var configuration ----------
         let chat_model_name =
             env::var("CHAT_MODEL").unwrap_or_else(|_| "google/gemma-4-e4b".to_string());
+        let chat_base_url =
+            env::var("CHAT_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:1234/v1".to_string());
         let fastembed_model_name =
             env::var("FASTEMBED_MODEL").unwrap_or_else(|_| "Xenova/bge-small-en-v1.5".to_string());
         let rag_top_k = env::var("RAG_TOP_K")
@@ -59,9 +61,24 @@ mod rag_main {
             std::fs::create_dir_all(parent)?;
         }
 
+        // ---------- startup banner ----------
+        println!("--- cli_chatbot configuration ---");
+        println!("  CHAT_BASE_URL    = {chat_base_url}");
+        println!("  CHAT_MODEL       = {chat_model_name}");
+        println!("  FASTEMBED_MODEL  = {fastembed_model_name}");
+        println!("  RAG_DB_PATH      = {rag_db_path}");
+        println!("  RAG_INDEX_PATH   = {rag_index_path}");
+        if chat_base_url == "http://127.0.0.1:1234/v1" {
+            println!(
+                "  WARNING: CHAT_BASE_URL is the local default (127.0.0.1:1234). \
+                 Set CHAT_BASE_URL in .env or the environment to point at your provider."
+            );
+        }
+        println!("-------------------------------");
+
         // ---------- chat client (OpenAI-compatible local endpoint) ----------
-        let chat_client = openai::Client::builder()
-            .base_url("http://127.0.0.1:1234/v1")
+        let chat_client = openai::CompletionsClient::builder()
+            .base_url(chat_base_url)
             .api_key(env::var("API_KEY").expect("Missing API_KEY env var"))
             .build()?;
 
