@@ -12,4 +12,6 @@ pub mod observability_tests;
 #[cfg(feature = "opentelemetry")]
 pub mod react_otel_tests;
 #[cfg(test)]
+pub mod react_recovery_tests;
+#[cfg(test)]
 pub mod react_tests;
