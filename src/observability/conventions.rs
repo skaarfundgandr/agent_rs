@@ -9,6 +9,7 @@ pub const LANGSMITH_SPAN_KIND: &str = "langsmith.span.kind";
 pub const OPENINFERENCE_SPAN_KIND: &str = "openinference.span.kind";
 pub const INPUT_VALUE: &str = "input.value";
 pub const OUTPUT_VALUE: &str = "output.value";
+pub const GEN_AI_REASONING: &str = "gen_ai.content.reasoning";
 
 /// LangSmith run-typing values for `langsmith.span.kind`.
 pub const KIND_LLM: &str = "llm";

@@ -1,4 +1,5 @@
 use crate::domain::agent::{Action, Observation, ReActTrace, Thought};
+use crate::domain::errors::ReActError;
 
 /// Trait for observing per-cycle lifecycle events of a ReAct loop.
 ///
@@ -15,6 +16,8 @@ pub trait ReActSpanEmitter: Send + Sync {
     fn emit_action(&self, _action: &Action) {}
     /// Called after a tool has been executed and the observation recorded.
     fn emit_observation(&self, _observation: &Observation) {}
+    /// Called when the loop terminates with an error.
+    fn emit_error(&self, _err: &ReActError) {}
 }
 
 /// Default no-op span emitter used when none is supplied.

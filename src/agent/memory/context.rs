@@ -134,12 +134,25 @@ impl<
                 None => default_compaction_prompt_formatter(&history_text),
             };
 
-            let summary = self
+            let summary = match self
                 .compaction_model
                 .prompt(&compaction_prompt)
                 .into_future()
-                .instrument(compaction_span)
-                .await?;
+                .instrument(compaction_span.clone())
+                .await
+            {
+                Ok(sum) => sum,
+                Err(e) => {
+                    #[cfg(feature = "opentelemetry")]
+                    {
+                        use tracing_opentelemetry::OpenTelemetrySpanExt;
+                        compaction_span
+                            .set_status(opentelemetry::trace::Status::error(e.to_string()));
+                    }
+                    tracing::error!(error = %e, "conversation history compaction failed");
+                    return Err(e);
+                }
+            };
 
             let compacted_tokens = count_string_tokens(&summary);
             tracing::info!(

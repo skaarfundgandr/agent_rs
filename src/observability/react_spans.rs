@@ -9,7 +9,10 @@
 
 use crate::agent::react::ReActSpanEmitter;
 use crate::domain::agent::{Action, Observation, ReActTrace, Thought};
+use crate::domain::errors::ReActError;
 use crate::observability::conventions::*;
+use opentelemetry::trace::Status;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// OTel-aware [`ReActSpanEmitter`] that records LangSmith run-typing
 /// attributes on the current `tracing` span.
@@ -18,6 +21,13 @@ pub struct LangSmithReActEmitter;
 
 impl ReActSpanEmitter for LangSmithReActEmitter {
     fn emit_thought(&self, thought: &Thought) {
+        let span = tracing::Span::current();
+        span.record(LANGSMITH_SPAN_KIND, KIND_CHAIN);
+        span.record(OPENINFERENCE_SPAN_KIND, "CHAIN");
+        span.record(GEN_AI_OPERATION_NAME, "reasoning");
+        span.record(GEN_AI_REASONING, thought.reasoning.as_str());
+        span.record("react.cycle", thought.cycle as u64);
+
         tracing::info!(
             cycle = thought.cycle,
             thought = %thought.reasoning,
@@ -60,5 +70,28 @@ impl ReActSpanEmitter for LangSmithReActEmitter {
         span.record(OUTPUT_VALUE, observation.result.as_str());
         span.record("react.is_error", observation.is_error);
         span.record("react.duration_ms", observation.duration.as_millis() as u64);
+
+        if observation.is_error {
+            span.set_status(Status::error(format!(
+                "Tool '{}' execution failed: {}",
+                observation.tool_name, observation.result
+            )));
+            tracing::error!(
+                tool_name = %observation.tool_name,
+                error = %observation.result,
+                "react tool call error"
+            );
+        }
+    }
+
+    fn emit_error(&self, err: &ReActError) {
+        let span = tracing::Span::current();
+        span.record("react.is_error", true);
+        span.set_status(Status::error(err.to_string()));
+
+        tracing::error!(
+            error = %err,
+            "react loop execution error"
+        );
     }
 }
