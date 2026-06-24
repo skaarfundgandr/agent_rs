@@ -98,7 +98,9 @@ Internal tools (filesystem, RAG, compact) are added to the same tool vec in `cli
 
 ## Testing
 
-Tests in `tests/` (15 files): `agents_tests.rs`, `document_store.rs`, `embeddings.rs`, `manage_rag.rs`, `mcp_client.rs`, `mcp_registry.rs`, `observability_tests.rs` (feature-gated on `opentelemetry`), `permission.rs`, `rag.rs`, `react_otel_tests.rs` (feature-gated on `opentelemetry`), `react_tests.rs`, `sandbox_tests.rs`, `shared_sandbox.rs`, `tool_tests.rs`, `turbo_index.rs` (plus `mod.rs`).
+All tests must reside in the `tests/` directory rather than inside `src/`. No unit tests should be placed inline within `src/` to keep production code clean.
+
+Tests in `tests/` (17 files): `agents_tests.rs`, `document_store.rs`, `embeddings.rs`, `manage_rag.rs`, `mcp_client.rs`, `mcp_registry.rs`, `observability_tests.rs` (feature-gated on `opentelemetry`), `permission.rs`, `rag.rs`, `react_otel_tests.rs` (feature-gated on `opentelemetry`), `react_recovery_tests.rs`, `react_tests.rs`, `sandbox_tests.rs`, `shared_sandbox.rs`, `tool_tests.rs`, `turbo_index.rs` (plus `mod.rs`).
 - `test_read_pdf` in `tool_tests.rs` is `#[ignore]` — needs a local PDF file, will fail in CI.
 - Tool tests use `tempfile` for sandbox isolation.
 - MCP tests need live MCP servers or will fail — not safe to run blindly.
@@ -129,4 +131,3 @@ Tests in `tests/` (15 files): `agents_tests.rs`, `document_store.rs`, `embedding
 - `docs/api/` — API reference docs (split by section). See [API Reference Overview](docs/api/README.md)
 - `docs/migration-0.2.0.md` — migration guide
 - `docs/diagrams/` — architecture diagrams (C4, class, sequence, state, module dependency)
-- `ROADMAP.md` — project roadmap and known gaps
