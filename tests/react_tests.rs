@@ -1,8 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_rs_lib::agent::react::{
-    REACT_PREAMBLE, ReActLoop, ReActSpanEmitter, detect_final_answer,
-};
+use agent_rs_lib::agent::ReActExt;
+use agent_rs_lib::agent::react::{REACT_PREAMBLE, ReActSpanEmitter, detect_final_answer};
 use agent_rs_lib::domain::agent::{
     Action, FinalAnswer, Observation, ReActStep, ReActTrace, Thought,
 };
@@ -155,16 +154,48 @@ fn react_preamble_is_nonempty_and_under_300_tokens() {
 }
 
 #[test]
-fn react_loop_builder_defaults() {
+fn test_react_builder_defaults() {
     let agent = make_test_agent();
-    let mut history: Vec<rig_core::message::Message> = Vec::new();
-    let loop_builder = ReActLoop::builder(&agent, "hello", &mut history);
-
-    assert_eq!(loop_builder.max_cycles, 20);
+    let builder = agent.react();
+    assert_eq!(builder.max_cycles, 20);
     assert!(
-        loop_builder.react_preamble.is_none(),
+        builder.react_preamble.is_none(),
         "react_preamble should be None by default"
     );
+}
+
+#[test]
+fn test_builder_with_history_seeds_built_history() {
+    let agent = make_test_agent();
+    let msg = rig_core::message::Message::user("prior context");
+    let built = agent.react().with_history(vec![msg.clone()]).build();
+    let history = built.history();
+    assert_eq!(history.len(), 1);
+}
+
+#[test]
+#[should_panic(expected = "threshold")]
+fn test_builder_compaction_panics_without_threshold() {
+    let agent = make_test_agent();
+    let _ = agent.react().with_compaction().build(); // panics
+}
+
+#[test]
+fn test_built_prompt_does_not_mutate_history() {
+    let agent = make_test_agent();
+    let built = agent.react().build();
+    let before = built.history().len();
+    // .prompt() will fail (no real LLM), but it shouldn't mutate history
+    let _ = built.prompt("test"); // ignore error
+    assert_eq!(built.history().len(), before);
+}
+
+#[test]
+fn test_built_chat_accessors() {
+    let agent = make_test_agent();
+    let built = agent.react().max_cycles(10).build();
+    assert_eq!(built.max_cycles(), 10);
+    assert!(built.history().is_empty());
 }
 
 #[test]

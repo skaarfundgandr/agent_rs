@@ -1,10 +1,26 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+use agent_rs_lib::agent::ManagedExt;
 use agent_rs_lib::agent::memory::context::ContextManager;
 use agent_rs_lib::agent::memory::tokenizer::{count_messages_tokens, count_string_tokens};
 use rig_core::OneOrMany;
+use rig_core::client::CompletionClient;
 use rig_core::completion::{Prompt, PromptError};
 use rig_core::message::{AssistantContent, Message, UserContent};
 use rig_core::wasm_compat::WasmCompatSend;
+
+fn make_test_agent() -> rig_core::agent::Agent<
+    rig_core::providers::openai::responses_api::ResponsesCompletionModel<reqwest::Client>,
+> {
+    let client = rig_core::providers::openai::Client::builder()
+        .base_url("http://127.0.0.1:1")
+        .api_key("test")
+        .build()
+        .expect("build openai client for test");
+    client
+        .agent(rig_core::providers::openai::GPT_4O)
+        .preamble("test preamble")
+        .build()
+}
 
 #[derive(Clone)]
 struct MockCompactor {
@@ -175,13 +191,45 @@ async fn test_context_manager_custom_compaction_prompt() {
     }
 }
 
+#[test]
+fn test_managed_builder_defaults() {
+    let agent = make_test_agent();
+    let built = agent.managed().build();
+    assert!(built.history().is_empty());
+}
+
+#[test]
+fn test_managed_builder_with_history_seeds() {
+    let agent = make_test_agent();
+    let msg = Message::user("hello");
+    let built = agent.managed().with_history(vec![msg.clone()]).build();
+    assert_eq!(built.history().len(), 1);
+}
+
 #[tokio::test]
-async fn test_context_managed_chat_stream() {
-    use agent_rs_lib::agent::agents::ContextManagedChatStream;
+async fn test_managed_prompt_does_not_mutate_history() {
+    let agent = make_test_agent();
+    let built = agent.managed().build();
+    let before = built.history().len();
+    // .prompt() will fail (no real LLM), but history should remain unchanged.
+    let _ = built.prompt("test").await;
+    assert_eq!(built.history().len(), before);
+}
+
+#[test]
+#[should_panic(expected = "threshold")]
+fn test_managed_builder_compaction_panics_without_threshold() {
+    let agent = make_test_agent();
+    let _ = agent.managed().with_compaction().build(); // panics
+}
+
+#[tokio::test]
+async fn test_managed_stream_appends_history() {
+    use agent_rs_lib::agent::ManagedStream;
     use futures::StreamExt;
     use rig_core::agent::MultiTurnStreamItem;
     use rig_core::completion::Usage;
-    use tokio::sync::oneshot;
+    use std::sync::{Arc, Mutex};
 
     let final_history = vec![
         Message::User {
@@ -200,15 +248,14 @@ async fn test_context_managed_chat_stream() {
     );
 
     let inner_stream = futures::stream::iter(vec![Ok(final_item)]);
-
-    let (tx, rx) = oneshot::channel();
-    let mut managed_stream = ContextManagedChatStream::new(inner_stream, tx, vec![]);
+    let history = Arc::new(Mutex::new(Vec::<Message>::new()));
+    let mut managed_stream = ManagedStream::new(inner_stream, Some(Arc::clone(&history)));
 
     while let Some(item) = managed_stream.next().await {
         assert!(item.is_ok());
     }
 
-    let updated_history = rx.await.unwrap();
+    let updated_history = history.lock().unwrap();
     assert_eq!(updated_history.len(), 2);
     if let Message::Assistant { content, .. } = &updated_history[1] {
         if let AssistantContent::Text(t) = content.first_ref() {
@@ -222,12 +269,12 @@ async fn test_context_managed_chat_stream() {
 }
 
 #[tokio::test]
-async fn test_context_managed_chat_stream_no_history() {
-    use agent_rs_lib::agent::agents::ContextManagedChatStream;
+async fn test_managed_stream_no_history_no_append() {
+    use agent_rs_lib::agent::ManagedStream;
     use futures::StreamExt;
     use rig_core::agent::MultiTurnStreamItem;
     use rig_core::completion::Usage;
-    use tokio::sync::oneshot;
+    use std::sync::{Arc, Mutex};
 
     let final_item: MultiTurnStreamItem<()> = MultiTurnStreamItem::final_response(
         OneOrMany::one(AssistantContent::text("Hi there!")),
@@ -235,15 +282,15 @@ async fn test_context_managed_chat_stream_no_history() {
     );
 
     let inner_stream = futures::stream::iter(vec![Ok(final_item)]);
-
-    let (tx, rx) = oneshot::channel();
-    let mut managed_stream = ContextManagedChatStream::new(inner_stream, tx, vec![]);
+    let history = Arc::new(Mutex::new(Vec::<Message>::new()));
+    let mut managed_stream = ManagedStream::new(inner_stream, Some(Arc::clone(&history)));
 
     while let Some(item) = managed_stream.next().await {
         assert!(item.is_ok());
     }
 
-    let updated_history = rx.await.unwrap();
+    // FinalResponse without history() => no append
+    let updated_history = history.lock().unwrap();
     assert!(updated_history.is_empty());
 }
 
