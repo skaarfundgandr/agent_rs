@@ -56,12 +56,24 @@ src/
 ├── security/
 │   └── sandbox.rs       # SandboxConfig, SharedSandbox, validate_sandboxed_path, find_containing_root, relative_display_path (+ _shared variants)
 ├── agent/
-│   ├── embeddings.rs    # EmbeddingService<M> — generic over Rig EmbeddingModel
-│   ├── permission.rs    # PermissionPolicy enum + PermissionGate trait
-│   ├── memory/          # ContextManagedAgent — token estimation + auto-summarize
-│   ├── model/           # execute_chat / execute_stream_chat helpers
-│   ├── tools/           # Read/Write/Grep/Glob/ListDir/ManageRag/Compact tools
-│   └── react.rs         # ReActLoop, ReActExt, ReActSpanEmitter trait, REACT_PREAMBLE
+│   ├── agents.rs         # strip_reasoning_from_history
+│   ├── managed.rs        # ManagedExt, ManagedBuilder, BuiltManagedAgent, ManagedStream
+│   ├── embeddings.rs     # EmbeddingService<M> — generic over Rig EmbeddingModel
+│   ├── permission.rs     # PermissionPolicy enum + PermissionGate trait
+│   ├── memory/           # ContextManager — token estimation + auto-summarize
+│   ├── model/            # execute_chat / execute_stream_chat helpers
+│   ├── tools/            # Read/Write/Grep/Glob/ListDir/ManageRag/Compact tools
+│   ├── utils.rs          # Shared helpers (lock_mutex)
+│   └── react/            # ReAct loop: builder → built → streaming
+│       ├── builder.rs   # ReActBuilder, NoCompaction, CompactionConfig typestates
+│       ├── built.rs     # BuiltReAct — prompt(), chat(), run_loop()
+│       ├── streaming.rs # ReActStream, ReActStreamItem — async Stream impl
+│       ├── constants.rs # REACT_PREAMBLE
+│       ├── ext.rs       # ReActExt trait
+│       ├── emitter.rs   # ReActSpanEmitter trait, NoopSpanEmitter
+│       ├── helpers.rs   # detect_final_answer, tool_error_to_string
+│       ├── callbacks.rs # ThoughtCb, ActionCb, ObservationCb, FinalCb, ErrorCb
+│       └── mod.rs       # Re-exports
 ├── mcp/
 │   ├── client.rs        # McpClient — config → connect → tools
 │   └── registry.rs      # McpRegistry — stdio/HTTP transport, tool dedup, keepalive

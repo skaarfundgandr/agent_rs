@@ -2,42 +2,68 @@
 
 Automates history size management to prevent context window overflows and excessive token costs.
 
-> **Runtime reference:** See the [history compaction flowchart](../diagrams/flowchart.md) for the compaction algorithm, the [runtime sequence diagram](../diagrams/sequence-diagram.md) for how context management interacts with the chat loop, and the [class diagram](../diagrams/class-diagram.md) for `ContextManagedAgent` and `AgentContextExt`.
+> **Runtime reference:** See the [history compaction flowchart](../diagrams/flowchart.md) for the compaction algorithm, the [runtime sequence diagram](../diagrams/sequence-diagram.md) for how context management interacts with the chat loop, and the [class diagram](../diagrams/class-diagram.md) for `BuiltManagedAgent` and `ManagedExt`.
 
 ---
 
-## `ContextManagedAgent<M, C, P>`
+## `BuiltManagedAgent<M, P, C>`
 
-Wraps an `Agent<M, P>` (where `M: CompletionModel` and `P: PromptHook<M>`) and a compaction model `C: Prompt` to automatically summarize conversation history when it crosses a token threshold, calculated via the `cl100k_base` BPE tokenizer by default.
+A fully configured managed agent, ready to run prompts and chats. Constructed by calling [`.build()`](ManagedBuilder::build) on a [`ManagedBuilder`].
+
+Wraps an `Agent<M, P>` (where `M: CompletionModel` and `P: PromptHook<M>`) with shared conversation history (`Arc<Mutex<Vec<Message>>>`) and an optional compaction model `C: Prompt` that automatically summarizes history when it crosses a token threshold.
 
 ### Methods
-- **`async chat(&self, prompt: &str, history: &mut Vec<Message>) -> Result<String, PromptError>`**
-  Executes an LLM chat turn. Summarizes conversation history in-place if threshold is crossed, then appends the current user prompt and assistant response.
-- **`async chat_with_owned_history(&self, prompt: &str, history: Vec<Message>) -> Result<(String, Vec<Message>), PromptError>`**
-  Executes an LLM chat turn using owned history, returning the updated history rather than mutating it in-place.
-- **`async stream_chat(&self, prompt: &str, history: &[Message]) -> Result<(ContextManagedChatStream<impl Stream, M::StreamingResponse>, oneshot::Receiver<Vec<Message>>), PromptError>`**
-  Executes a streaming LLM chat turn. Compacts history if needed, returns a stream wrapper yielding elements, and a oneshot `Receiver` that resolves to the updated history once the stream is fully consumed.
-- **`async stream_chat_with_owned_history(&self, prompt: &str, history: Vec<Message>) -> Result<(ContextManagedChatStream<impl Stream, M::StreamingResponse>, oneshot::Receiver<Vec<Message>>), PromptError>`**
-  Executes a streaming LLM chat turn using owned history.
+- **`history(&self) -> Vec<Message>`**
+  Returns a snapshot of the current conversation history.
+- **`async prompt(&self, msg: impl Into<String>) -> Result<String, PromptError>`**
+  Executes an LLM chat turn **without** mutating shared history. Returns the response text. When compaction is enabled (with-compaction variant), history is compacted before the call.
+- **`async chat(&self, msg: impl Into<String>) -> Result<String, PromptError>`**
+  Executes an LLM chat turn **with** history mutation on success. On success, the shared history is replaced with the new working history. On error, the shared history is not modified.
+- **`async stream_prompt(&self, msg: impl Into<String>) -> Result<ManagedStream<R>, PromptError>`**
+  Streams a chat turn **without** mutating shared history.
+- **`async stream_chat(&self, msg: impl Into<String>) -> Result<ManagedStream<R>, PromptError>`**
+  Streams a chat turn **with** history mutation on completion. The shared history is updated with the final accumulated messages when the stream finishes.
 
-  > [!NOTE]
-  > **Thought / Thinking Tokens:** The returned stream (`ContextManagedChatStream`) does not filter or modify the elements yielded by the underlying completion model. Therefore, any thought, reasoning, or thinking tokens produced by the model are preserved and passed through to the consumer (as part of `MultiTurnStreamItem::StreamAssistantItem`).
-- **`with_token_estimator(mut self, estimator: fn(&[Message]) -> usize) -> Self`**
-  Registers a custom token estimator callback to replace the default `cl100k_base` token counting.
-- **`with_compaction_prompt_formatter(mut self, formatter: fn(&str) -> String) -> Self`**
-  Registers a custom prompt formatter to format the compaction request sent to the compaction model.
-- **`agent(&self) -> &Agent<M, P>`**
-  Returns a reference to the inner wrapped `Agent`.
+> [!NOTE]
+> **With-compaction variants:** When built with `.with_compaction()`, additional methods are available: `prompt_compact()`, `chat_compact()`, `stream_prompt_compact()`, `stream_chat_compact()`. These compact the history before calling the LLM.
 
 ---
 
-## `ContextManagedChatStream<S, R>`
+## `ManagedBuilder<'a, M, P, CompState>`
 
-A stream wrapper for streaming responses from a context-managed agent. Once the stream is polled to completion, the updated conversation history (including the final accumulated model response) is sent to the oneshot channel to be retrieved by the caller.
+Builder for a managed agent. Constructed via [`ManagedExt::managed`].
 
 ### Methods
-- **`new(inner: S, history_tx: oneshot::Sender<Vec<Message>>, original_history: Vec<Message>) -> Self`**
-  Creates a new `ContextManagedChatStream` wrapping an underlying stream, a oneshot sender, and the conversation history snapshot to merge into the final history.
+- **`with_history(self, history: Vec<Message>) -> Self`**
+  Seeds the initial conversation history.
+- **`with_compaction(self) -> ManagedBuilder<'a, M, P, CompactionConfig<Agent<M, P>>>`**
+  Enables automatic context compaction. The compaction model defaults to a clone of the agent itself.
+- **`build(self) -> BuiltManagedAgent<M, P, ()>`**
+  Builds the agent without compaction.
+
+When compaction is enabled, additional methods are available on `ManagedBuilder<'a, M, P, CompactionConfig<C>>`:
+- **`threshold(self, n: usize) -> Self`** — Sets the compaction threshold (must be > 0).
+- **`compaction_model<NewC: Prompt>(self, model: NewC) -> Self`** — Replaces the compaction model.
+- **`compaction_prompt(self, formatter: fn(&str) -> String) -> Self`** — Sets a custom compaction prompt formatter.
+- **`tokenizer(self, estimator: fn(&[Message]) -> usize) -> Self`** — Sets a custom token estimator.
+- **`build(self) -> BuiltManagedAgent<M, P, C>`** — Builds the agent with compaction. Panics if threshold was not set.
+
+---
+
+## `ManagedStream<R>`
+
+A stream wrapper for a managed agent chat session. Once the stream finishes and yields the `FinalResponse`, the shared history (if provided) is updated with the final accumulated messages.
+
+Implements `futures::Stream<Item = Result<MultiTurnStreamItem<R>, StreamingError>>`.
+
+---
+
+## `ManagedExt`
+
+Extension trait implemented for standard Rig `Agent<M, P>` structs to start building a managed agent.
+
+- **`fn managed(&self) -> ManagedBuilder<'_, M, P, NoCompaction>`**
+  Entry point for building a managed agent.
 
 ---
 
@@ -81,17 +107,32 @@ Located in `agent::model::chat`.
 
 ---
 
-## `AgentContextExt`
-
-Extension trait implemented for standard Rig `Agent<M, P>` structs to easily wrap them in a context management layer.
-
-- **`with_compaction<C: Prompt>(self, threshold: usize, compaction_model: C) -> ContextManagedAgent<M, C, P>`**
-  Wraps the standard Rig agent in a `ContextManagedAgent` using the specified token threshold and compaction model.
-
-### Example Usage: Context Compaction
+### Example Usage: Basic Chat
 
 ```rust,no_run
-use agent_rs_lib::agent::agents::AgentContextExt;
+use agent_rs_lib::agent::ManagedExt;
+use rig_core::message::Message;
+
+# async fn example() -> Result<(), rig_core::completion::PromptError> {
+# let openai = todo!(); // your Rig client
+let chat_agent = openai.agent("gpt-5").build();
+
+// Build a managed agent with shared history
+let managed = chat_agent.managed().build();
+
+let response = managed.chat("Hello, world!").await?;
+println!("Response: {}", response);
+
+// History is automatically updated after chat()
+let history = managed.history();
+# Ok(())
+# }
+```
+
+### Example Usage: With Context Compaction
+
+```rust,no_run
+use agent_rs_lib::agent::ManagedExt;
 use rig_core::message::Message;
 
 # async fn example() -> Result<(), rig_core::completion::PromptError> {
@@ -99,53 +140,46 @@ use rig_core::message::Message;
 let chat_agent = openai.agent("gpt-5").build();
 let compaction_agent = openai.agent("gpt-5-mini").build();
 
-// Wrap the chat agent to automatically compact context when it exceeds ~2000 tokens
-let managed_agent = chat_agent.with_compaction(2000, compaction_agent);
+// Build with compaction enabled at ~2000 token threshold
+let managed = chat_agent
+    .managed()
+    .with_compaction()
+    .threshold(2000)
+    .compaction_model(compaction_agent)
+    .build();
 
-let mut history = vec![];
-let response = managed_agent.chat("What were my previous requests?", &mut history).await?;
+let response = managed.chat_compact("What were my previous requests?").await?;
 # Ok(())
 # }
 ```
 
-### Example Usage: Streaming Chat & Thought Tokens
+### Example Usage: Streaming Chat
 
 ```rust,no_run
-use agent_rs_lib::agent::agents::AgentContextExt;
-use rig_core::message::Message;
+use agent_rs_lib::agent::ManagedExt;
 use rig_core::agent::MultiTurnStreamItem;
 use futures::StreamExt;
 
 # async fn example() -> Result<(), rig_core::completion::PromptError> {
 # let openai = todo!();
 let chat_agent = openai.agent("gpt-5").build();
-let compaction_agent = openai.agent("gpt-5-mini").build();
+let managed = chat_agent.managed().build();
 
-// Wrap the agent with compaction enabled
-let managed_agent = chat_agent.with_compaction(2000, compaction_agent);
-
-let history = vec![];
-
-// Start streaming chat turn
-let (mut stream, rx) = managed_agent.stream_chat("Explain quantum computing.", &history).await?;
+let mut stream = managed.stream_chat("Explain quantum computing.").await?;
 
 while let Some(chunk) = stream.next().await {
     match chunk {
         Ok(MultiTurnStreamItem::StreamAssistantItem(content)) => {
-            // content can be standard text chunks or thought/reasoning tokens
-            println!("Received assistant chunk: {:?}", content);
+            println!("Received chunk: {:?}", content);
         }
         Ok(MultiTurnStreamItem::FinalResponse(response)) => {
-            println!("Streaming finished! Final response: {}", response.choice);
+            println!("Streaming finished!");
         }
         Err(err) => {
             eprintln!("Error in stream: {:?}", err);
         }
     }
 }
-
-// Retrieve the updated history containing the final response
-let updated_history = rx.await?;
 # Ok(())
 # }
 ```
@@ -169,13 +203,7 @@ Assistant messages whose content consists entirely of reasoning are dropped from
 ```rust,no_run
 use agent_rs_lib::agent;
 
-// Stream yields reasoning for live display — not affected by this function
-let (stream, rx) = agent.stream_chat(prompt, &history).await?;
-let display_history = consume_chat_stream(stream, rx, channel).await?;
-
-// Strip reasoning before persisting
 let persisted_history = agent::strip_reasoning_from_history(display_history);
-repo.save_session_history(session_id, &persisted_history)?;
 ```
 
 The function is available at:

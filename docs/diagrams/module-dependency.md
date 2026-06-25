@@ -30,11 +30,13 @@ graph LR
     subgraph agent["src/agent/"]
         agent_mod["mod.rs"]
         embeddings["embeddings.rs (cfg rag)<br/>EmbeddingService&lt;M&gt;"]
-        react["react.rs<br/>ReActLoop, ReActExt<br/>ReActSpanEmitter, REACT_PREAMBLE"]
+        react["react/<br/>ReActBuilder, BuiltReAct<br/>ReActExt, ReActSpanEmitter<br/>REACT_PREAMBLE, ReActStream"]
 
         subgraph memory["memory/"]
-            context["context.rs<br/>ContextManagedAgent&lt;M,C&gt;<br/>AgentContextExt"]
+            context["context.rs<br/>ContextManager&lt;C&gt;"]
         end
+
+        managed["managed.rs<br/>ManagedExt, ManagedBuilder<br/>BuiltManagedAgent, ManagedStream"]
 
         subgraph tools["tools/"]
             document["document.rs<br/>ReadDocumentTool, WriteDocumentTool"]

@@ -16,7 +16,7 @@ Robust, typed errors used across tools and modules.
 
 ## `ReActError`
 
-Returned from `ReActLoop::execute()`. Lives in `src/domain/errors.rs`.
+Returned from `BuiltReAct::prompt()` / `BuiltReAct::chat()`. Lives in `src/domain/errors.rs`.
 
 * `MaxCyclesExceeded { cycles: usize }` — the loop reached `max_cycles` without a final answer.
 * `ToolExecution { tool: String, source: Box<dyn Error + Send + Sync> }` — a tool call returned an error; the `result` field of the corresponding `Observation` will carry the error text (`is_error: true`).

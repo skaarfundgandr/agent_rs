@@ -78,7 +78,7 @@ flowchart TB
         end
 
         subgraph Memory ["Memory & Context Management"]
-            ctx["ContextManagedAgent<br/><small>memory/context.rs</small><br/><small>Auto-compact chat history</small>"]:::component
+            ctx["BuiltManagedAgent<br/><small>managed.rs</small><br/><small>Auto-compact chat history</small>"]:::component
             compact["CompactTool&lt;M&gt;<br/><small>tools/context.rs</small><br/><small>Text summarization</small>"]:::component
         end
 

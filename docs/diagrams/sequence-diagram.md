@@ -108,6 +108,6 @@ sequenceDiagram
         Agent-->>User: text response
         deactivate Agent
 
-        Note over Agent: ContextManagedAgent auto-compacts<br/>history when threshold exceeded
+        Note over Agent: BuiltManagedAgent auto-compacts<br/>history when threshold exceeded
     end
 ```

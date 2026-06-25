@@ -166,8 +166,8 @@ classDiagram
     }
 
     class RagPipeline {
-        -Arc~RwLock~TurboIndex~~ turbo
-        -Arc~DocumentStore~ store
+        -turbo SharedTurboIndex
+        -store Arc~DocumentStore~
         +open_or_create(db, index, dim, bit_width) Result~Self~
         +add_source(path, service) Result~usize~
         +add_source_dyn(path, embedder) Result~usize~
@@ -177,14 +177,19 @@ classDiagram
         +chunk_count() Result~i64~
     }
 
+    class EmbeddingVector {
+        <<type alias>>
+        Vec~f64~
+    }
+
     class EmbeddingService~M~ {
-        -M model
+        -model M
         +new(model) Self
         +ndims() usize
         +max_documents() usize
-        +embed_text(text) Vec~f64~
-        +embed_texts(texts) List~Vec~f64~~
-        +embed_document(doc) List~Vec~f64~~
+        +embed_text(text) EmbeddingVector
+        +embed_texts(texts) List~EmbeddingVector~
+        +embed_document(doc) List~EmbeddingVector~
     }
 
     class DocumentError {
@@ -209,6 +214,9 @@ classDiagram
     RagPipeline --> EmbeddingService : uses
     RagPipeline --> TextSplitter : uses
     RagPipeline *--> Chunk : stores
+
+    note for RagPipeline "SharedTurboIndex = Arc<RwLock<TurboIndex>>"
+    note for EmbeddingVector "EmbeddingVector = Vec<f64>"
 ```
 
 ---
@@ -220,18 +228,34 @@ This diagram outlines the context-managed agent wrapper for conversation compact
 ```mermaid
 classDiagram
     direction TB
-    class ContextManagedAgent~M, C~ {
-        -Agent~M~ inner
-        -usize compaction_threshold
-        -C compaction_model
-        -Option~Estimator~ token_estimator
-        +chat(prompt, history) Response
-        +agent() Agent~M~
+    class BuiltManagedAgent~M, P, C~ {
+        -agent Agent~M~
+        -history SharedHistory
+        -context_manager OptionalContextManager
+        +history() Vec~Message~
+        +prompt(msg) Response
+        +chat(msg) Response
     }
 
-    class AgentContextExt {
+    class ManagedExt {
         <<interface>>
-        +with_compaction(threshold, model) ContextManagedAgent
+        +managed() ManagedBuilder
+    }
+
+    class ManagedBuilder~M, P, CompState~ {
+        -agent Agent~M~
+        -initial_history Vec~Message~
+        -compaction CompState
+        +with_history(history) Self
+        +with_compaction() ManagedBuilder
+        +build() BuiltManagedAgent
+    }
+
+    class CompactionConfig~C~ {
+        +model C
+        +threshold usize
+        +tokenizer fn
+        +compaction_prompt fn
     }
 
     class Tool {
@@ -270,7 +294,11 @@ classDiagram
         +Model(String)
     }
 
-    AgentContextExt ..> ContextManagedAgent : creates
+    ManagedExt ..> ManagedBuilder : creates
+    ManagedBuilder ..> BuiltManagedAgent : build()
+    ManagedBuilder --> CompactionConfig : configures
+
+    note for BuiltManagedAgent "SharedHistory = Arc<Mutex<Vec<Message>>>\nOptionalContextManager = Option<Arc<dyn Any>>"
     
     ReadDocumentTool ..|> Tool
     WriteDocumentTool ..|> Tool
