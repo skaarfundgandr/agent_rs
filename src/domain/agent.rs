@@ -65,3 +65,39 @@ pub enum ReActStep {
     Observation(Observation),
     FinalAnswer(FinalAnswer),
 }
+
+/// A single item yielded by a [`ReActStream`](crate::agent::react::streaming::ReActStream).
+#[derive(Debug, Clone)]
+pub enum ReActStreamItem {
+    /// A new cycle is starting.
+    CycleStart { cycle: usize },
+    /// A streaming text delta from the model's reasoning/thinking.
+    ThoughtDelta { delta: String, cycle: usize },
+    /// The model has emitted a tool call.
+    Action {
+        tool_name: String,
+        args: String,
+        tool_call_id: Option<String>,
+        cycle: usize,
+    },
+    /// A streaming text delta for tool call arguments.
+    ActionArgsDelta {
+        tool_name: String,
+        delta: String,
+        cycle: usize,
+    },
+    /// A tool has been executed and produced an observation.
+    Observation {
+        tool_name: String,
+        result: String,
+        is_error: bool,
+        cycle: usize,
+        duration: Duration,
+    },
+    /// A streaming text delta for the final answer.
+    FinalAnswerDelta { delta: String },
+    /// The ReAct loop has completed successfully.
+    Completed { trace: ReActTrace },
+    /// An error occurred during the ReAct loop.
+    Error { error: String },
+}
