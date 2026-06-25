@@ -26,11 +26,11 @@
 
 #[cfg(feature = "opentelemetry")]
 mod otel_main {
+    use agent_rs_lib::agent::ReActExt;
     use agent_rs_lib::agent::permission::PermissionPolicy;
     use agent_rs_lib::agent::tools::{
         GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool,
     };
-    use agent_rs_lib::agent::{REACT_PREAMBLE, ReActExt};
     use agent_rs_lib::config::McpConfig;
     use agent_rs_lib::domain::observability::LangSmithConfig;
     use agent_rs_lib::mcp::client::McpClient;
@@ -163,7 +163,6 @@ mod otel_main {
         let agent = chat_client
             .agent(&chat_model_name)
             .tools(tools)
-            .preamble(REACT_PREAMBLE)
             .default_max_turns(20)
             .temperature(0.6)
             .hook(LangSmithAgentHook)
@@ -171,6 +170,32 @@ mod otel_main {
 
         // ---------- interactive prompt loop ----------
         println!("LangSmith ReAct CLI Chatbot. Type 'exit' or 'quit' to end.");
+
+        use agent_rs_lib::observability::conventions::KIND_AGENT;
+        use tracing::Instrument;
+
+        let react = agent
+            .react()
+            .max_cycles(20)
+            .react_preamble(None)
+            .with_span_emitter(Arc::new(LangSmithReActEmitter))
+            .on_action(|a| eprintln!("→ action: {}", a.tool_name))
+            .on_observation(|o| {
+                eprintln!(
+                    "← obs: {} ({} bytes, err={})",
+                    o.tool_name,
+                    o.result.len(),
+                    o.is_error
+                )
+            })
+            .on_final(|f| {
+                eprintln!("\n✓ final answer ({} cycles):\n{}\n", f.cycles, f.text);
+                tracing::Span::current().record("output.value", f.text.as_str());
+            })
+            .with_compaction()
+            .compaction_model(agent.clone())
+            .threshold(128_000)
+            .build();
 
         loop {
             print!("\nreact> ");
@@ -188,9 +213,6 @@ mod otel_main {
             }
 
             // ---------- run ReAct loop ----------
-            use agent_rs_lib::observability::conventions::KIND_AGENT;
-            use tracing::Instrument;
-
             let parent_span = tracing::info_span!(
                 "react_agent",
                 "langsmith.span.kind" = KIND_AGENT,
@@ -199,33 +221,11 @@ mod otel_main {
                 "output.value" = tracing::field::Empty,
             );
 
-            let mut history = Vec::new();
-            let trace = async {
-                agent
-                    .react(prompt, &mut history)
-                    .max_cycles(20)
-                    .react_preamble(None)
-                    .with_span_emitter(Arc::new(LangSmithReActEmitter))
-                    .on_action(|a| eprintln!("→ action: {}", a.tool_name))
-                    .on_observation(|o| {
-                        eprintln!(
-                            "← obs: {} ({} bytes, err={})",
-                            o.tool_name,
-                            o.result.len(),
-                            o.is_error
-                        )
-                    })
-                    .on_final(|f| {
-                        eprintln!("\n✓ final answer ({} cycles):\n{}\n", f.cycles, f.text);
-                        tracing::Span::current().record("output.value", f.text.as_str());
-                    })
-                    .execute()
-                    .await
-            }
-            .instrument(parent_span)
-            .await;
+            let trace = async { react.chat_compact(prompt).await }
+                .instrument(parent_span)
+                .await;
 
-            let trace = match trace {
+            let answer = match trace {
                 Ok(t) => t,
                 Err(e) => {
                     eprintln!("ReAct loop error: {e}");
@@ -233,10 +233,9 @@ mod otel_main {
                 }
             };
 
-            // ---------- print trace ----------
-            let trace_json = serde_json::to_string_pretty(&trace)?;
+            // ---------- print answer ----------
             let mut stdout = std::io::stdout();
-            writeln!(stdout, "ReAct trace JSON:\n{trace_json}")?;
+            writeln!(stdout, "{answer}")?;
             stdout.flush()?;
         }
 

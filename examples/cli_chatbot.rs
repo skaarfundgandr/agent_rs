@@ -128,9 +128,14 @@ mod rag_main {
             }
         };
 
-        let mut tools = McpClient::new(McpConfig::from_path("./mcp.json").unwrap())
-            .tools(policy.clone())
-            .await?;
+        let mut tools = if std::path::Path::new("./mcp.json").exists() {
+            McpClient::new(McpConfig::from_path("./mcp.json")?)
+                .tools(policy.clone())
+                .await?
+        } else {
+            eprintln!("  No mcp.json found — skipping MCP tools.");
+            Vec::new()
+        };
 
         let compaction_agent = chat_client
             .agent(&chat_model_name)
@@ -198,24 +203,24 @@ mod rag_main {
 
         let chatbot = ChatBotBuilder::new().agent(agent).show_usage().build();
 
-        // ---------- run with graceful shutdown ----------
         let pipeline_for_save = Arc::clone(&pipeline);
         let save_path = index_path;
-        tokio::select! {
-            res = chatbot.run() => {
+
+        match chatbot.run().await {
+            Ok(()) => {}
+            Err(_) => {
                 if let Err(e) = pipeline_for_save.save(&save_path).await {
-                    eprintln!("warning: failed to save RAG index on exit: {e}");
-                }
-                res?;
-            }
-            _ = tokio::signal::ctrl_c() => {
-                println!("\nReceived Ctrl-C, saving RAG index...");
-                if let Err(e) = pipeline_for_save.save(&save_path).await {
-                    eprintln!("warning: failed to save RAG index on shutdown: {e}");
+                    eprintln!("warning: failed to save RAG index on shutdown: {e}")
                 } else {
                     println!("Saved to {save_path:?}.");
                 }
             }
+        };
+
+        if let Err(e) = pipeline_for_save.save(&save_path).await {
+            eprintln!("warning: failed to save RAG index on shutdown: {e}")
+        } else {
+            println!("Saved to {save_path:?}.");
         }
 
         Ok(())
