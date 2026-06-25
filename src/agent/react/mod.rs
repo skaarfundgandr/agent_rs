@@ -5,17 +5,22 @@
 //! agent's tool server, feeds observations back, and repeats until the
 //! model produces a "Final Answer:" sentinel or `max_cycles` is reached.
 
+mod builder;
+mod built;
 mod callbacks;
+mod constants;
 mod emitter;
 mod ext;
 mod helpers;
-mod react_loop;
+pub mod streaming;
 
+pub use builder::{CompactionConfig, NoCompaction, ReActBuilder};
+pub use built::BuiltReAct;
 pub use callbacks::{ActionCb, ErrorCb, FinalCb, ObservationCb, ThoughtCb};
+pub use constants::REACT_PREAMBLE;
 pub use emitter::ReActSpanEmitter;
 pub use ext::ReActExt;
 pub use helpers::detect_final_answer;
-pub use react_loop::{REACT_PREAMBLE, ReActLoop};
 
 /// Errors that can occur during a ReAct loop execution.
 ///

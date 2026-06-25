@@ -1,9 +1,12 @@
+use std::marker::PhantomData;
+use std::sync::Arc;
+
 use rig_core::agent::Agent;
 use rig_core::completion::CompletionModel;
-use rig_core::message::Message;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
-use super::react_loop::ReActLoop;
+use super::builder::{NoCompaction, ReActBuilder};
+use super::emitter::NoopSpanEmitter;
 
 /// Extension trait that adds a `.react()` method to rig [`Agent`]s.
 pub trait ReActExt<M, P>
@@ -12,11 +15,7 @@ where
     P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     /// Start building a ReAct loop for this agent.
-    fn react<'a>(
-        &'a self,
-        prompt: impl Into<String>,
-        history: &'a mut Vec<Message>,
-    ) -> ReActLoop<'a, M, P>;
+    fn react(&self) -> ReActBuilder<'_, M, P, NoCompaction>;
 }
 
 impl<M, P> ReActExt<M, P> for Agent<M, P>
@@ -24,11 +23,20 @@ where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
-    fn react<'a>(
-        &'a self,
-        prompt: impl Into<String>,
-        history: &'a mut Vec<Message>,
-    ) -> ReActLoop<'a, M, P> {
-        ReActLoop::builder(self, prompt, history)
+    fn react(&self) -> ReActBuilder<'_, M, P, NoCompaction> {
+        ReActBuilder {
+            agent: self,
+            max_cycles: 20,
+            react_preamble: None,
+            initial_history: Vec::new(),
+            span_emitter: Arc::new(NoopSpanEmitter),
+            on_thought: None,
+            on_action: None,
+            on_observation: None,
+            on_final: None,
+            on_error: None,
+            compaction: NoCompaction,
+            _phantom: PhantomData,
+        }
     }
 }

@@ -1,6 +1,6 @@
 //! OTel span emission for ReAct-loop cycles.
 //!
-//! Since the emitter methods are called from `ReActLoop::execute()` (which is
+//! Since the emitter methods are called from `BuiltReAct::prompt()` / `BuiltReAct::chat()` (which is
 //! async), we cannot borrow a `tracing::Span` across an await point. Instead,
 //! we **augment the current span** via `Span::current().record(...)` — the
 //! rig-emitted `chat` / `execute_tool` span is the parent context, and it is

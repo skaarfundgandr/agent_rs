@@ -6,12 +6,19 @@ pub mod model;
 pub mod permission;
 pub mod react;
 pub mod tools;
+pub(crate) mod utils;
 
-pub use agents::{AgentContextExt, ContextManagedAgent, strip_reasoning_from_history};
+pub use agents::strip_reasoning_from_history;
+
+mod managed;
 #[cfg(feature = "rag")]
 pub use embeddings::EmbeddingService;
+pub use managed::{BuiltManagedAgent, ManagedBuilder, ManagedExt, ManagedStream};
 pub use permission::{PermissionGate, PermissionPolicy};
-pub use react::{REACT_PREAMBLE, ReActExt, ReActLoop, ReActSpanEmitter};
+pub use react::{
+    BuiltReAct, CompactionConfig, NoCompaction, REACT_PREAMBLE, ReActBuilder, ReActExt,
+    ReActSpanEmitter,
+};
 
 pub use tools::{
     CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool,
