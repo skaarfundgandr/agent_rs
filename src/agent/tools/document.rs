@@ -210,14 +210,14 @@ impl Tool for WriteDocumentTool {
         }
 
         if let Some(true) = args.append {
-            tokio::fs::OpenOptions::new()
+            let mut file = tokio::fs::OpenOptions::new()
                 .write(true)
                 .append(true)
                 .create(true)
                 .open(&path)
-                .await?
-                .write_all(args.content.as_bytes())
                 .await?;
+            file.write_all(args.content.as_bytes()).await?;
+            file.sync_all().await?;
         } else {
             tokio::fs::write(&path, args.content).await?;
         }
