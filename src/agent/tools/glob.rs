@@ -1,11 +1,12 @@
 use crate::agent::permission::PermissionPolicy;
 use crate::domain::errors::DocumentError;
 use crate::security::SharedSandbox;
+use crate::security::validate_sandboxed_path_shared;
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
-use std::path::{Component, Path, PathBuf};
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, LazyLock};
 
 /// Arguments for the `glob_search` tool.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -31,6 +32,27 @@ pub struct GlobSearchTool {
     policy: PermissionPolicy,
 }
 
+static GLOB_DEF: LazyLock<ToolDefinition> = LazyLock::new(|| {
+    ToolDefinition {
+    name: "glob_search".to_string(),
+    description: "Find files and directories matching a glob pattern (e.g., 'src/**/*.rs' or '*.md') within the sandbox root(s). Use 'directory' to narrow the search to a specific subdirectory.".to_string(),
+    parameters: json!({
+        "type": "object",
+        "properties": {
+            "pattern": {
+                "type": "string",
+                "description": "The glob pattern to match against (relative to sandbox root, e.g. 'src/**/*.rs')"
+            },
+            "directory": {
+                "type": "string",
+                "description": "Optional directory to search within (relative to sandbox root). When provided, the pattern is matched relative to this directory."
+            }
+        },
+        "required": ["pattern"]
+    }),
+}
+});
+
 impl GlobSearchTool {
     /// Creates a new `GlobSearchTool` restricted to the given sandbox.
     ///
@@ -55,24 +77,7 @@ impl Tool for GlobSearchTool {
     type Output = String;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Find files and directories matching a glob pattern (e.g., 'src/**/*.rs' or '*.md') within the sandbox root(s). Use 'directory' to narrow the search to a specific subdirectory.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "pattern": {
-                        "type": "string",
-                        "description": "The glob pattern to match against (relative to sandbox root, e.g. 'src/**/*.rs')"
-                    },
-                    "directory": {
-                        "type": "string",
-                        "description": "Optional directory to search within (relative to sandbox root). When provided, the pattern is matched relative to this directory."
-                    }
-                },
-                "required": ["pattern"]
-            }),
-        }
+        GLOB_DEF.clone()
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
@@ -85,11 +90,7 @@ impl Tool for GlobSearchTool {
         let pattern = &args.pattern;
 
         // Safety: Reject absolute patterns or path traversals containing '..'
-        if Path::new(pattern)
-            .components()
-            .any(|c| matches!(c, Component::ParentDir))
-            || Path::new(pattern).is_absolute()
-        {
+        if Path::new(pattern).is_absolute() || pattern.split('/').any(|segment| segment == "..") {
             return Err(DocumentError::SandboxEscape(format!(
                 "Access denied: Absolute patterns or path traversals containing '..' are not allowed: {}",
                 pattern
@@ -134,6 +135,16 @@ impl Tool for GlobSearchTool {
                     std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
                 })?;
 
+                // Skip symlinks and validate sandbox containment
+                if let Ok(meta) = std::fs::symlink_metadata(&path)
+                    && meta.file_type().is_symlink()
+                {
+                    continue;
+                }
+                validate_sandboxed_path_shared(&self.sandbox, &path).map_err(|e| {
+                    std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
+                })?;
+
                 let relative = path.strip_prefix(&dir_path).unwrap_or(&path);
                 let display = relative.to_string_lossy().into_owned();
                 let normalized = display.replace('\\', "/");
@@ -158,6 +169,16 @@ impl Tool for GlobSearchTool {
 
                 for entry in paths {
                     let path = entry.map_err(|e| {
+                        std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
+                    })?;
+
+                    // Skip symlinks and validate sandbox containment
+                    if let Ok(meta) = std::fs::symlink_metadata(&path)
+                        && meta.file_type().is_symlink()
+                    {
+                        continue;
+                    }
+                    validate_sandboxed_path_shared(&self.sandbox, &path).map_err(|e| {
                         std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
                     })?;
 

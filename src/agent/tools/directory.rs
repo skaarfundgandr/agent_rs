@@ -4,7 +4,6 @@ use crate::security::SharedSandbox;
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
-use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -88,10 +87,10 @@ impl Tool for ListDirectoryTool {
         }
 
         let mut entries = Vec::new();
-        for entry in fs::read_dir(&path)? {
-            let entry = entry?;
+        let mut read_dir = tokio::fs::read_dir(&path).await?;
+        while let Some(entry) = read_dir.next_entry().await? {
             let file_name = entry.file_name().to_string_lossy().into_owned();
-            let metadata = entry.metadata()?;
+            let metadata = entry.metadata().await?;
             let is_dir = metadata.is_dir();
 
             let entry_str = if is_dir {

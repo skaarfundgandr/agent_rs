@@ -1,6 +1,8 @@
 use crate::agent::permission::PermissionPolicy;
 use crate::domain::errors::DocumentError;
-use crate::security::{SandboxConfig, SharedSandbox, relative_display_path};
+use crate::security::{
+    SandboxConfig, SharedSandbox, relative_display_path, validate_sandboxed_path,
+};
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
@@ -116,20 +118,28 @@ impl Tool for GrepSearchTool {
 
         let case_sensitive = args.case_sensitive.unwrap_or(false);
         let max_results = 100;
-        let mut results = Vec::new();
 
         let snapshot = self.sandbox.snapshot();
-        search_recursive(
-            &path,
-            &args.query,
-            case_sensitive,
-            &self.allowed_extensions,
-            &snapshot,
-            &mut results,
-            max_results,
-            10,
-            0,
-        )?;
+        let query = args.query.clone();
+        let allowed_extensions = self.allowed_extensions.clone();
+        let path_clone = path.clone();
+        let results = tokio::task::spawn_blocking(move || {
+            let mut local_results = Vec::new();
+            search_recursive(
+                &path_clone,
+                &query,
+                case_sensitive,
+                &allowed_extensions,
+                &snapshot,
+                &mut local_results,
+                max_results,
+                10,
+                0,
+            )?;
+            Ok::<_, std::io::Error>(local_results)
+        })
+        .await
+        .map_err(|e| DocumentError::Io(std::io::Error::other(e)))??;
 
         if results.is_empty() {
             Ok(format!("No matches found for query: '{}'", args.query))
@@ -172,6 +182,17 @@ fn search_recursive(
         for entry in fs::read_dir(target)? {
             let entry = entry?;
             let path = entry.path();
+
+            // Skip symlinks and paths outside the sandbox
+            if let Ok(meta) = std::fs::symlink_metadata(&path)
+                && meta.file_type().is_symlink()
+            {
+                continue;
+            }
+            if validate_sandboxed_path(sandbox, &path).is_err() {
+                continue;
+            }
+
             if path.is_dir() {
                 search_recursive(
                     &path,
@@ -235,7 +256,10 @@ fn search_file(
 
     let content = match fs::read_to_string(file_path) {
         Ok(c) => c,
-        Err(_) => return Ok(()),
+        Err(e) => {
+            tracing::warn!(path = %file_path.display(), error = %e, "IO error reading file during search");
+            return Ok(());
+        }
     };
 
     let relative_path = relative_display_path(sandbox, file_path);

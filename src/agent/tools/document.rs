@@ -7,9 +7,9 @@ use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
 use std::collections::HashSet;
-use std::fs;
 use std::path::Path;
 use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct ReadDocumentArgs {
@@ -29,6 +29,7 @@ pub struct ReadDocumentTool {
     sandbox: Arc<SharedSandbox>,
     allowed_extensions: HashSet<String>,
     policy: PermissionPolicy,
+    cached_def: ToolDefinition,
 }
 
 impl ReadDocumentTool {
@@ -48,31 +49,13 @@ impl ReadDocumentTool {
         allowed_extensions: HashSet<String>,
         policy: PermissionPolicy,
     ) -> Self {
-        Self {
-            sandbox,
-            allowed_extensions,
-            policy,
-        }
-    }
-}
-
-impl Tool for ReadDocumentTool {
-    const NAME: &'static str = "read_document";
-
-    type Error = DocumentError;
-    type Args = ReadDocumentArgs;
-    type Output = String;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        let supported = self
-            .allowed_extensions
+        let supported = allowed_extensions
             .iter()
             .map(|e| format!(".{e}"))
             .collect::<Vec<_>>()
             .join(", ");
-
-        ToolDefinition {
-            name: Self::NAME.to_string(),
+        let cached_def = ToolDefinition {
+            name: "read_document".to_string(),
             description: format!(
                 "Read the content of a document or text file. Supports: {supported}. Paths are resolved within the configured sandbox root(s)."
             ),
@@ -86,7 +69,25 @@ impl Tool for ReadDocumentTool {
                 },
                 "required": ["path"]
             }),
+        };
+        Self {
+            sandbox,
+            allowed_extensions,
+            policy,
+            cached_def,
         }
+    }
+}
+
+impl Tool for ReadDocumentTool {
+    const NAME: &'static str = "read_document";
+
+    type Error = DocumentError;
+    type Args = ReadDocumentArgs;
+    type Output = String;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        self.cached_def.clone()
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
@@ -109,7 +110,7 @@ impl Tool for ReadDocumentTool {
         match extension {
             "pdf" => extract_pdf_text(&path).map_err(|e| DocumentError::Pdf(e.to_string())),
             _ => {
-                let content = fs::read_to_string(&path)?;
+                let content = tokio::fs::read_to_string(&path).await?;
                 Ok(content)
             }
         }
@@ -122,6 +123,7 @@ pub struct WriteDocumentTool {
     sandbox: Arc<SharedSandbox>,
     allowed_extensions: HashSet<String>,
     policy: PermissionPolicy,
+    cached_def: ToolDefinition,
 }
 
 impl WriteDocumentTool {
@@ -141,31 +143,13 @@ impl WriteDocumentTool {
         allowed_extensions: HashSet<String>,
         policy: PermissionPolicy,
     ) -> Self {
-        Self {
-            sandbox,
-            allowed_extensions,
-            policy,
-        }
-    }
-}
-
-impl Tool for WriteDocumentTool {
-    const NAME: &'static str = "write_document";
-
-    type Error = DocumentError;
-    type Args = WriteDocumentArgs;
-    type Output = String;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        let supported = self
-            .allowed_extensions
+        let supported = allowed_extensions
             .iter()
             .map(|e| format!(".{e}"))
             .collect::<Vec<_>>()
             .join(", ");
-
-        ToolDefinition {
-            name: Self::NAME.to_string(),
+        let cached_def = ToolDefinition {
+            name: "write_document".to_string(),
             description: format!(
                 "Write or edit a document or text file. Supports: {supported}. Paths are resolved within the configured sandbox root(s)."
             ),
@@ -187,7 +171,25 @@ impl Tool for WriteDocumentTool {
                 },
                 "required": ["path", "content"]
             }),
+        };
+        Self {
+            sandbox,
+            allowed_extensions,
+            policy,
+            cached_def,
         }
+    }
+}
+
+impl Tool for WriteDocumentTool {
+    const NAME: &'static str = "write_document";
+
+    type Error = DocumentError;
+    type Args = WriteDocumentArgs;
+    type Output = String;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        self.cached_def.clone()
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
@@ -208,13 +210,16 @@ impl Tool for WriteDocumentTool {
         }
 
         if let Some(true) = args.append {
-            let mut options = fs::OpenOptions::new();
-            options.append(true).create(true);
-            let mut file = options.open(&path)?;
-            use std::io::Write;
-            file.write_all(args.content.as_bytes())?;
+            tokio::fs::OpenOptions::new()
+                .write(true)
+                .append(true)
+                .create(true)
+                .open(&path)
+                .await?
+                .write_all(args.content.as_bytes())
+                .await?;
         } else {
-            fs::write(&path, args.content)?;
+            tokio::fs::write(&path, args.content).await?;
         }
 
         Ok(format!("Successfully wrote to {}", args.path))

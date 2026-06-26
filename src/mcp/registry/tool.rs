@@ -4,9 +4,12 @@ use rig_core::completion::ToolDefinition;
 use rig_core::tool::{ToolDyn, ToolError, rmcp::McpTool as RigMcpTool};
 use rig_core::wasm_compat::WasmBoxedFuture;
 use rmcp::service::{RoleClient, RunningService};
+use tokio::sync::Mutex;
 
 use crate::agent::permission::{PermissionPolicy, PermissionResult};
 use crate::domain::errors::DocumentError;
+
+static STDIN_MUTEX: Mutex<()> = Mutex::const_new(());
 
 /// A Rig tool wrapper that keeps the underlying MCP server connection alive.
 pub struct RegisteredMcpTool {
@@ -80,6 +83,7 @@ impl ToolDyn for RegisteredMcpTool {
                 "MCP tool {tool_name} called with args: {}",
                 &args_owned[..args_owned.len().min(200)]
             );
+            let _guard = STDIN_MUTEX.lock().await;
             match policy.evaluate(&tool_name, &desc).await {
                 PermissionResult::Allow => {}
                 PermissionResult::Deny { reason } => {
@@ -94,6 +98,7 @@ impl ToolDyn for RegisteredMcpTool {
                     return Err(ToolError::ToolCallError(Box::new(err)));
                 }
             }
+            drop(_guard);
             self.inner.call(args_owned).await
         })
     }
