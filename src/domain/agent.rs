@@ -95,7 +95,7 @@ pub enum ReActStreamItem {
         duration: Duration,
     },
     /// A streaming text delta for the final answer.
-    FinalAnswerDelta { delta: String },
+    FinalAnswerDelta { delta: String, cycle: usize },
     /// The ReAct loop has completed successfully.
     Completed { trace: ReActTrace },
     /// An error occurred during the ReAct loop.

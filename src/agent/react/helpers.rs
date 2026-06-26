@@ -1,4 +1,4 @@
-use rig_core::message::{AssistantContent, Message};
+use rig_core::completion::PromptError;
 use rig_core::tool::server::ToolServerError;
 
 /// Detect a "Final Answer:" / "FINAL ANSWER:" sentinel in trailing text.
@@ -6,19 +6,16 @@ use rig_core::tool::server::ToolServerError;
 /// Returns `Some(text_after_sentinel)` if found, `None` otherwise.
 #[doc(hidden)]
 pub fn detect_final_answer(text: &str) -> Option<String> {
-    let lower = text.to_lowercase();
-    // Look for "final answer:" (case-insensitive) and take everything after it.
-    let sentinel_pos = lower.find("final answer:");
-    match sentinel_pos {
-        Some(pos) => {
-            let answer = text[pos + "final answer:".len()..].trim();
-            if answer.is_empty() {
-                None
-            } else {
-                Some(answer.to_string())
-            }
-        }
-        None => None,
+    let sentinel_len = "final answer:".len();
+    let prefix = text.get(..sentinel_len)?;
+    if !prefix.eq_ignore_ascii_case("final answer:") {
+        return None;
+    }
+    let answer = text[sentinel_len..].trim();
+    if answer.is_empty() {
+        None
+    } else {
+        Some(answer.to_string())
     }
 }
 
@@ -27,30 +24,20 @@ pub(crate) fn tool_error_to_string(e: &ToolServerError) -> String {
     format!("{e}")
 }
 
-/// Find the last `Message::Assistant` in `chat_history` that contains a
-/// `ToolCall` whose function name matches `tool_name`.
+/// Recover the partial conversation progress carried by rig-core's
+/// [`MaxTurnsError`](PromptError::MaxTurnsError).
 ///
-/// Returns a cloned copy so the caller can push it to its own history.
+/// When the inner agent loop exhausts its per-`agent.prompt()` turn budget,
+/// rig-core returns the *full* accumulated history (the caller's snapshot +
+/// the prompt that was sent + every assistant turn and tool result gathered
+/// before the limit) inside the error. Returning `Some(history)` here lets the
+/// ReAct loop preserve that progress instead of discarding it (which would make
+/// the next cycle redo identical work and reproduce the same turn-limit error).
+/// Returns `None` for any non-`MaxTurnsError`.
 #[doc(hidden)]
-pub fn find_assistant_with_tool_call(chat_history: &[Message], tool_name: &str) -> Option<Message> {
-    chat_history.iter().rev().find_map(|msg| {
-        let Message::Assistant { content, id } = msg else {
-            return None;
-        };
-        let has_match = content.iter().any(|item| {
-            if let AssistantContent::ToolCall(tc) = item {
-                tc.function.name == tool_name
-            } else {
-                false
-            }
-        });
-        if has_match {
-            Some(Message::Assistant {
-                content: content.clone(),
-                id: id.clone(),
-            })
-        } else {
-            None
-        }
-    })
+pub fn recover_turn_limit_history(e: &PromptError) -> Option<Vec<rig_core::message::Message>> {
+    match e {
+        PromptError::MaxTurnsError { chat_history, .. } => Some((**chat_history).clone()),
+        _ => None,
+    }
 }

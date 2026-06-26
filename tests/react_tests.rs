@@ -158,10 +158,21 @@ fn test_react_builder_defaults() {
     let agent = make_test_agent();
     let builder = agent.react();
     assert_eq!(builder.max_cycles, 20);
+    assert_eq!(builder.max_retries, 3);
+    assert_eq!(builder.tool_timeout_secs, 60);
     assert!(
         builder.react_preamble.is_none(),
         "react_preamble should be None by default"
     );
+}
+
+#[test]
+fn test_react_builder_max_retries_setter() {
+    let agent = make_test_agent();
+    let builder = agent.react().max_retries(5);
+    assert_eq!(builder.max_retries, 5);
+    let built = builder.build();
+    assert_eq!(built.max_retries(), 5);
 }
 
 #[test]
@@ -180,13 +191,12 @@ fn test_builder_compaction_panics_without_threshold() {
     let _ = agent.react().with_compaction().build(); // panics
 }
 
-#[test]
-fn test_built_prompt_does_not_mutate_history() {
+#[tokio::test]
+async fn test_built_prompt_does_not_mutate_history() {
     let agent = make_test_agent();
     let built = agent.react().build();
     let before = built.history().len();
-    // .prompt() will fail (no real LLM), but it shouldn't mutate history
-    let _ = built.prompt("test"); // ignore error
+    let _ = built.prompt("test").await;
     assert_eq!(built.history().len(), before);
 }
 
@@ -196,6 +206,13 @@ fn test_built_chat_accessors() {
     let built = agent.react().max_cycles(10).build();
     assert_eq!(built.max_cycles(), 10);
     assert!(built.history().is_empty());
+}
+
+#[test]
+#[should_panic(expected = "max_cycles must be at least 1")]
+fn test_max_cycles_zero_panics() {
+    let agent = make_test_agent();
+    let _ = agent.react().max_cycles(0);
 }
 
 #[test]

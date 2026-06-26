@@ -26,7 +26,7 @@ impl ReActSpanEmitter for LangSmithReActEmitter {
         span.record(OPENINFERENCE_SPAN_KIND, "CHAIN");
         span.record(GEN_AI_OPERATION_NAME, "reasoning");
         span.record(GEN_AI_REASONING, thought.reasoning.as_str());
-        span.record("react.cycle", thought.cycle as u64);
+        span.record("react.cycle", thought.cycle as i64);
 
         tracing::info!(
             cycle = thought.cycle,
@@ -40,16 +40,20 @@ impl ReActSpanEmitter for LangSmithReActEmitter {
         span.record(LANGSMITH_SPAN_KIND, KIND_CHAIN);
         span.record(OPENINFERENCE_SPAN_KIND, "CHAIN");
         span.record(GEN_AI_OPERATION_NAME, "react_cycle");
-        span.record("react.cycle", cycle as u64);
+        span.record("react.cycle", cycle as i64);
+
+        tracing::info!(cycle, "react cycle start");
     }
 
     fn emit_cycle_end(&self, cycle: usize, trace_so_far: &ReActTrace) {
-        let serialized = serde_json::to_string(trace_so_far).unwrap_or_else(|_| String::new());
-        tracing::info!(
-            cycle,
-            trace = %serialized,
-            "react cycle complete"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            let serialized = serde_json::to_string(trace_so_far).unwrap_or_else(|_| String::new());
+            tracing::info!(
+                cycle,
+                trace = %serialized,
+                "react cycle complete"
+            );
+        }
     }
 
     fn emit_action(&self, action: &Action) {
@@ -59,7 +63,7 @@ impl ReActSpanEmitter for LangSmithReActEmitter {
         span.record(GEN_AI_OPERATION_NAME, "react_action");
         span.record(GEN_AI_TOOL_NAME, action.tool_name.as_str());
         span.record(INPUT_VALUE, action.args.as_str());
-        span.record("react.cycle", action.cycle as u64);
+        span.record("react.cycle", action.cycle as i64);
     }
 
     fn emit_observation(&self, observation: &Observation) {

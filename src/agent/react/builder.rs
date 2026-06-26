@@ -34,6 +34,7 @@ where
 {
     pub agent: &'a Agent<M, P>,
     pub max_cycles: usize,
+    pub max_retries: u32,
     pub react_preamble: Option<String>,
     pub initial_history: Vec<Message>,
     pub span_emitter: Arc<dyn ReActSpanEmitter>,
@@ -42,6 +43,7 @@ where
     pub on_observation: Option<ObservationCb>,
     pub on_final: Option<FinalCb>,
     pub on_error: Option<ErrorCb>,
+    pub tool_timeout_secs: u64,
     pub compaction: CompState,
     pub(crate) _phantom: PhantomData<()>,
 }
@@ -55,8 +57,40 @@ where
 {
     /// Set the maximum number of reasoning-action cycles before the loop
     /// returns [`ReActError::MaxCyclesExceeded`](crate::domain::errors::ReActError::MaxCyclesExceeded).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `max_cycles` is 0.
     pub fn max_cycles(self, max_cycles: usize) -> Self {
+        assert!(max_cycles > 0, "max_cycles must be at least 1");
         Self { max_cycles, ..self }
+    }
+
+    /// Set the maximum number of retries for completion calls within a single cycle.
+    ///
+    /// Retries occur with exponential backoff (500ms * 2^attempt) and are
+    /// triggered on transient completion errors (`HttpError`, `ProviderError`)
+    /// and on `MaxTurnsError`. Defaults to 3.
+    pub fn max_retries(self, max_retries: u32) -> Self {
+        Self {
+            max_retries,
+            ..self
+        }
+    }
+
+    /// Set the timeout in seconds for individual tool executions.
+    ///
+    /// A tool call that exceeds this duration is cancelled and reported as
+    /// a timed-out observation. Defaults to 60 seconds.
+    ///
+    /// In the streaming ReAct path this value is doubled and used as the
+    /// timeout for stream initialization and for waiting for each streamed
+    /// item from the model.
+    pub fn tool_timeout_secs(self, secs: u64) -> Self {
+        Self {
+            tool_timeout_secs: secs,
+            ..self
+        }
     }
 
     /// Set a custom preamble that is prepended to the user prompt.
@@ -91,7 +125,7 @@ where
         cb: impl Fn(&crate::domain::agent::Thought) + Send + Sync + 'static,
     ) -> Self {
         Self {
-            on_thought: Some(Box::new(cb)),
+            on_thought: Some(Arc::new(cb)),
             ..self
         }
     }
@@ -102,7 +136,7 @@ where
         cb: impl Fn(&crate::domain::agent::Action) + Send + Sync + 'static,
     ) -> Self {
         Self {
-            on_action: Some(Box::new(cb)),
+            on_action: Some(Arc::new(cb)),
             ..self
         }
     }
@@ -113,7 +147,7 @@ where
         cb: impl Fn(&crate::domain::agent::Observation) + Send + Sync + 'static,
     ) -> Self {
         Self {
-            on_observation: Some(Box::new(cb)),
+            on_observation: Some(Arc::new(cb)),
             ..self
         }
     }
@@ -124,7 +158,7 @@ where
         cb: impl Fn(&crate::domain::agent::FinalAnswer) + Send + Sync + 'static,
     ) -> Self {
         Self {
-            on_final: Some(Box::new(cb)),
+            on_final: Some(Arc::new(cb)),
             ..self
         }
     }
@@ -135,7 +169,7 @@ where
         cb: impl Fn(&crate::domain::errors::ReActError) + Send + Sync + 'static,
     ) -> Self {
         Self {
-            on_error: Some(Box::new(cb)),
+            on_error: Some(Arc::new(cb)),
             ..self
         }
     }
@@ -160,6 +194,7 @@ where
         ReActBuilder {
             agent: self.agent,
             max_cycles: self.max_cycles,
+            max_retries: self.max_retries,
             react_preamble: self.react_preamble,
             initial_history: self.initial_history,
             span_emitter: self.span_emitter,
@@ -168,6 +203,7 @@ where
             on_observation: self.on_observation,
             on_final: self.on_final,
             on_error: self.on_error,
+            tool_timeout_secs: self.tool_timeout_secs,
             compaction: CompactionConfig {
                 model: self.agent.clone(),
                 threshold: 0,
@@ -184,6 +220,7 @@ where
             agent: self.agent.clone(),
             history: Arc::new(std::sync::Mutex::new(self.initial_history)),
             max_cycles: self.max_cycles,
+            max_retries: self.max_retries,
             react_preamble: self.react_preamble,
             span_emitter: self.span_emitter,
             on_thought: self.on_thought,
@@ -192,6 +229,7 @@ where
             on_final: self.on_final,
             on_error: self.on_error,
             context_manager: None,
+            tool_timeout_secs: self.tool_timeout_secs,
             _compaction: PhantomData,
         }
     }
@@ -227,6 +265,7 @@ where
         ReActBuilder {
             agent: self.agent,
             max_cycles: self.max_cycles,
+            max_retries: self.max_retries,
             react_preamble: self.react_preamble,
             initial_history: self.initial_history,
             span_emitter: self.span_emitter,
@@ -235,6 +274,7 @@ where
             on_observation: self.on_observation,
             on_final: self.on_final,
             on_error: self.on_error,
+            tool_timeout_secs: self.tool_timeout_secs,
             compaction: CompactionConfig {
                 model,
                 threshold: self.compaction.threshold,
@@ -293,6 +333,7 @@ where
             agent: self.agent.clone(),
             history: Arc::new(std::sync::Mutex::new(self.initial_history)),
             max_cycles: self.max_cycles,
+            max_retries: self.max_retries,
             react_preamble: self.react_preamble,
             span_emitter: self.span_emitter,
             on_thought: self.on_thought,
@@ -300,7 +341,10 @@ where
             on_observation: self.on_observation,
             on_final: self.on_final,
             on_error: self.on_error,
-            context_manager: Some(Arc::new(ctx)),
+            context_manager: Some(
+                Arc::new(ctx) as Arc<dyn crate::agent::react::Compact + Send + Sync>
+            ),
+            tool_timeout_secs: self.tool_timeout_secs,
             _compaction: PhantomData,
         }
     }

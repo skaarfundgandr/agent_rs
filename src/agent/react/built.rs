@@ -1,21 +1,35 @@
-use std::any::Any;
 use std::marker::PhantomData;
+use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use rig_core::agent::{Agent, PromptHook};
-use rig_core::completion::{CompletionModel, Prompt};
+use rig_core::completion::{CompletionError, CompletionModel, Prompt, PromptError};
 use rig_core::message::{AssistantContent, Message, ToolCall, ToolResultContent, UserContent};
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::memory::ContextManager;
+use crate::agent::react::Compact;
 use crate::agent::utils::{Mutex, lock_mutex};
+
+impl<C> Compact for ContextManager<C>
+where
+    C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
+{
+    fn compact<'a>(
+        &'a self,
+        history: &'a mut Vec<Message>,
+        prompt: &'a str,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<bool, PromptError>> + Send + 'a>> {
+        Box::pin(async move { self.compact_history_if_needed(history, prompt).await })
+    }
+}
 use crate::domain::agent::{Action, FinalAnswer, Observation, ReActStep, ReActTrace, Thought};
 use crate::domain::errors::ReActError;
 
 use super::callbacks::{ActionCb, ErrorCb, FinalCb, ObservationCb, ThoughtCb};
 use super::emitter::ReActSpanEmitter;
-use super::helpers::{detect_final_answer, tool_error_to_string};
+use super::helpers::{detect_final_answer, recover_turn_limit_history, tool_error_to_string};
 
 /// A fully configured ReAct agent, ready to run prompts and chats.
 ///
@@ -29,6 +43,7 @@ where
     pub(crate) agent: Agent<M, P>,
     pub(crate) history: Arc<Mutex<Vec<Message>>>,
     pub(crate) max_cycles: usize,
+    pub(crate) max_retries: u32,
     pub(crate) react_preamble: Option<String>,
     pub(crate) span_emitter: Arc<dyn ReActSpanEmitter>,
     pub(crate) on_thought: Option<ThoughtCb>,
@@ -36,7 +51,8 @@ where
     pub(crate) on_observation: Option<ObservationCb>,
     pub(crate) on_final: Option<FinalCb>,
     pub(crate) on_error: Option<ErrorCb>,
-    pub(crate) context_manager: Option<Arc<dyn Any + Send + Sync>>,
+    pub(crate) context_manager: Option<Arc<dyn Compact + Send + Sync>>,
+    pub(crate) tool_timeout_secs: u64,
     pub(crate) _compaction: PhantomData<C>,
 }
 
@@ -54,6 +70,11 @@ where
     pub fn max_cycles(&self) -> usize {
         self.max_cycles
     }
+
+    /// Return the configured `max_retries` limit.
+    pub fn max_retries(&self) -> u32 {
+        self.max_retries
+    }
 }
 
 /// Standalone ReAct loop that works on a local `Vec<Message>` clone.
@@ -65,6 +86,8 @@ async fn run_loop<M, P>(
     prompt: &str,
     history_snapshot: &[Message],
     max_cycles: usize,
+    max_retries: u32,
+    tool_timeout_secs: u64,
     react_preamble: &Option<String>,
     span_emitter: &Arc<dyn ReActSpanEmitter>,
     on_thought: &Option<ThoughtCb>,
@@ -74,6 +97,7 @@ async fn run_loop<M, P>(
     on_error: &Option<ErrorCb>,
     shared_history: &Arc<Mutex<Vec<Message>>>,
     append_to_shared_history: bool,
+    context_manager: Option<&(dyn Compact + Send + Sync)>,
 ) -> Result<ReActTrace, ReActError>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
@@ -94,16 +118,102 @@ where
     let mut current_prompt = Message::User {
         content: rig_core::OneOrMany::one(UserContent::text(effective_prompt)),
     };
+    let mut no_assistant_retried = false;
+    let mut empty_output_retried = false;
 
     for cycle in 0..max_cycles {
         span_emitter.emit_cycle_start(cycle);
 
-        let response = agent
-            .prompt(current_prompt.clone())
-            .with_history(working_history.iter().cloned())
-            .extended_details()
-            .await
-            .map_err(|e| ReActError::Model(e.to_string()))?;
+        if let Some(cm) = context_manager {
+            let prompt_text = match &current_prompt {
+                Message::User { content } => content
+                    .iter()
+                    .find_map(|c| match c {
+                        UserContent::Text(t) => Some(t.text.as_str()),
+                        _ => None,
+                    })
+                    .unwrap_or(prompt),
+                _ => prompt,
+            };
+            cm.compact(&mut working_history, prompt_text)
+                .await
+                .map_err(|e| ReActError::Model(e.to_string()))?;
+        }
+
+        let mut attempt = 0;
+        let response = loop {
+            attempt += 1;
+            match agent
+                .prompt(current_prompt.clone())
+                .with_history(working_history.iter().cloned())
+                .extended_details()
+                .await
+            {
+                Ok(resp) => break resp,
+                Err(e) => {
+                    let is_transient = matches!(
+                        &e,
+                        PromptError::CompletionError(
+                            CompletionError::HttpError(_) | CompletionError::ProviderError(_)
+                        )
+                    );
+                    let is_turn_limit = matches!(&e, PromptError::MaxTurnsError { .. });
+                    if is_transient && attempt < max_retries {
+                        let delay = std::time::Duration::from_millis(500 * 2u64.pow(attempt - 1));
+                        tokio::time::sleep(delay).await;
+                        continue;
+                    }
+                    // Turn limit (rig-core's `default_max_turns`) is a
+                    // recoverable condition at the ReAct cycle level: the
+                    // model hit its per-`agent.prompt()` tool-call budget
+                    // mid-cycle. Surface the error to the `on_error`
+                    // callback, but let the outer `for cycle` loop move on
+                    // and try a fresh ReAct cycle, as long as the cycle
+                    // budget hasn't been exhausted.
+                    //
+                    // Critical: rig-core carries the *full* accumulated
+                    // history (snapshot + this cycle's prompt + every
+                    // assistant turn and tool result gathered before the
+                    // limit) inside `MaxTurnsError`. Recover it into
+                    // `working_history`/`current_prompt` so the next cycle
+                    // continues from where the inner loop left off. Without
+                    // this recovery, the next cycle re-sends an identical
+                    // request and reproduces the same turn-limit error until
+                    // `max_cycles` is exhausted — the "hard stuck" failure
+                    // mode. With recovery, the next cycle starts with a fresh
+                    // turn budget and the accumulated context, so the model
+                    // can reason (Chain-of-Thought, via the existing ReAct
+                    // preamble) over what it has gathered instead of redoing
+                    // the same tool calls.
+                    if is_turn_limit {
+                        let err = ReActError::Model(e.to_string());
+                        if let Some(cb) = on_error {
+                            cb(&err);
+                        }
+                        span_emitter.emit_error(&err);
+                        span_emitter.emit_cycle_end(cycle, &trace);
+                        if let Some(mut recovered) = recover_turn_limit_history(&e)
+                            && let Some(last) = recovered.pop()
+                        {
+                            // `recovered` is snapshot + cycle prompt +
+                            // progress (all but the final pending message);
+                            // `last` is that pending message (the tool
+                            // result rig-core was about to act on).
+                            working_history = recovered;
+                            current_prompt = last;
+                        }
+                        continue;
+                    }
+                    let err = ReActError::Model(e.to_string());
+                    if let Some(cb) = on_error {
+                        cb(&err);
+                    }
+                    span_emitter.emit_error(&err);
+                    span_emitter.emit_cycle_end(cycle, &trace);
+                    return Err(err);
+                }
+            }
+        };
 
         if let Some(messages) = response.messages {
             working_history.extend(messages);
@@ -115,18 +225,17 @@ where
         }) {
             Some(content) => content.clone(),
             None => {
-                let text = response.output.clone();
-                let fa = FinalAnswer {
-                    text,
-                    cycles: cycle + 1,
-                };
-                trace.steps.push(ReActStep::FinalAnswer(fa.clone()));
-                trace.final_answer = Some(fa.clone());
-                if let Some(cb) = on_final {
-                    cb(&fa);
+                if !no_assistant_retried {
+                    no_assistant_retried = true;
+                    continue;
                 }
+                let err = ReActError::NoToolCallsAndNoFinalAnswer { cycle };
+                if let Some(cb) = on_error {
+                    cb(&err);
+                }
+                span_emitter.emit_error(&err);
                 span_emitter.emit_cycle_end(cycle, &trace);
-                return Err(ReActError::NoToolCallsAndNoFinalAnswer { cycle });
+                return Err(err);
             }
         };
 
@@ -161,10 +270,15 @@ where
         if tool_calls.is_empty() {
             let text = response.output.clone();
             if text.is_empty() {
+                if !empty_output_retried {
+                    empty_output_retried = true;
+                    continue;
+                }
                 let err = ReActError::NoToolCallsAndNoFinalAnswer { cycle };
                 if let Some(cb) = on_error {
                     cb(&err);
                 }
+                span_emitter.emit_error(&err);
                 span_emitter.emit_cycle_end(cycle, &trace);
                 return Err(err);
             }
@@ -179,7 +293,11 @@ where
             }
             span_emitter.emit_cycle_end(cycle, &trace);
             if append_to_shared_history {
-                *lock_mutex(shared_history) = working_history;
+                let mut h = lock_mutex(shared_history);
+                h.push(Message::User {
+                    content: rig_core::OneOrMany::one(UserContent::text(prompt)),
+                });
+                h.push(Message::assistant(&fa.text));
             }
             return Ok(trace);
         }
@@ -212,7 +330,11 @@ where
             }
             span_emitter.emit_cycle_end(cycle, &trace);
             if append_to_shared_history {
-                *lock_mutex(shared_history) = working_history;
+                let mut h = lock_mutex(shared_history);
+                h.push(Message::User {
+                    content: rig_core::OneOrMany::one(UserContent::text(prompt)),
+                });
+                h.push(Message::assistant(&fa.text));
             }
             return Ok(trace);
         }
@@ -235,23 +357,36 @@ where
             trace.steps.push(ReActStep::Action(action.clone()));
 
             let start = Instant::now();
-            let result = agent
-                .tool_server_handle
-                .call_tool(&tc.function.name, &args_str)
-                .await;
+            let result = tokio::time::timeout(
+                Duration::from_secs(tool_timeout_secs),
+                agent
+                    .tool_server_handle
+                    .call_tool(&tc.function.name, &args_str),
+            )
+            .await;
             let duration = start.elapsed();
 
             let observation = match result {
-                Ok(s) => Observation {
+                Ok(Ok(s)) => Observation {
                     tool_name: tc.function.name.clone(),
                     result: s,
                     is_error: false,
                     cycle,
                     duration,
                 },
-                Err(e) => Observation {
+                Ok(Err(e)) => Observation {
                     tool_name: tc.function.name.clone(),
                     result: tool_error_to_string(&e),
+                    is_error: true,
+                    cycle,
+                    duration,
+                },
+                Err(_elapsed) => Observation {
+                    tool_name: tc.function.name.clone(),
+                    result: format!(
+                        "Tool '{}' timed out after {}s",
+                        tc.function.name, tool_timeout_secs
+                    ),
                     is_error: true,
                     cycle,
                     duration,
@@ -298,6 +433,8 @@ where
     if let Some(cb) = on_error {
         cb(&err);
     }
+    span_emitter.emit_error(&err);
+    span_emitter.emit_cycle_end(max_cycles.saturating_sub(1), &trace);
     Err(err)
 }
 
@@ -317,6 +454,8 @@ where
             &msg,
             &snapshot,
             self.max_cycles,
+            self.max_retries,
+            self.tool_timeout_secs,
             &self.react_preamble,
             &self.span_emitter,
             &self.on_thought,
@@ -326,6 +465,7 @@ where
             &self.on_error,
             &self.history,
             false,
+            None,
         )
         .await
     }
@@ -339,6 +479,8 @@ where
             &msg,
             &snapshot,
             self.max_cycles,
+            self.max_retries,
+            self.tool_timeout_secs,
             &self.react_preamble,
             &self.span_emitter,
             &self.on_thought,
@@ -348,6 +490,7 @@ where
             &self.on_error,
             &self.history,
             true,
+            None,
         )
         .await?;
         Ok(trace.final_answer.map(|fa| fa.text).unwrap_or_default())
@@ -377,10 +520,18 @@ where
             Arc::new(super::streaming::StreamShared {
                 agent: self.agent.clone(),
                 history: Arc::clone(&self.history),
-                _compaction: std::marker::PhantomData,
+                tool_timeout_secs: self.tool_timeout_secs,
+                on_thought: self.on_thought.as_ref().map(Arc::clone),
+                on_action: self.on_action.as_ref().map(Arc::clone),
+                on_observation: self.on_observation.as_ref().map(Arc::clone),
+                on_final: self.on_final.as_ref().map(Arc::clone),
+                on_error: self.on_error.as_ref().map(Arc::clone),
+                context_manager: None,
+                _compaction: PhantomData,
             }),
             snapshot,
             self.max_cycles,
+            self.max_retries,
             self.react_preamble.clone(),
             Arc::clone(&self.span_emitter),
             false,
@@ -399,10 +550,18 @@ where
             Arc::new(super::streaming::StreamShared {
                 agent: self.agent.clone(),
                 history: Arc::clone(&self.history),
-                _compaction: std::marker::PhantomData,
+                tool_timeout_secs: self.tool_timeout_secs,
+                on_thought: self.on_thought.as_ref().map(Arc::clone),
+                on_action: self.on_action.as_ref().map(Arc::clone),
+                on_observation: self.on_observation.as_ref().map(Arc::clone),
+                on_final: self.on_final.as_ref().map(Arc::clone),
+                on_error: self.on_error.as_ref().map(Arc::clone),
+                context_manager: None,
+                _compaction: PhantomData,
             }),
             snapshot,
             self.max_cycles,
+            self.max_retries,
             self.react_preamble.clone(),
             Arc::clone(&self.span_emitter),
             true,
@@ -419,20 +578,13 @@ where
     P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
     C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
 {
-    /// Downcast the type-erased context manager back to `&ContextManager<C>`.
-    fn context_manager(&self) -> Option<&ContextManager<C>> {
-        self.context_manager
-            .as_ref()
-            .and_then(|arc| arc.downcast_ref::<ContextManager<C>>())
-    }
-
     /// Execute a ReAct prompt with automatic compaction, **without** mutating
     /// shared history.
     pub async fn prompt_compact(&self, msg: impl Into<String>) -> Result<ReActTrace, ReActError> {
         let msg = msg.into();
         let mut snapshot = lock_mutex(&self.history).clone();
-        if let Some(cm) = self.context_manager() {
-            cm.compact_history_if_needed(&mut snapshot, &msg)
+        if let Some(cm) = self.context_manager.as_deref() {
+            cm.compact(&mut snapshot, &msg)
                 .await
                 .map_err(|e| ReActError::Model(e.to_string()))?;
         }
@@ -441,6 +593,8 @@ where
             &msg,
             &snapshot,
             self.max_cycles,
+            self.max_retries,
+            self.tool_timeout_secs,
             &self.react_preamble,
             &self.span_emitter,
             &self.on_thought,
@@ -450,6 +604,7 @@ where
             &self.on_error,
             &self.history,
             false,
+            self.context_manager.as_deref(),
         )
         .await
     }
@@ -459,8 +614,8 @@ where
     pub async fn chat_compact(&self, msg: impl Into<String>) -> Result<String, ReActError> {
         let msg = msg.into();
         let mut snapshot = lock_mutex(&self.history).clone();
-        if let Some(cm) = self.context_manager() {
-            cm.compact_history_if_needed(&mut snapshot, &msg)
+        if let Some(cm) = self.context_manager.as_deref() {
+            cm.compact(&mut snapshot, &msg)
                 .await
                 .map_err(|e| ReActError::Model(e.to_string()))?;
         }
@@ -469,6 +624,8 @@ where
             &msg,
             &snapshot,
             self.max_cycles,
+            self.max_retries,
+            self.tool_timeout_secs,
             &self.react_preamble,
             &self.span_emitter,
             &self.on_thought,
@@ -478,8 +635,86 @@ where
             &self.on_error,
             &self.history,
             true,
+            self.context_manager.as_deref(),
         )
         .await?;
         Ok(trace.final_answer.map(|fa| fa.text).unwrap_or_default())
+    }
+}
+
+// ── Streaming-compaction methods ──────────────────────────────────────────
+
+impl<M, P, C> BuiltReAct<M, P, C>
+where
+    M: CompletionModel
+        + rig_core::streaming::StreamingChat<M, M::StreamingResponse>
+        + WasmCompatSend
+        + WasmCompatSync
+        + 'static,
+    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
+    M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
+    C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
+{
+    fn make_stream_shared(&self) -> Arc<super::streaming::StreamShared<M, P, C>> {
+        Arc::new(super::streaming::StreamShared {
+            agent: self.agent.clone(),
+            history: Arc::clone(&self.history),
+            tool_timeout_secs: self.tool_timeout_secs,
+            on_thought: self.on_thought.as_ref().map(Arc::clone),
+            on_action: self.on_action.as_ref().map(Arc::clone),
+            on_observation: self.on_observation.as_ref().map(Arc::clone),
+            on_final: self.on_final.as_ref().map(Arc::clone),
+            on_error: self.on_error.as_ref().map(Arc::clone),
+            context_manager: self.context_manager.clone(),
+            _compaction: PhantomData,
+        })
+    }
+
+    /// Stream a ReAct prompt with automatic compaction. Does **not** mutate shared history.
+    pub async fn stream_prompt_compact(
+        &self,
+        msg: impl Into<String>,
+    ) -> Result<super::streaming::ReActStream<M, P, C>, ReActError> {
+        let msg = msg.into();
+        let mut snapshot = lock_mutex(&self.history).clone();
+        if let Some(cm) = self.context_manager.as_deref() {
+            cm.compact(&mut snapshot, &msg)
+                .await
+                .map_err(|e| ReActError::Model(e.to_string()))?;
+        }
+        Ok(super::streaming::ReActStream::new(
+            self.make_stream_shared(),
+            snapshot,
+            self.max_cycles,
+            self.max_retries,
+            self.react_preamble.clone(),
+            Arc::clone(&self.span_emitter),
+            false,
+            msg,
+        ))
+    }
+
+    /// Stream a ReAct chat with automatic compaction. Mutates shared history on completion.
+    pub async fn stream_chat_compact(
+        &self,
+        msg: impl Into<String>,
+    ) -> Result<super::streaming::ReActStream<M, P, C>, ReActError> {
+        let msg = msg.into();
+        let mut snapshot = lock_mutex(&self.history).clone();
+        if let Some(cm) = self.context_manager.as_deref() {
+            cm.compact(&mut snapshot, &msg)
+                .await
+                .map_err(|e| ReActError::Model(e.to_string()))?;
+        }
+        Ok(super::streaming::ReActStream::new(
+            self.make_stream_shared(),
+            snapshot,
+            self.max_cycles,
+            self.max_retries,
+            self.react_preamble.clone(),
+            Arc::clone(&self.span_emitter),
+            true,
+            msg,
+        ))
     }
 }

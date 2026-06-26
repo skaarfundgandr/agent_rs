@@ -27,6 +27,7 @@ where
         ReActBuilder {
             agent: self,
             max_cycles: 20,
+            max_retries: 3,
             react_preamble: None,
             initial_history: Vec::new(),
             span_emitter: Arc::new(NoopSpanEmitter),
@@ -35,6 +36,7 @@ where
             on_observation: None,
             on_final: None,
             on_error: None,
+            tool_timeout_secs: 60,
             compaction: NoCompaction,
             _phantom: PhantomData,
         }
