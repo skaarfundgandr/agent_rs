@@ -47,9 +47,9 @@ impl RagPipeline {
             .map(|e| e.eq_ignore_ascii_case("pdf"))
             .unwrap_or(false)
         {
-            PdfLoader::new().load(path)?
+            PdfLoader::new().load(path).await?
         } else {
-            TextLoader::new().load(path)?
+            TextLoader::new().load(path).await?
         };
 
         let source = document
@@ -82,10 +82,17 @@ impl RagPipeline {
 
     async fn add_directory(&self, dir: &Path, embedder: &dyn ErasedEmbedder) -> Result<usize> {
         let extensions = self.effective_extensions();
+        let dir_owned = dir.to_path_buf();
+        let walk_extensions = extensions.clone();
+        let files = tokio::task::spawn_blocking(move || {
+            walker::walk_indexable(&dir_owned, &walk_extensions)
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("directory walk task failed: {e}"))??;
         let mut total_chunks = 0usize;
         let mut files_indexed = 0usize;
 
-        for path in walker::walk_indexable(dir, &extensions)? {
+        for path in files {
             match self.add_single_file(&path, embedder).await {
                 Ok(n) => {
                     total_chunks += n;

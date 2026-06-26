@@ -42,14 +42,14 @@ impl EmbeddingModel for MockEmbeddingModel {
 
 // ---------- Existing-style tests (loaders + splitter) — unchanged conceptually ----------
 
-#[test]
-fn test_text_loader_and_splitter() {
+#[tokio::test]
+async fn test_text_loader_and_splitter() {
     let temp_file = tempfile::Builder::new().suffix(".md").tempfile().unwrap();
     let test_file = temp_file.path();
     fs::write(test_file, "This is a test file for the RAG text loader.").unwrap();
 
     let loader = TextLoader::new();
-    let doc = loader.load(test_file).unwrap();
+    let doc = loader.load(test_file).await.unwrap();
 
     assert_eq!(doc.content, "This is a test file for the RAG text loader.");
     let source_name = test_file.file_name().unwrap().to_str().unwrap();

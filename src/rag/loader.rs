@@ -4,7 +4,6 @@ use crate::agent::tools::document::extract_pdf_text;
 use crate::rag::Document;
 use anyhow::{Context, Result};
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 /// File extensions indexed by [`crate::rag::RagPipeline`] when no explicit
@@ -12,9 +11,10 @@ use std::path::Path;
 pub const DEFAULT_EXTENSIONS: &[&str] = &["txt", "md", "pdf"];
 
 /// Trait for loading documents from the file system.
+#[async_trait::async_trait]
 pub trait DocumentLoader {
     /// Loads a file and returns a `Document`.
-    fn load(&self, path: &Path) -> Result<Document>;
+    async fn load(&self, path: &Path) -> Result<Document>;
 }
 
 /// Loader for PDF documents.
@@ -32,8 +32,9 @@ impl PdfLoader {
     }
 }
 
+#[async_trait::async_trait]
 impl DocumentLoader for PdfLoader {
-    fn load(&self, path: &Path) -> Result<Document> {
+    async fn load(&self, path: &Path) -> Result<Document> {
         let text = extract_pdf_text(path)?;
         let source_name = path
             .file_name()
@@ -67,9 +68,11 @@ impl TextLoader {
     }
 }
 
+#[async_trait::async_trait]
 impl DocumentLoader for TextLoader {
-    fn load(&self, path: &Path) -> Result<Document> {
-        let content = fs::read_to_string(path)
+    async fn load(&self, path: &Path) -> Result<Document> {
+        let content = tokio::fs::read_to_string(path)
+            .await
             .with_context(|| format!("Failed to read text file: {:?}", path))?;
 
         let source_name = path
