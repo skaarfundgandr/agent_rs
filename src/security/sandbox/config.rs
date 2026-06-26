@@ -218,9 +218,10 @@ impl Default for SandboxConfig {
     ///
     /// # Panics
     ///
-    /// Panics if the current directory cannot be determined or canonicalized.
-    /// This is acceptable because the current directory is always a valid
-    /// concept in a running process.
+    /// Panics if the current working directory cannot be determined or
+    /// canonicalized (e.g., it was deleted while the process was running).
+    /// For daemon or long-running use cases where the CWD may change,
+    /// prefer [`SandboxConfig::new`] with an explicit root path.
     #[allow(clippy::expect_used)]
     fn default() -> Self {
         Self::single(".").expect("current directory is always a valid sandbox root")

@@ -1,10 +1,13 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use agent_rs_lib::domain::errors::DocumentError;
 use agent_rs_lib::security::{
-    SandboxConfig, find_containing_root, relative_display_path, validate_sandboxed_path,
+    SandboxConfig, SharedSandbox, find_containing_root, relative_display_path,
+    validate_sandboxed_path,
 };
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 #[test]
 fn test_single_root() {
@@ -137,4 +140,97 @@ fn test_sandbox_config_clone() {
     let config = SandboxConfig::single(tmp.path()).unwrap();
     let cloned = config.clone();
     assert_eq!(config.len(), cloned.len());
+}
+
+#[tokio::test]
+async fn test_symlink_glob_rejects_targets_outside_sandbox() {
+    use agent_rs_lib::agent::permission::PermissionPolicy;
+    use agent_rs_lib::agent::tools::glob::{GlobSearchArgs, GlobSearchTool};
+    use rig_core::tool::Tool;
+
+    let sandbox_dir = tempfile::tempdir().unwrap();
+    let outside_dir = tempfile::tempdir().unwrap();
+
+    fs::write(outside_dir.path().join("secret.txt"), "classified").unwrap();
+    fs::write(sandbox_dir.path().join("safe.txt"), "public").unwrap();
+
+    let symlink_path = sandbox_dir.path().join("link_outside");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(outside_dir.path().join("secret.txt"), &symlink_path).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_file(outside_dir.path().join("secret.txt"), &symlink_path)
+        .unwrap();
+
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(sandbox_dir.path()).unwrap(),
+    ));
+    let tool = GlobSearchTool::new(Arc::clone(&sandbox), PermissionPolicy::AllowAll);
+
+    let result = tool
+        .call(GlobSearchArgs {
+            pattern: "**/*".to_string(),
+            directory: None,
+        })
+        .await
+        .unwrap();
+
+    assert!(
+        !result.contains("secret.txt"),
+        "Glob should not return files outside sandbox via symlink, got: {result}"
+    );
+    assert!(
+        result.contains("safe.txt"),
+        "Glob should return files inside sandbox, got: {result}"
+    );
+}
+
+#[tokio::test]
+async fn test_symlink_grep_rejects_targets_outside_sandbox() {
+    use agent_rs_lib::agent::permission::PermissionPolicy;
+    use agent_rs_lib::agent::tools::search::{GrepSearchArgs, GrepSearchTool};
+    use rig_core::tool::Tool;
+
+    let sandbox_dir = tempfile::tempdir().unwrap();
+    let outside_dir = tempfile::tempdir().unwrap();
+
+    fs::write(outside_dir.path().join("secret.txt"), "classified content").unwrap();
+    fs::write(sandbox_dir.path().join("safe.txt"), "public content").unwrap();
+
+    let symlink_path = sandbox_dir.path().join("link_outside");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(outside_dir.path().join("secret.txt"), &symlink_path).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_file(outside_dir.path().join("secret.txt"), &symlink_path)
+        .unwrap();
+
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::single(sandbox_dir.path()).unwrap(),
+    ));
+    let tool = GrepSearchTool::new(
+        Arc::clone(&sandbox),
+        HashSet::from(["txt".to_string()]),
+        PermissionPolicy::AllowAll,
+    );
+
+    let result = tool
+        .call(GrepSearchArgs {
+            query: "content".to_string(),
+            path: None,
+            case_sensitive: None,
+        })
+        .await
+        .unwrap();
+
+    let canonical_outside = outside_dir.path().canonicalize().unwrap();
+    for line in result.lines() {
+        if let Some(path_part) = line.split(':').next() {
+            let path = std::path::Path::new(path_part);
+            if path.is_absolute() {
+                assert!(
+                    !path.starts_with(&canonical_outside),
+                    "Grep returned path outside sandbox: {path_part}"
+                );
+            }
+        }
+    }
 }

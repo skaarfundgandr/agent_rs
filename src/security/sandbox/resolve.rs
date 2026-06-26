@@ -58,6 +58,12 @@ pub fn validate_sandboxed_path(
 ///
 /// Returns `Ok(Some(path))` if the path is within the root,
 /// `Ok(None)` if the path escapes the root, or `Err` on IO failure.
+///
+/// NOTE: Both paths are canonicalized before comparison, which handles
+/// symlinks and `..` components. On case-insensitive filesystems (e.g.,
+/// macOS APFS), `Path::canonicalize()` preserves the on-disk casing so
+/// the comparison remains correct. On case-sensitive Linux, casing is
+/// irrelevant.
 fn try_resolve_within_root(
     canonical_root: &Path,
     user_path: &Path,
@@ -101,6 +107,10 @@ fn try_resolve_within_root(
 /// Uses canonical roots for comparison to handle Windows `\\?\` prefix
 /// correctly. Falls back to non-canonical comparison for non-existent paths.
 ///
+/// Both `path` and each root go through `Path::canonicalize()` before
+/// comparison. On case-insensitive filesystems (macOS APFS) this preserves
+/// on-disk casing, so the comparison remains correct.
+///
 /// # Arguments
 ///
 /// * `sandbox` - The sandbox configuration containing allowed roots.
@@ -110,7 +120,6 @@ fn try_resolve_within_root(
 ///
 /// Returns `Some(&PathBuf)` of the containing sandbox root, or `None` if not found.
 pub fn find_containing_root<'a>(sandbox: &'a SandboxConfig, path: &Path) -> Option<&'a PathBuf> {
-    // Try canonical comparison first (works for existing, canonicalized paths)
     let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     for (original_root, canonical_root) in
         sandbox.roots().iter().zip(sandbox.canonical_roots().iter())
@@ -152,5 +161,5 @@ pub fn relative_display_path(sandbox: &SandboxConfig, path: &Path) -> String {
             return rel.to_string_lossy().into_owned();
         }
     }
-    path.to_string_lossy().into_owned()
+    "<outside-sandbox>".to_string()
 }
