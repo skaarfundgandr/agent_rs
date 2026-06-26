@@ -1,4 +1,5 @@
 #![cfg_attr(not(feature = "rag"), allow(unused))]
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 #[cfg(feature = "rag")]
 mod rag_main {
@@ -136,6 +137,35 @@ mod rag_main {
             eprintln!("  No mcp.json found — skipping MCP tools.");
             Vec::new()
         };
+
+        let internal_tool_names: std::collections::HashSet<String> = [
+            "read_document",
+            "write_document",
+            "list_directory",
+            "grep_search",
+            "glob_search",
+            "manage_rag",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+        let mut mcp_collisions = Vec::new();
+        tools.retain(|t| {
+            let name = t.name();
+            if internal_tool_names.contains(&name) {
+                mcp_collisions.push(name);
+                false
+            } else {
+                true
+            }
+        });
+        if !mcp_collisions.is_empty() {
+            tracing::warn!(
+                ?mcp_collisions,
+                "MCP tools skipped: names collide with internal tools"
+            );
+        }
 
         let compaction_agent = chat_client
             .agent(&chat_model_name)

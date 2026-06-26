@@ -163,7 +163,11 @@ mod otel_main {
         let agent = chat_client
             .agent(&chat_model_name)
             .tools(tools)
-            .default_max_turns(20)
+            // One rig turn per ReAct cycle: the agent reasons, optionally calls
+            // a tool, and returns. The ReAct loop recovers from MaxTurnsError
+            // and only persists the final answer across cycles, so reasoning and
+            // tool-call history are not carried forward.
+            .default_max_turns(1)
             .temperature(0.6)
             .hook(LangSmithAgentHook)
             .build();
@@ -179,17 +183,17 @@ mod otel_main {
             .max_cycles(20)
             .react_preamble(None)
             .with_span_emitter(Arc::new(LangSmithReActEmitter))
-            .on_action(|a| eprintln!("→ action: {}", a.tool_name))
+            .on_action(|a| println!("action: {}", a.tool_name))
             .on_observation(|o| {
-                eprintln!(
-                    "← obs: {} ({} bytes, err={})",
+                println!(
+                    "obs: {} ({} bytes, err={})",
                     o.tool_name,
                     o.result.len(),
                     o.is_error
                 )
             })
             .on_final(|f| {
-                eprintln!("\n✓ final answer ({} cycles):\n{}\n", f.cycles, f.text);
+                eprintln!("\nfinal answer ({} cycles):\n{}\n", f.cycles, f.text);
                 tracing::Span::current().record("output.value", f.text.as_str());
             })
             .with_compaction()
@@ -219,6 +223,7 @@ mod otel_main {
                 "openinference.span.kind" = "AGENT",
                 "input.value" = prompt,
                 "output.value" = tracing::field::Empty,
+                "react.cycle" = tracing::field::Empty,
             );
 
             let trace = async { react.chat_compact(prompt).await }

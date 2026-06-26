@@ -16,6 +16,9 @@ use agent_rs_lib::agent::{ReActExt, ReActBuilder, BuiltReAct, ReActSpanEmitter, 
   `rig::agent::Agent<M, P>`. Returns a `ReActBuilder`.
 - **Builder methods** (all return `Self`, preserving typestate):
   - `max_cycles(usize)` — guard rail; default 20.
+  - `max_retries(u32)` — retries for transient completion errors (`HttpError`,
+    `ProviderError`) and `MaxTurnsError` within a single cycle; default 3. Uses
+    exponential backoff (500ms × 2^attempt).
   - `react_preamble(Option<String>)` — preamble prepended to the prompt; default `None` (uses `REACT_PREAMBLE` at runtime).
   - `with_history(Vec<Message>)` — seed the initial conversation history.
   - `with_span_emitter(Arc<dyn ReActSpanEmitter>)` — for OTel integration.
@@ -33,6 +36,7 @@ use agent_rs_lib::agent::{ReActExt, ReActBuilder, BuiltReAct, ReActSpanEmitter, 
   - `stream_prompt(msg)` / `stream_chat(msg)` — streaming variants returning `ReActStream`.
   - `history()` — snapshot of current conversation history.
   - `max_cycles()` — accessor for the configured limit.
+  - `max_retries()` — accessor for the configured retry limit.
 - **`ReActSpanEmitter`** — trait with no-op defaults for `emit_cycle_start`,
   `emit_cycle_end`, `emit_action`, `emit_observation`. The `opentelemetry` feature
   provides `LangSmithReActEmitter` as a concrete impl.

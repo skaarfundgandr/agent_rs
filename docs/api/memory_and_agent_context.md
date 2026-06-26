@@ -15,6 +15,8 @@ Wraps an `Agent<M, P>` (where `M: CompletionModel` and `P: PromptHook<M>`) with 
 ### Methods
 - **`history(&self) -> Vec<Message>`**
   Returns a snapshot of the current conversation history.
+- **`max_retries(&self) -> u32`**
+  Returns the configured retry limit for completion calls (default 3).
 - **`async prompt(&self, msg: impl Into<String>) -> Result<String, PromptError>`**
   Executes an LLM chat turn **without** mutating shared history. Returns the response text. When compaction is enabled (with-compaction variant), history is compacted before the call.
 - **`async chat(&self, msg: impl Into<String>) -> Result<String, PromptError>`**
@@ -36,6 +38,11 @@ Builder for a managed agent. Constructed via [`ManagedExt::managed`].
 ### Methods
 - **`with_history(self, history: Vec<Message>) -> Self`**
   Seeds the initial conversation history.
+- **`max_retries(self, n: u32) -> Self`**
+  Sets the maximum number of retries for completion calls on transient errors
+  (`HttpError`, `ProviderError`). Defaults to 3. Retries use exponential
+  backoff (500ms × 2^attempt). Note: streaming methods are not retried at the
+  construction level because stream errors only surface during polling.
 - **`with_compaction(self) -> ManagedBuilder<'a, M, P, CompactionConfig<Agent<M, P>>>`**
   Enables automatic context compaction. The compaction model defaults to a clone of the agent itself.
 - **`build(self) -> BuiltManagedAgent<M, P, ()>`**
