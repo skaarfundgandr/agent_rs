@@ -196,6 +196,14 @@ fn test_managed_builder_defaults() {
     let agent = make_test_agent();
     let built = agent.managed().build();
     assert!(built.history().is_empty());
+    assert_eq!(built.max_retries(), 3);
+}
+
+#[test]
+fn test_managed_builder_max_retries_setter() {
+    let agent = make_test_agent();
+    let built = agent.managed().max_retries(7).build();
+    assert_eq!(built.max_retries(), 7);
 }
 
 #[test]
@@ -249,7 +257,11 @@ async fn test_managed_stream_appends_history() {
 
     let inner_stream = futures::stream::iter(vec![Ok(final_item)]);
     let history = Arc::new(Mutex::new(Vec::<Message>::new()));
-    let mut managed_stream = ManagedStream::new(inner_stream, Some(Arc::clone(&history)));
+    let mut managed_stream = ManagedStream::new(
+        inner_stream,
+        Some(Arc::clone(&history)),
+        "Hello".to_string(),
+    );
 
     while let Some(item) = managed_stream.next().await {
         assert!(item.is_ok());
@@ -269,7 +281,7 @@ async fn test_managed_stream_appends_history() {
 }
 
 #[tokio::test]
-async fn test_managed_stream_no_history_no_append() {
+async fn test_managed_stream_appends_user_and_final_without_history_field() {
     use agent_rs_lib::agent::ManagedStream;
     use futures::StreamExt;
     use rig_core::agent::MultiTurnStreamItem;
@@ -283,15 +295,37 @@ async fn test_managed_stream_no_history_no_append() {
 
     let inner_stream = futures::stream::iter(vec![Ok(final_item)]);
     let history = Arc::new(Mutex::new(Vec::<Message>::new()));
-    let mut managed_stream = ManagedStream::new(inner_stream, Some(Arc::clone(&history)));
+    let mut managed_stream = ManagedStream::new(
+        inner_stream,
+        Some(Arc::clone(&history)),
+        "Hello".to_string(),
+    );
 
     while let Some(item) = managed_stream.next().await {
         assert!(item.is_ok());
     }
 
-    // FinalResponse without history() => no append
+    // Even without history(), the user prompt + final answer are persisted.
     let updated_history = history.lock().unwrap();
-    assert!(updated_history.is_empty());
+    assert_eq!(updated_history.len(), 2);
+    if let Message::User { content } = &updated_history[0] {
+        if let UserContent::Text(t) = content.first_ref() {
+            assert_eq!(t.text, "Hello");
+        } else {
+            panic!("Expected text user content");
+        }
+    } else {
+        panic!("Expected user message");
+    }
+    if let Message::Assistant { content, .. } = &updated_history[1] {
+        if let AssistantContent::Text(t) = content.first_ref() {
+            assert_eq!(t.text, "Hi there!");
+        } else {
+            panic!("Expected text assistant content");
+        }
+    } else {
+        panic!("Expected assistant message");
+    }
 }
 
 #[test]
@@ -434,4 +468,37 @@ fn test_strip_reasoning_preserves_assistant_id() {
     } else {
         panic!("Expected assistant message");
     }
+}
+
+#[tokio::test]
+#[ignore = "requires a running mock completion server to test concurrent chat"]
+async fn test_concurrent_managed_agent_chat_preserves_history() {
+    use agent_rs_lib::agent::ManagedExt;
+    use std::sync::Arc;
+
+    let agent = make_test_agent();
+    let built = agent.managed().build();
+    let shared = Arc::new(built);
+
+    let mut handles = vec![];
+    for i in 0..3 {
+        let agent_clone = Arc::clone(&shared);
+        handles.push(tokio::spawn(async move {
+            agent_clone.chat(format!("message {i}")).await
+        }));
+    }
+
+    let mut success_count = 0;
+    for h in handles {
+        let result = h.await.unwrap();
+        if result.is_ok() {
+            success_count += 1;
+        }
+    }
+
+    let history = shared.history();
+    assert!(
+        history.len() >= success_count,
+        "History should have grown proportionally to successful calls"
+    );
 }

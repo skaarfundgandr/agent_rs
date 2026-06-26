@@ -128,7 +128,16 @@ impl<
                 threshold = self.compaction_threshold
             );
 
-            let history_text = serde_json::to_string(&history).unwrap_or_default();
+            let history_text = match serde_json::to_string(&history) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "failed to serialize conversation history for compaction; skipping compaction"
+                    );
+                    return Ok(false);
+                }
+            };
             let compaction_prompt = match self.compaction_prompt_formatter {
                 Some(formatter) => formatter(&history_text),
                 None => default_compaction_prompt_formatter(&history_text),

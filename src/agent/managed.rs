@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::time::Duration;
 
 use rig_core::agent::{Agent, MultiTurnStreamItem, StreamingError};
 use rig_core::completion::{CompletionModel, Prompt, PromptError};
@@ -33,7 +34,51 @@ where
         ManagedBuilder {
             agent: self,
             initial_history: Vec::new(),
+            max_retries: 3,
             compaction: NoCompaction,
+        }
+    }
+}
+
+/// Returns `true` for transient completion errors that are safe to retry.
+fn is_retryable_prompt_error(e: &PromptError) -> bool {
+    matches!(
+        e,
+        rig_core::completion::request::PromptError::CompletionError(
+            rig_core::completion::request::CompletionError::HttpError(_)
+                | rig_core::completion::request::CompletionError::ProviderError(_)
+        )
+    )
+}
+
+/// Retry `execute_chat` with exponential backoff on transient errors.
+///
+/// Restores the working history from a snapshot before each attempt to avoid
+/// partial mutation on failure. On success, `working` contains the final
+/// history; on failure, `working` is left in a clean state (last successful
+/// snapshot).
+async fn retry_chat<M, P>(
+    agent: &Agent<M, P>,
+    msg: &str,
+    working: &mut Vec<Message>,
+    max_retries: u32,
+) -> Result<String, PromptError>
+where
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
+{
+    let snapshot = working.clone();
+    let mut attempt = 0u32;
+    loop {
+        attempt += 1;
+        *working = snapshot.clone();
+        match execute_chat(agent, msg, working).await {
+            Ok(s) => return Ok(s),
+            Err(e) if is_retryable_prompt_error(&e) && attempt < max_retries => {
+                let delay = Duration::from_millis(500 * 2u64.pow(attempt - 1));
+                tokio::time::sleep(delay).await;
+            }
+            Err(e) => return Err(e),
         }
     }
 }
@@ -51,6 +96,7 @@ where
 {
     agent: &'a Agent<M, P>,
     initial_history: Vec<Message>,
+    max_retries: u32,
     compaction: CompState,
 }
 
@@ -65,6 +111,17 @@ where
     pub fn with_history(self, history: Vec<Message>) -> Self {
         Self {
             initial_history: history,
+            ..self
+        }
+    }
+
+    /// Set the maximum number of retries for completion calls on transient errors.
+    ///
+    /// Retries occur with exponential backoff (500ms * 2^attempt) and are
+    /// triggered on `HttpError` and `ProviderError`. Defaults to 3.
+    pub fn max_retries(self, max_retries: u32) -> Self {
+        Self {
+            max_retries,
             ..self
         }
     }
@@ -90,6 +147,7 @@ where
         ManagedBuilder {
             agent: self.agent,
             initial_history: self.initial_history,
+            max_retries: self.max_retries,
             compaction: CompactionConfig {
                 model: self.agent.clone(),
                 threshold: 0,
@@ -104,6 +162,7 @@ where
         BuiltManagedAgent {
             agent: self.agent.clone(),
             history: Arc::new(Mutex::new(self.initial_history)),
+            max_retries: self.max_retries,
             context_manager: None,
             _compaction: PhantomData,
         }
@@ -137,6 +196,7 @@ where
         ManagedBuilder {
             agent: self.agent,
             initial_history: self.initial_history,
+            max_retries: self.max_retries,
             compaction: CompactionConfig {
                 model,
                 threshold: self.compaction.threshold,
@@ -193,6 +253,7 @@ where
         BuiltManagedAgent {
             agent: self.agent.clone(),
             history: Arc::new(Mutex::new(self.initial_history)),
+            max_retries: self.max_retries,
             context_manager: Some(Arc::new(ctx)),
             _compaction: PhantomData,
         }
@@ -212,6 +273,7 @@ where
 {
     agent: Agent<M, P>,
     history: Arc<Mutex<Vec<Message>>>,
+    max_retries: u32,
     context_manager: Option<Arc<dyn Any + Send + Sync>>,
     _compaction: PhantomData<C>,
 }
@@ -227,6 +289,11 @@ where
     pub fn history(&self) -> Vec<Message> {
         lock_mutex(&self.history).clone()
     }
+
+    /// Return the configured `max_retries` limit.
+    pub fn max_retries(&self) -> u32 {
+        self.max_retries
+    }
 }
 
 // ── No-compaction methods ────────────────────────────────────────────────
@@ -240,7 +307,7 @@ where
     pub async fn prompt(&self, msg: impl Into<String>) -> Result<String, PromptError> {
         let msg = msg.into();
         let mut working = lock_mutex(&self.history).clone();
-        execute_chat(&self.agent, &msg, &mut working).await
+        retry_chat(&self.agent, &msg, &mut working, self.max_retries).await
     }
 
     /// Execute a chat prompt **with** history mutation on success.
@@ -250,9 +317,11 @@ where
     pub async fn chat(&self, msg: impl Into<String>) -> Result<String, PromptError> {
         let msg = msg.into();
         let mut working = lock_mutex(&self.history).clone();
-        let result = execute_chat(&self.agent, &msg, &mut working).await;
-        if result.is_ok() {
-            *lock_mutex(&self.history) = working;
+        let result = retry_chat(&self.agent, &msg, &mut working, self.max_retries).await;
+        if let Ok(final_text) = &result {
+            let mut h = lock_mutex(&self.history);
+            h.push(Message::user(msg.as_str()));
+            h.push(Message::assistant(final_text));
         }
         result
     }
@@ -272,7 +341,7 @@ where
         let rig_stream = execute_stream_chat(&self.agent, &msg, working)
             .multi_turn(self.agent.default_max_turns.unwrap_or(20))
             .await;
-        Ok(ManagedStream::new(rig_stream, None))
+        Ok(ManagedStream::new(rig_stream, None, msg))
     }
 
     /// Stream a chat prompt **with** history mutation on completion.
@@ -293,6 +362,7 @@ where
         Ok(ManagedStream::new(
             rig_stream,
             Some(Arc::clone(&self.history)),
+            msg,
         ))
     }
 }
@@ -319,7 +389,7 @@ where
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
-        execute_chat(&self.agent, &msg, &mut working).await
+        retry_chat(&self.agent, &msg, &mut working, self.max_retries).await
     }
 
     /// Execute a chat prompt **with** history mutation on success, with compaction.
@@ -329,9 +399,11 @@ where
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
-        let result = execute_chat(&self.agent, &msg, &mut working).await;
-        if result.is_ok() {
-            *lock_mutex(&self.history) = working;
+        let result = retry_chat(&self.agent, &msg, &mut working, self.max_retries).await;
+        if let Ok(final_text) = &result {
+            let mut h = lock_mutex(&self.history);
+            h.push(Message::user(msg.as_str()));
+            h.push(Message::assistant(final_text));
         }
         result
     }
@@ -354,7 +426,7 @@ where
         let rig_stream = execute_stream_chat(&self.agent, &msg, working)
             .multi_turn(self.agent.default_max_turns.unwrap_or(20))
             .await;
-        Ok(ManagedStream::new(rig_stream, None))
+        Ok(ManagedStream::new(rig_stream, None, msg))
     }
 
     /// Stream a chat prompt **with** history mutation on completion, with compaction.
@@ -378,6 +450,7 @@ where
         Ok(ManagedStream::new(
             rig_stream,
             Some(Arc::clone(&self.history)),
+            msg,
         ))
     }
 }
@@ -395,7 +468,11 @@ pub struct ManagedStream<R: Send + 'static> {
 }
 
 impl<R: Send + 'static> ManagedStream<R> {
-    pub fn new<S>(stream: S, shared_history: Option<Arc<Mutex<Vec<Message>>>>) -> Self
+    pub fn new<S>(
+        stream: S,
+        shared_history: Option<Arc<Mutex<Vec<Message>>>>,
+        prompt_text: String,
+    ) -> Self
     where
         S: futures::Stream<Item = Result<MultiTurnStreamItem<R>, StreamingError>>
             + Send
@@ -407,15 +484,18 @@ impl<R: Send + 'static> ManagedStream<R> {
         tokio::spawn(async move {
             use futures::StreamExt;
             let mut stream = stream;
+            let mut history_appended = false;
 
             while let Some(item) = stream.next().await {
                 if let Ok(MultiTurnStreamItem::FinalResponse(ref final_res)) = item
                     && let Some(ref shared_history) = shared_history
+                    && !history_appended
                 {
-                    let final_history = final_res.history().map(|h| h.to_vec()).unwrap_or_default();
-                    if !final_history.is_empty() {
-                        *lock_mutex(shared_history) = final_history;
-                    }
+                    let final_text = final_res.response().to_string();
+                    let mut h = lock_mutex(shared_history);
+                    h.push(Message::user(&prompt_text));
+                    h.push(Message::assistant(&final_text));
+                    history_appended = true;
                 }
 
                 if tx.send(item).await.is_err() {
