@@ -349,3 +349,81 @@ fn langsmith_react_emitter_handles_errors_gracefully() {
         );
     });
 }
+
+/// Regression test for the "cycle count is not incrementing" bug
+///
+/// `LangSmithReActEmitter::emit_cycle_start` records `react.cycle` (and the
+/// LangSmith/OpenInference run-typing attributes) on the current span via
+/// `Span::current().record(...)`. The `tracing-opentelemetry` layer only
+/// materialises an OTel attribute at span creation when the field has a
+/// concrete value; `tracing::field::Empty` fields are silently dropped on
+/// export, and any subsequent `record()` call has nothing to update.
+///
+/// This test pins the fix: the parent span MUST declare `react.cycle` and the
+/// run-typing fields with typed defaults (here `0_i64` and the empty-string
+/// sentinels), so that each `emit_cycle_start(n)` produces an observable
+/// update on the span's recorded fields. The local `TraceCapture` layer
+/// confirms the record() calls fire in order; the real verification is that
+/// the OTel exporter (in `examples/langsmith_react.rs`) now sees a typed
+/// attribute and propagates it to LangSmith.
+#[test]
+fn langsmith_react_emitter_records_react_cycle_incrementally() {
+    let capture = TraceCapture::default();
+    let subscriber = Registry::default().with(capture.clone());
+
+    tracing::subscriber::with_default(subscriber, || {
+        // The parent span — mirrors the declaration in `examples/langsmith_react.rs`
+        // after the bug-3 fix. `react.cycle` uses a typed default (0_i64), not
+        // `tracing::field::Empty`, so the OTel layer can materialise the
+        // attribute and `record()` calls can update it.
+        let span = tracing::info_span!(
+            "test_react_agent_span",
+            "langsmith.span.kind" = "",
+            "openinference.span.kind" = "",
+            "gen_ai.operation.name" = "",
+            "react.cycle" = 0_i64,
+        );
+        let _guard = span.enter();
+
+        let emitter = LangSmithReActEmitter;
+
+        // Cycle 0 — records `react.cycle = 0` (matches the typed default).
+        emitter.emit_cycle_start(0);
+
+        // Cycle 1 — must update `react.cycle` to 1.
+        emitter.emit_cycle_start(1);
+
+        // Cycle 2 — must update `react.cycle` to 2.
+        emitter.emit_cycle_start(2);
+
+        // --- Assertion 1: react.cycle is recorded, with the latest value --
+        let cycle_values = capture.fields_named("react.cycle");
+        assert!(
+            !cycle_values.is_empty(),
+            "expected react.cycle to be recorded on the span, got nothing"
+        );
+        let last = cycle_values.last().expect("non-empty");
+        assert_eq!(
+            last, "2",
+            "expected the last react.cycle recording to be '2' (latest \
+             emit_cycle_start call), got: {cycle_values:?}"
+        );
+
+        // --- Assertion 2: langsmith.span.kind is set to "chain" ----------
+        // emit_cycle_start overwrites the empty-string default with KIND_CHAIN.
+        let kind_values = capture.fields_named("langsmith.span.kind");
+        assert!(
+            kind_values.iter().any(|v| v == "chain"),
+            "expected langsmith.span.kind to be set to 'chain' after \
+             emit_cycle_start, got: {kind_values:?}"
+        );
+
+        // --- Assertion 3: gen_ai.operation.name is set to "react_cycle" --
+        let op_values = capture.fields_named("gen_ai.operation.name");
+        assert!(
+            op_values.iter().any(|v| v == "react_cycle"),
+            "expected gen_ai.operation.name to be set to 'react_cycle' after \
+             emit_cycle_start, got: {op_values:?}"
+        );
+    });
+}

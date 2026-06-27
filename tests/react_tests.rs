@@ -1,12 +1,19 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use agent_rs_lib::agent::ReActExt;
-use agent_rs_lib::agent::react::{REACT_PREAMBLE, ReActSpanEmitter, detect_final_answer};
+use agent_rs_lib::agent::react::{
+    ActionCb, ObservationCb, REACT_PREAMBLE, ReActSpanEmitter, detect_final_answer,
+};
 use agent_rs_lib::domain::agent::{
     Action, FinalAnswer, Observation, ReActStep, ReActTrace, Thought,
 };
 use agent_rs_lib::domain::errors::ReActError;
+use rig_core::OneOrMany;
 use rig_core::client::CompletionClient;
+use rig_core::message::{
+    AssistantContent, Message, ToolCall, ToolFunction, ToolResultContent, UserContent,
+};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 // ---------------------------------------------------------------------------
@@ -240,4 +247,153 @@ fn noop_span_emitter_is_inert() {
         duration: Duration::from_millis(1),
     };
     emitter.emit_observation(&dummy_obs);
+}
+
+/// When rig-core executes tool turns internally, the non-streaming ReAct loop
+/// must still surface every intermediate action and observation callback,
+/// not only the ones from the final assistant turn.
+#[test]
+fn internal_tool_turns_emit_callbacks() {
+    let actions = Arc::new(Mutex::new(Vec::<Action>::new()));
+    let observations = Arc::new(Mutex::new(Vec::<Observation>::new()));
+
+    let actions_clone = Arc::clone(&actions);
+    let on_action: Option<ActionCb> = Some(Arc::new(move |a| {
+        actions_clone.lock().unwrap().push(a.clone())
+    }));
+
+    let observations_clone = Arc::clone(&observations);
+    let on_observation: Option<ObservationCb> = Some(Arc::new(move |o| {
+        observations_clone.lock().unwrap().push(o.clone())
+    }));
+
+    let messages = vec![
+        // Initial user prompt.
+        Message::User {
+            content: OneOrMany::one(UserContent::text("read a file")),
+        },
+        // First assistant turn: tool call executed internally by rig-core.
+        Message::Assistant {
+            id: None,
+            content: OneOrMany::one(AssistantContent::ToolCall(ToolCall::new(
+                "tc-1".to_string(),
+                ToolFunction {
+                    name: "read_file".to_string(),
+                    arguments: serde_json::json!({"path": "README.md"}),
+                },
+            ))),
+        },
+        // Corresponding tool result.
+        Message::User {
+            content: OneOrMany::one(UserContent::ToolResult(rig_core::message::ToolResult {
+                id: "tc-1".to_string(),
+                call_id: None,
+                content: OneOrMany::one(ToolResultContent::text("hello")),
+            })),
+        },
+        // Final assistant turn: plain text answer.
+        Message::Assistant {
+            id: None,
+            content: OneOrMany::one(AssistantContent::text("Final Answer: done")),
+        },
+    ];
+
+    let mut trace = ReActTrace::default();
+    let emitter: Arc<dyn ReActSpanEmitter> = Arc::new(TestSpanEmitter);
+    agent_rs_lib::agent::react::emit_internal_tool_callbacks(
+        &messages,
+        0,
+        &on_action,
+        &on_observation,
+        &emitter,
+        &mut trace,
+    );
+
+    let actions = actions.lock().unwrap();
+    let observations = observations.lock().unwrap();
+
+    assert_eq!(actions.len(), 1, "expected one action callback");
+    assert_eq!(actions[0].tool_name, "read_file");
+
+    assert_eq!(observations.len(), 1, "expected one observation callback");
+    assert_eq!(observations[0].tool_name, "read_file");
+    assert_eq!(observations[0].result, "hello");
+
+    assert!(
+        matches!(trace.steps[0], ReActStep::Action(_)),
+        "first trace step should be an action"
+    );
+    assert!(
+        matches!(trace.steps[1], ReActStep::Observation(_)),
+        "second trace step should be an observation"
+    );
+}
+
+/// When the first message in `response.messages` is a tool result carried
+/// over from the previous ReAct cycle (i.e. the cycle's `current_prompt`),
+/// it must NOT be treated as a new observation.
+#[test]
+fn internal_tool_callbacks_skip_leading_prompt_tool_result() {
+    let observations = Arc::new(Mutex::new(Vec::<Observation>::new()));
+    let observations_clone = Arc::clone(&observations);
+    let on_observation: Option<ObservationCb> = Some(Arc::new(move |o| {
+        observations_clone.lock().unwrap().push(o.clone())
+    }));
+
+    // First message is the prompt for this `agent.prompt()` call, modelled as
+    // a tool result from the previous cycle.
+    let messages = vec![
+        Message::User {
+            content: OneOrMany::one(UserContent::ToolResult(rig_core::message::ToolResult {
+                id: "tc-prev".to_string(),
+                call_id: None,
+                content: OneOrMany::one(ToolResultContent::text("previous result")),
+            })),
+        },
+        Message::Assistant {
+            id: None,
+            content: OneOrMany::one(AssistantContent::ToolCall(ToolCall::new(
+                "tc-1".to_string(),
+                ToolFunction {
+                    name: "read_file".to_string(),
+                    arguments: serde_json::json!({"path": "README.md"}),
+                },
+            ))),
+        },
+        Message::User {
+            content: OneOrMany::one(UserContent::ToolResult(rig_core::message::ToolResult {
+                id: "tc-1".to_string(),
+                call_id: None,
+                content: OneOrMany::one(ToolResultContent::text("hello")),
+            })),
+        },
+        Message::Assistant {
+            id: None,
+            content: OneOrMany::one(AssistantContent::text("Final Answer: done")),
+        },
+    ];
+
+    let mut trace = ReActTrace::default();
+    let emitter: Arc<dyn ReActSpanEmitter> = Arc::new(TestSpanEmitter);
+    agent_rs_lib::agent::react::emit_internal_tool_callbacks(
+        &messages,
+        1,
+        &None,
+        &on_observation,
+        &emitter,
+        &mut trace,
+    );
+
+    let observations = observations.lock().unwrap();
+    assert_eq!(
+        observations.len(),
+        1,
+        "only the new tool result should emit an observation"
+    );
+    assert_eq!(observations[0].tool_name, "read_file");
+    assert_eq!(observations[0].result, "hello");
+    assert!(
+        !observations.iter().any(|o| o.result == "previous result"),
+        "previous cycle's tool result must not emit a callback"
+    );
 }

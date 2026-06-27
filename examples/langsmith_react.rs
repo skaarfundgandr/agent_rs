@@ -223,7 +223,7 @@ mod otel_main {
                 "openinference.span.kind" = "AGENT",
                 "input.value" = prompt,
                 "output.value" = tracing::field::Empty,
-                "react.cycle" = tracing::field::Empty,
+                "react.cycle" = 0_i64,
             );
 
             let trace = async { react.chat_compact(prompt).await }
