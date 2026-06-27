@@ -21,6 +21,8 @@ pub mod streaming;
 
 pub use builder::{CompactionConfig, NoCompaction, ReActBuilder};
 pub use built::BuiltReAct;
+#[doc(hidden)]
+pub use built::emit_internal_tool_callbacks;
 pub use callbacks::{ActionCb, ErrorCb, FinalCb, ObservationCb, ThoughtCb};
 pub use constants::REACT_PREAMBLE;
 pub use emitter::ReActSpanEmitter;

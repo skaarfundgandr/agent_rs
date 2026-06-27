@@ -1,20 +1,21 @@
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures::Stream;
 use rig_core::agent::{Agent, MultiTurnStreamItem, PromptHook};
 use rig_core::completion::{CompletionError, CompletionModel, PromptError};
 use rig_core::message::Message;
-use rig_core::streaming::{StreamedAssistantContent, StreamingChat};
+use rig_core::streaming::{StreamedAssistantContent, StreamedUserContent, StreamingChat};
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::react::Compact;
 use crate::agent::utils::{Mutex, lock_mutex};
 use crate::domain::agent::ReActStreamItem;
-use crate::domain::agent::{Action, FinalAnswer, ReActStep, ReActTrace, Thought};
+use crate::domain::agent::{Action, FinalAnswer, Observation, ReActStep, ReActTrace, Thought};
 use crate::domain::errors::ReActError;
 
 use super::callbacks::{ActionCb, ErrorCb, FinalCb, ObservationCb, ThoughtCb};
@@ -31,7 +32,6 @@ where
     pub(crate) tool_timeout_secs: u64,
     pub(crate) on_thought: Option<ThoughtCb>,
     pub(crate) on_action: Option<ActionCb>,
-    #[allow(dead_code)]
     pub(crate) on_observation: Option<ObservationCb>,
     pub(crate) on_final: Option<FinalCb>,
     pub(crate) on_error: Option<ErrorCb>,
@@ -105,6 +105,7 @@ where
 
         let on_thought_cb = shared.on_thought.clone();
         let on_action_cb = shared.on_action.clone();
+        let on_observation_cb = shared.on_observation.clone();
         let on_final_cb = shared.on_final.clone();
         let on_error_cb = shared.on_error.clone();
 
@@ -132,6 +133,7 @@ where
             let mut loop_continue = true;
             let mut error_emitted = false;
             let mut final_answer_buffer = String::new();
+            let mut pending_tool_calls: HashMap<String, (String, Instant)> = HashMap::new();
 
             while loop_continue && current_cycle < max_cycles {
                 span_emitter.emit_cycle_start(current_cycle);
@@ -324,6 +326,10 @@ where
                                         tool_call_id: Some(tool_call.id.clone()),
                                         cycle: current_cycle,
                                     };
+                                    pending_tool_calls.insert(
+                                        tool_call.id.clone(),
+                                        (tool_call.function.name.clone(), Instant::now()),
+                                    );
                                     if let Some(cb) = &on_action_cb {
                                         cb(&action);
                                     }
@@ -389,6 +395,53 @@ where
                                 }
                                 StreamedAssistantContent::ReasoningDelta { .. } => {}
                                 _ => {}
+                            }
+                        }
+                        MultiTurnStreamItem::StreamUserItem(StreamedUserContent::ToolResult {
+                            tool_result,
+                            internal_call_id: _,
+                        }) => {
+                            let result_text = tool_result
+                                .content
+                                .iter()
+                                .filter_map(|c| match c {
+                                    rig_core::message::ToolResultContent::Text(t) => {
+                                        Some(t.text.as_str())
+                                    }
+                                    _ => None,
+                                })
+                                .collect::<String>();
+                            let (tool_name, start) = pending_tool_calls
+                                .remove(&tool_result.id)
+                                .unwrap_or_else(|| ("unknown".to_string(), Instant::now()));
+                            let observation = Observation {
+                                tool_name,
+                                result: result_text,
+                                is_error: false,
+                                cycle: current_cycle,
+                                duration: start.elapsed(),
+                            };
+                            if let Some(cb) = &on_observation_cb {
+                                cb(&observation);
+                            }
+                            span_emitter.emit_observation(&observation);
+                            trace
+                                .steps
+                                .push(ReActStep::Observation(observation.clone()));
+                            if send_or_break(
+                                &tx,
+                                ReActStreamItem::Observation {
+                                    tool_name: observation.tool_name,
+                                    result: observation.result,
+                                    is_error: observation.is_error,
+                                    cycle: observation.cycle,
+                                    duration: observation.duration,
+                                },
+                            )
+                            .await
+                            {
+                                loop_continue = false;
+                                break;
                             }
                         }
                         MultiTurnStreamItem::FinalResponse(final_resp) => {

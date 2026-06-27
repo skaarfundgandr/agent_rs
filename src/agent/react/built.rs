@@ -77,6 +77,89 @@ where
     }
 }
 
+/// Emit `on_action` / `on_observation` callbacks for tool calls and tool
+/// results that rig-core executed internally before returning from
+/// `agent.prompt()`. The existing `run_loop` logic only inspects the *last*
+/// assistant message, so intermediate tool turns are otherwise lost.
+#[doc(hidden)]
+pub fn emit_internal_tool_callbacks(
+    messages: &[Message],
+    cycle: usize,
+    on_action: &Option<ActionCb>,
+    on_observation: &Option<ObservationCb>,
+    span_emitter: &Arc<dyn ReActSpanEmitter>,
+    trace: &mut ReActTrace,
+) {
+    let Some(last_assistant_idx) = messages
+        .iter()
+        .rposition(|msg| matches!(msg, Message::Assistant { .. }))
+    else {
+        return;
+    };
+
+    // Pending tool names, in emission order. Tool calls and their results are
+    // interleaved by rig-core, so FIFO pairing is robust when provider IDs
+    // between the call and the result do not match exactly.
+    let mut pending_tool_names: std::collections::VecDeque<String> =
+        std::collections::VecDeque::new();
+
+    // Skip the first message: it is the prompt passed to `agent.prompt()`.
+    // In later ReAct cycles that prompt is the previous cycle's last tool
+    // result, whose action/observation were already emitted.
+    for msg in &messages[1..last_assistant_idx] {
+        match msg {
+            Message::Assistant { content, .. } => {
+                for item in content.iter() {
+                    if let AssistantContent::ToolCall(tc) = item {
+                        pending_tool_names.push_back(tc.function.name.clone());
+                        let action = Action {
+                            tool_name: tc.function.name.clone(),
+                            args: tc.function.arguments.to_string(),
+                            tool_call_id: Some(tc.id.clone()),
+                            cycle,
+                        };
+                        if let Some(cb) = on_action {
+                            cb(&action);
+                        }
+                        span_emitter.emit_action(&action);
+                        trace.steps.push(ReActStep::Action(action));
+                    }
+                }
+            }
+            Message::User { content } => {
+                for item in content.iter() {
+                    if let UserContent::ToolResult(tr) = item {
+                        let result_text = tr
+                            .content
+                            .iter()
+                            .filter_map(|c| match c {
+                                ToolResultContent::Text(t) => Some(t.text.as_str()),
+                                _ => None,
+                            })
+                            .collect::<String>();
+                        let tool_name = pending_tool_names
+                            .pop_front()
+                            .unwrap_or_else(|| "unknown".to_string());
+                        let observation = Observation {
+                            tool_name,
+                            result: result_text,
+                            is_error: false,
+                            cycle,
+                            duration: Duration::from_secs(0),
+                        };
+                        if let Some(cb) = on_observation {
+                            cb(&observation);
+                        }
+                        span_emitter.emit_observation(&observation);
+                        trace.steps.push(ReActStep::Observation(observation));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Standalone ReAct loop that works on a local `Vec<Message>` clone.
 /// On success when `append_to_shared_history` is true, appends to the
 /// shared history via the Mutex.
@@ -216,6 +299,14 @@ where
         };
 
         if let Some(messages) = response.messages {
+            emit_internal_tool_callbacks(
+                &messages,
+                cycle,
+                on_action,
+                on_observation,
+                span_emitter,
+                &mut trace,
+            );
             working_history.extend(messages);
         }
 
