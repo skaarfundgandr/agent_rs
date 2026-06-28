@@ -1,7 +1,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-use agent_rs_lib::agent::ManagedExt;
-use agent_rs_lib::agent::memory::context::ContextManager;
-use agent_rs_lib::agent::memory::tokenizer::{count_messages_tokens, count_string_tokens};
+
+#[path = "common/mod.rs"]
+mod common;
+
+use agent_rs::agent::ManagedExt;
+use agent_rs::agent::memory::context::ContextManager;
+use agent_rs::agent::memory::tokenizer::{count_messages_tokens, count_string_tokens};
 use rig_core::OneOrMany;
 use rig_core::client::CompletionClient;
 use rig_core::completion::{Prompt, PromptError};
@@ -233,7 +237,7 @@ fn test_managed_builder_compaction_panics_without_threshold() {
 
 #[tokio::test]
 async fn test_managed_stream_appends_history() {
-    use agent_rs_lib::agent::ManagedStream;
+    use agent_rs::agent::ManagedStream;
     use futures::StreamExt;
     use rig_core::agent::MultiTurnStreamItem;
     use rig_core::completion::Usage;
@@ -282,7 +286,7 @@ async fn test_managed_stream_appends_history() {
 
 #[tokio::test]
 async fn test_managed_stream_appends_user_and_final_without_history_field() {
-    use agent_rs_lib::agent::ManagedStream;
+    use agent_rs::agent::ManagedStream;
     use futures::StreamExt;
     use rig_core::agent::MultiTurnStreamItem;
     use rig_core::completion::Usage;
@@ -351,7 +355,7 @@ fn test_strip_reasoning_mixed_content_keeps_text_and_tool_call() {
         },
     ];
 
-    let result = agent_rs_lib::agent::strip_reasoning_from_history(history);
+    let result = agent_rs::agent::strip_reasoning_from_history(history);
     assert_eq!(result.len(), 2);
 
     // User message unchanged
@@ -384,7 +388,7 @@ fn test_strip_reasoning_drops_pure_reasoning_message() {
         },
     ];
 
-    let result = agent_rs_lib::agent::strip_reasoning_from_history(history);
+    let result = agent_rs::agent::strip_reasoning_from_history(history);
     assert_eq!(result.len(), 1);
     assert!(matches!(result[0], Message::User { .. }));
 }
@@ -400,14 +404,14 @@ fn test_strip_reasoning_passes_through_non_assistant_messages() {
         },
     ];
 
-    let result = agent_rs_lib::agent::strip_reasoning_from_history(history.clone());
+    let result = agent_rs::agent::strip_reasoning_from_history(history.clone());
     assert_eq!(result.len(), 2);
     assert_eq!(result, history);
 }
 
 #[test]
 fn test_strip_reasoning_empty_input() {
-    let result = agent_rs_lib::agent::strip_reasoning_from_history(vec![]);
+    let result = agent_rs::agent::strip_reasoning_from_history(vec![]);
     assert!(result.is_empty());
 }
 
@@ -438,7 +442,7 @@ fn test_strip_reasoning_multiple_assistant_messages_independently_filtered() {
         },
     ];
 
-    let result = agent_rs_lib::agent::strip_reasoning_from_history(history);
+    let result = agent_rs::agent::strip_reasoning_from_history(history);
     // First assistant: reasoning stripped, text kept → still present
     // Second assistant: pure reasoning → dropped
     assert_eq!(result.len(), 3);
@@ -460,7 +464,7 @@ fn test_strip_reasoning_preserves_assistant_id() {
         .unwrap(),
     }];
 
-    let result = agent_rs_lib::agent::strip_reasoning_from_history(history);
+    let result = agent_rs::agent::strip_reasoning_from_history(history);
     assert_eq!(result.len(), 1);
     if let Message::Assistant { id, content, .. } = &result[0] {
         assert_eq!(id.as_deref(), Some("msg_123"));
@@ -471,12 +475,20 @@ fn test_strip_reasoning_preserves_assistant_id() {
 }
 
 #[tokio::test]
-#[ignore = "requires a running mock completion server to test concurrent chat"]
 async fn test_concurrent_managed_agent_chat_preserves_history() {
-    use agent_rs_lib::agent::ManagedExt;
+    use agent_rs::agent::ManagedExt;
+    use common::{MockCompletionModel, mock_agent};
     use std::sync::Arc;
 
-    let agent = make_test_agent();
+    // Each concurrent chat needs a final-answer response from the model.
+    // 3 concurrent calls × 1 response each = 3 responses.
+    let responses = vec![
+        MockCompletionModel::text("Final Answer: response 0"),
+        MockCompletionModel::text("Final Answer: response 1"),
+        MockCompletionModel::text("Final Answer: response 2"),
+    ];
+
+    let agent = mock_agent(responses);
     let built = agent.managed().build();
     let shared = Arc::new(built);
 

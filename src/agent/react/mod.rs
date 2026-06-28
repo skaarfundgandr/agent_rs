@@ -10,14 +10,23 @@ use std::pin::Pin;
 use rig_core::completion::PromptError;
 use rig_core::message::Message;
 
+pub mod assistant_parse;
 mod builder;
 mod built;
+mod built_compaction;
+mod built_methods;
+mod built_no_compaction;
 mod callbacks;
 mod constants;
+pub mod cycle_compaction;
 mod emitter;
 mod ext;
 mod helpers;
+pub mod model_call;
+pub mod stream_loop;
+pub mod stream_process;
 pub mod streaming;
+pub mod tool_dispatch;
 
 pub use builder::{CompactionConfig, NoCompaction, ReActBuilder};
 pub use built::BuiltReAct;

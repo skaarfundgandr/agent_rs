@@ -1,8 +1,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_rs_lib::agent::ReActExt;
-use agent_rs_lib::agent::react::{ReActSpanEmitter, recover_turn_limit_history};
-use agent_rs_lib::domain::errors::ReActError;
+#[path = "common/mod.rs"]
+mod common;
+
+use agent_rs::agent::ReActExt;
+use agent_rs::agent::react::{ReActSpanEmitter, recover_turn_limit_history};
+use agent_rs::domain::errors::ReActError;
 use rig_core::client::CompletionClient;
 use rig_core::completion::request::PromptError;
 use rig_core::message::{Message, UserContent};
@@ -75,13 +78,54 @@ async fn test_model_http_error_is_retried() {
     );
 }
 
-#[test]
-#[ignore = "needs a mock that triggers CompletionError::JsonError or similar non-transient error"]
-fn test_model_non_transient_error_not_retried() {}
+#[tokio::test]
+async fn test_model_non_transient_error_not_retried() {
+    use common::{MockCompletionModel, mock_agent};
 
-#[test]
-#[ignore = "needs a real broken model that returns empty assistant content"]
-fn test_empty_assistant_content_retried_once() {}
+    let responses = vec![MockCompletionModel::json_error("non-transient json error")];
+
+    let agent = mock_agent(responses);
+    let built = agent.react().max_retries(3).build();
+    let before = built.history().len();
+    let err = built.prompt("test").await.unwrap_err();
+    match &err {
+        ReActError::Model(s) => {
+            let lower = s.to_lowercase();
+            assert!(
+                lower.contains("json") || lower.contains("non-transient"),
+                "Expected JSON/non-transient error in: {s}"
+            );
+        }
+        other => panic!("Expected ReActError::Model, got: {other:?}"),
+    }
+    assert_eq!(
+        built.history().len(),
+        before,
+        "history should not be mutated on error"
+    );
+}
+
+#[tokio::test]
+async fn test_empty_assistant_content_retried_once() {
+    use common::{MockCompletionModel, mock_agent};
+
+    // First call returns empty content (should trigger one retry).
+    // Second call returns the final answer.
+    let responses = vec![
+        MockCompletionModel::text(""),
+        MockCompletionModel::text("Final Answer: recovered"),
+    ];
+
+    let agent = mock_agent(responses);
+    let built = agent.react().max_cycles(3).build();
+    let trace = built.prompt("test").await.expect("prompt should succeed");
+
+    let fa = trace
+        .final_answer
+        .as_ref()
+        .expect("should have final answer");
+    assert_eq!(fa.text, "Final Answer: recovered");
+}
 
 #[tokio::test]
 async fn test_history_not_mutated_on_error() {
@@ -101,7 +145,7 @@ fn test_noop_span_emitter_emit_error_is_inert() {
 
 #[test]
 fn test_observation_is_error_on_wrong_tool_name() {
-    use agent_rs_lib::domain::agent::Observation;
+    use agent_rs::domain::agent::Observation;
     let obs = Observation {
         tool_name: "listDirectory".to_string(),
         result: "tool not found".to_string(),

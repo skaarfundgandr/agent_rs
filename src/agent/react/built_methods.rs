@@ -1,0 +1,164 @@
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
+
+use rig_core::completion::{Prompt, PromptError};
+use rig_core::message::{AssistantContent, Message, ToolResultContent, UserContent};
+use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
+
+use crate::agent::memory::ContextManager;
+use crate::agent::react::Compact;
+use crate::agent::state::checkpoint::{
+    AgentCheckpoint, CURRENT_SCHEMA_VERSION, CheckpointMetadata, now_timestamp,
+};
+use crate::agent::utils::lock_mutex;
+use crate::domain::agent::{Action, Observation, ReActStep, ReActTrace};
+
+use super::built::BuiltReAct;
+use super::callbacks::{ActionCb, ObservationCb};
+use super::emitter::ReActSpanEmitter;
+
+impl<C> Compact for ContextManager<C>
+where
+    C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
+{
+    fn compact<'a>(
+        &'a self,
+        history: &'a mut Vec<Message>,
+        prompt: &'a str,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<bool, PromptError>> + Send + 'a>> {
+        Box::pin(async move { self.compact_history_if_needed(history, prompt).await })
+    }
+}
+
+impl<M, P, C> BuiltReAct<M, P, C>
+where
+    M: rig_core::completion::CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
+{
+    /// Return a snapshot of the current conversation history.
+    pub fn history(&self) -> Vec<Message> {
+        lock_mutex(&self.history).clone()
+    }
+
+    /// Return the configured `max_cycles` limit.
+    pub fn max_cycles(&self) -> usize {
+        self.max_cycles
+    }
+
+    /// Return the configured `max_retries` limit.
+    pub fn max_retries(&self) -> u32 {
+        self.max_retries
+    }
+
+    /// Return the optional ReAct preamble string.
+    pub fn react_preamble(&self) -> Option<&str> {
+        self.react_preamble.as_deref()
+    }
+
+    /// Snapshot the current conversation state into an [`AgentCheckpoint`].
+    ///
+    /// `phase` is an application-defined label (e.g. `"research"`, `"draft"`).
+    /// `cycles_completed` should come from the application's cycle counter
+    /// (the library does not store this on `BuiltReAct`).
+    ///
+    /// `compacted_context` is left `None` because it is application-managed:
+    /// populate it after calling this method if your app tracks a separate
+    /// summary string.
+    pub fn to_checkpoint(&self, phase: &str, cycles_completed: usize) -> AgentCheckpoint {
+        let history = lock_mutex(&self.history).clone();
+        AgentCheckpoint {
+            history,
+            compacted_context: None,
+            phase: phase.to_string(),
+            partial_results: std::collections::HashMap::new(),
+            metadata: CheckpointMetadata {
+                created_at: now_timestamp(),
+                cycles_completed,
+                schema_version: CURRENT_SCHEMA_VERSION,
+            },
+        }
+    }
+}
+
+/// Emit `on_action` / `on_observation` callbacks for tool calls and tool
+/// results that rig-core executed internally before returning from
+/// `agent.prompt()`. The existing `run_loop` logic only inspects the *last*
+/// assistant message, so intermediate tool turns are otherwise lost.
+#[doc(hidden)]
+pub fn emit_internal_tool_callbacks(
+    messages: &[Message],
+    cycle: usize,
+    on_action: &Option<ActionCb>,
+    on_observation: &Option<ObservationCb>,
+    span_emitter: &Arc<dyn ReActSpanEmitter>,
+    trace: &mut ReActTrace,
+) {
+    let Some(last_assistant_idx) = messages
+        .iter()
+        .rposition(|msg| matches!(msg, Message::Assistant { .. }))
+    else {
+        return;
+    };
+
+    // Map tool_call_id → tool name so observations are attributed to the
+    // correct action even when a provider returns tool results out of order.
+    let mut pending_tool_names: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+
+    // Skip the first message: it is the prompt passed to `agent.prompt()`.
+    // In later ReAct cycles that prompt is the previous cycle's last tool
+    // result, whose action/observation were already emitted.
+    for msg in &messages[1..last_assistant_idx] {
+        match msg {
+            Message::Assistant { content, .. } => {
+                for item in content.iter() {
+                    if let AssistantContent::ToolCall(tc) = item {
+                        pending_tool_names.insert(tc.id.clone(), tc.function.name.clone());
+                        let action = Action {
+                            tool_name: tc.function.name.clone(),
+                            args: tc.function.arguments.to_string(),
+                            tool_call_id: Some(tc.id.clone()),
+                            cycle,
+                        };
+                        if let Some(cb) = on_action {
+                            cb(&action);
+                        }
+                        span_emitter.emit_action(&action);
+                        trace.steps.push(ReActStep::Action(action));
+                    }
+                }
+            }
+            Message::User { content } => {
+                for item in content.iter() {
+                    if let UserContent::ToolResult(tr) = item {
+                        let result_text = tr
+                            .content
+                            .iter()
+                            .filter_map(|c| match c {
+                                ToolResultContent::Text(t) => Some(t.text.as_str()),
+                                _ => None,
+                            })
+                            .collect::<String>();
+                        let tool_name = pending_tool_names
+                            .remove(&tr.id)
+                            .unwrap_or_else(|| "unknown".to_string());
+                        let observation = Observation {
+                            tool_name,
+                            result: result_text,
+                            is_error: false,
+                            cycle,
+                            duration: Duration::from_secs(0),
+                        };
+                        if let Some(cb) = on_observation {
+                            cb(&observation);
+                        }
+                        span_emitter.emit_observation(&observation);
+                        trace.steps.push(ReActStep::Observation(observation));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}

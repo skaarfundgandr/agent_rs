@@ -19,8 +19,29 @@ use rig_core::message::Message;
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// use rig_core::message::{Message, AssistantContent, UserContent};
+/// use rig_core::OneOrMany;
+///
+/// let history = vec![
+///     Message::User {
+///         content: OneOrMany::one(UserContent::text("hello")),
+///     },
+///     Message::Assistant {
+///         id: None,
+///         content: OneOrMany::many(vec![
+///             AssistantContent::Reasoning(rig_core::message::Reasoning::new("thinking...")),
+///             AssistantContent::text("Hi there!"),
+///         ]).unwrap(),
+///     },
+/// ];
+///
 /// let clean = agent_rs::agent::strip_reasoning_from_history(history);
+/// assert_eq!(clean.len(), 2);
+/// // The reasoning block is removed; text remains.
+/// if let Message::Assistant { content, .. } = &clean[1] {
+///     assert_eq!(content.iter().count(), 1);
+/// }
 /// ```
 pub fn strip_reasoning_from_history(history: Vec<Message>) -> Vec<Message> {
     history

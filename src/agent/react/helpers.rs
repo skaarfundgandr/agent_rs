@@ -41,3 +41,37 @@ pub fn recover_turn_limit_history(e: &PromptError) -> Option<Vec<rig_core::messa
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::*;
+    use rig_core::completion::CompletionError;
+    use rig_core::tool::ToolSetError;
+    use rig_core::tool::server::ToolServerError;
+
+    #[test]
+    fn tool_error_to_string_roundtrip() {
+        let err = ToolServerError::ToolsetError(ToolSetError::ToolNotFoundError(
+            "missing_tool".to_string(),
+        ));
+        let s = tool_error_to_string(&err);
+        assert!(
+            s.contains("missing_tool"),
+            "error string should contain tool name: {s}"
+        );
+    }
+
+    #[test]
+    fn detect_final_answer_returns_none_for_empty_after_colon() {
+        assert_eq!(detect_final_answer("Final Answer:"), None);
+        assert_eq!(detect_final_answer("Final Answer:   "), None);
+    }
+
+    #[test]
+    fn recover_returns_none_for_non_max_turns_error() {
+        let err = PromptError::CompletionError(CompletionError::ProviderError("test".into()));
+        assert!(recover_turn_limit_history(&err).is_none());
+    }
+}
