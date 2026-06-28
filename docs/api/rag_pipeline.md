@@ -117,9 +117,9 @@ pub trait ErasedEmbedder: Send + Sync {
 ```rust,no_run
 use std::path::Path;
 use std::sync::Arc;
-use agent_rs_lib::agent::embeddings::EmbeddingService;
-use agent_rs_lib::rag::{DocumentLoader, PdfLoader, RagPipeline, WordSplitter};
-use agent_rs_lib::rag::ErasedEmbedder;
+use agent_rs::agent::embeddings::EmbeddingService;
+use agent_rs::rag::{DocumentLoader, PdfLoader, RagPipeline, WordSplitter};
+use agent_rs::rag::ErasedEmbedder;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

@@ -73,21 +73,16 @@ classDiagram
 
 ## 2. MCP Registry & Connection Runtime
 
-This diagram illustrates how client connections to MCP servers are managed, spawned, and wrapped into Rig-compatible tools.
+This diagram illustrates how connections to MCP servers are managed, spawned, and wrapped into Rig-compatible tools.
 
 ```mermaid
 classDiagram
     direction TB
-    class McpClient {
-        -McpConfig config
-        +from_config_path(path) Self
-        +connect() McpRegistryRuntime
-        +tools() List~ToolDyn~
-    }
-
     class McpRegistry {
-        -McpClient client
+        -McpConfig config
+        +from_path(path) Result~Self~
         +connect() Result~McpRegistryRuntime~
+        +tools() List~ToolDyn~
     }
 
     class McpRegistryRuntime {
@@ -96,6 +91,7 @@ classDiagram
         +servers() List~RegisteredMcpServer~
         +tools() List~RegisteredMcpTool~
         +into_tools() List~ToolDyn~
+        +tool_boxes() List~ToolDyn~
     }
 
     class RegisteredMcpServer {
@@ -111,9 +107,7 @@ classDiagram
         -Arc~ArcService~ _keepalive
     }
 
-    McpRegistry --> McpClient : owns
     McpRegistry ..> McpRegistryRuntime : creates
-    McpClient ..> McpRegistryRuntime : connects to
     McpRegistryRuntime *--> RegisteredMcpServer : manages
     McpRegistryRuntime *--> RegisteredMcpTool : manages
 ```

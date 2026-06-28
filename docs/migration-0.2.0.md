@@ -24,8 +24,8 @@ let tool = ReadDocumentTool;
 **After (v0.2.0):**
 ```rust
 use std::collections::HashSet;
-use agent_rs_lib::security::SandboxConfig;
-use agent_rs_lib::agent::permission::PermissionPolicy;
+use agent_rs::security::SandboxConfig;
+use agent_rs::agent::permission::PermissionPolicy;
 
 let sandbox = SandboxConfig::single("./sandbox").unwrap();
 let allowed_extensions = HashSet::from(["txt".to_string(), "md".to_string(), "pdf".to_string()]);
@@ -43,8 +43,8 @@ let tool = WriteDocumentTool;
 **After (v0.2.0):**
 ```rust
 use std::collections::HashSet;
-use agent_rs_lib::security::SandboxConfig;
-use agent_rs_lib::agent::permission::PermissionPolicy;
+use agent_rs::security::SandboxConfig;
+use agent_rs::agent::permission::PermissionPolicy;
 
 let sandbox = SandboxConfig::single("./sandbox").unwrap();
 let allowed_extensions = HashSet::from(["txt".to_string(), "md".to_string()]);
@@ -64,8 +64,8 @@ let lister = ListDirectoryTool::new(sandbox);
 
 **After (v0.2.0):**
 ```rust
-use agent_rs_lib::security::SandboxConfig;
-use agent_rs_lib::agent::permission::PermissionPolicy;
+use agent_rs::security::SandboxConfig;
+use agent_rs::agent::permission::PermissionPolicy;
 
 let sandbox = SandboxConfig::single("./sandbox").unwrap();
 let policy = PermissionPolicy::AllowAll;
@@ -97,10 +97,10 @@ Ensure you import `HashSet`, `SandboxConfig`, `PermissionPolicy` and the new err
 
 ```rust
 use std::collections::HashSet;
-use agent_rs_lib::security::SandboxConfig;
-use agent_rs_lib::agent::permission::PermissionPolicy;
-use agent_rs_lib::agent::tools::{ReadDocumentTool, WriteDocumentTool};
-use agent_rs_lib::domain::errors::DocumentError;
+use agent_rs::security::SandboxConfig;
+use agent_rs::agent::permission::PermissionPolicy;
+use agent_rs::agent::tools::{ReadDocumentTool, WriteDocumentTool};
+use agent_rs::domain::errors::DocumentError;
 ```
 
 ### Step 2: Configure Sandbox and Allowed Extensions
@@ -108,8 +108,8 @@ use agent_rs_lib::domain::errors::DocumentError;
 Define your sandbox configuration and the set of allowed file extensions (without leading dots):
 
 ```rust
-use agent_rs_lib::security::SandboxConfig;
-use agent_rs_lib::agent::permission::PermissionPolicy;
+use agent_rs::security::SandboxConfig;
+use agent_rs::agent::permission::PermissionPolicy;
 
 let sandbox = SandboxConfig::single("./data").unwrap();
 let policy = PermissionPolicy::AllowAll;

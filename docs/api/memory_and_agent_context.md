@@ -117,7 +117,7 @@ Located in `agent::model::chat`.
 ### Example Usage: Basic Chat
 
 ```rust,no_run
-use agent_rs_lib::agent::ManagedExt;
+use agent_rs::agent::ManagedExt;
 use rig_core::message::Message;
 
 # async fn example() -> Result<(), rig_core::completion::PromptError> {
@@ -139,7 +139,7 @@ let history = managed.history();
 ### Example Usage: With Context Compaction
 
 ```rust,no_run
-use agent_rs_lib::agent::ManagedExt;
+use agent_rs::agent::ManagedExt;
 use rig_core::message::Message;
 
 # async fn example() -> Result<(), rig_core::completion::PromptError> {
@@ -163,7 +163,7 @@ let response = managed.chat_compact("What were my previous requests?").await?;
 ### Example Usage: Streaming Chat
 
 ```rust,no_run
-use agent_rs_lib::agent::ManagedExt;
+use agent_rs::agent::ManagedExt;
 use rig_core::agent::MultiTurnStreamItem;
 use futures::StreamExt;
 
@@ -208,11 +208,11 @@ Assistant messages whose content consists entirely of reasoning are dropped from
 ### Example Usage
 
 ```rust,no_run
-use agent_rs_lib::agent;
+use agent_rs::agent;
 
 let persisted_history = agent::strip_reasoning_from_history(display_history);
 ```
 
 The function is available at:
-- `agent_rs_lib::agent::strip_reasoning_from_history` (re-exported from `agent` module)
-- `agent_rs_lib::agent::agents::strip_reasoning_from_history` (full module path)
+- `agent_rs::agent::strip_reasoning_from_history` (re-exported from `agent` module)
+- `agent_rs::agent::agents::strip_reasoning_from_history` (full module path)

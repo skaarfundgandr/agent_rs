@@ -9,7 +9,7 @@ until the model emits a "Final Answer:" sentinel or `max_cycles` is reached.
 ## Public API
 
 ```rust
-use agent_rs_lib::agent::{ReActExt, ReActBuilder, BuiltReAct, ReActSpanEmitter, REACT_PREAMBLE};
+use agent_rs::agent::{ReActExt, ReActBuilder, BuiltReAct, ReActSpanEmitter, REACT_PREAMBLE};
 ```
 
 - **`ReActExt::react(agent)`** — extension trait method on
@@ -47,7 +47,7 @@ use agent_rs_lib::agent::{ReActExt, ReActBuilder, BuiltReAct, ReActSpanEmitter, 
 ## Data Types (in `domain::agent`)
 
 ```rust
-use agent_rs_lib::domain::agent::{Thought, Action, Observation, FinalAnswer, ReActStep, ReActTrace, ReActStreamItem};
+use agent_rs::domain::agent::{Thought, Action, Observation, FinalAnswer, ReActStep, ReActTrace, ReActStreamItem};
 ```
 
 All step types are `Serialize` + `Deserialize` (groundwork for M3 state persistence).
@@ -65,7 +65,7 @@ In order of precedence:
 ## Usage Example
 
 ```rust,no_run
-use agent_rs_lib::agent::ReActExt;
+use agent_rs::agent::ReActExt;
 
 let react = agent
     .react()

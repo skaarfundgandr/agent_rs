@@ -68,7 +68,7 @@ agent_rs = { git = "https://github.com/skaarfundgandr/agent_rs.git" }
 ```
 
 > [!NOTE]
-> The crate will be available in your code as `agent_rs_lib`.
+> The crate will be available in your code as `agent_rs`.
 
 ---
 
@@ -91,8 +91,8 @@ cargo run
 ```rust
 use std::path::Path;
 use std::sync::Arc;
-use agent_rs_lib::agent::embeddings::EmbeddingService;
-use agent_rs_lib::rag::RagPipeline;
+use agent_rs::agent::embeddings::EmbeddingService;
+use agent_rs::rag::RagPipeline;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

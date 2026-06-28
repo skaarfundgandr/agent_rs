@@ -1,6 +1,6 @@
 # Config and MCP Modules
 
-Provides configuration parser and client interfaces to load and connect to stdio or HTTP-based MCP servers.
+Provides configuration parser and registry interfaces to load and connect to stdio or HTTP-based MCP servers.
 
 > **Architecture reference:** See the [C4 architecture diagram](../diagrams/c4-architecture.md) for how these modules fit into the system, the [class diagram](../diagrams/class-diagram.md) for type relationships (`McpConfig`, `McpServerDef`, `McpTransportSpec`), and the [module dependency graph](../diagrams/module-dependency.md) for crate-level structure.
 
@@ -126,37 +126,6 @@ pub struct RegisteredMcpServer {
 
 ---
 
-## `McpClient`
-
-Manages connections and tool listing for the configured MCP servers.
-
-> **Lifecycle reference:** See the [MCP connection state diagram](../diagrams/state-diagram.md) for the full connection lifecycle and the [startup sequence diagram](../diagrams/sequence-diagram.md) for how `connect()` fits into application bootstrap.
-
-### Methods
-- **`from_config_path(path: &str) -> Result<Self>`**
-  Initializes the client from a path to an `mcp.json` file.
-- **`new(config: McpConfig) -> Self`**
-  Constructs a new client using an existing configuration struct.
-- **`config(&self) -> &McpConfig`**
-  Returns a reference to the underlying `McpConfig`.
-- **`get_server_def(&self, name: &str) -> Option<&McpServerDef>`**
-  Retrieves the server definition for a specific named server.
-- **`get_resolved_server(&self, name: &str) -> Result<ResolvedMcpServer>`**
-  Retrieves the resolved transport specification for a specific named server.
-- **`server_names(&self) -> impl Iterator<Item = &str>`**
-  Returns an iterator over the names of all configured MCP servers.
-- **`validate(&self) -> Result<()>`**
-  Validates the configurations of all registered MCP servers.
-- **`async connect(self, policy: PermissionPolicy) -> Result<McpRegistryRuntime>`**
-  Establishes standard I/O processes or HTTP streams with all configured MCP servers. The provided policy is wrapped around each discovered tool.
-- **`async tools(self, policy: PermissionPolicy) -> Result<Vec<Box<dyn ToolDyn>>>`**
-  Connects to all servers and returns all exposed endpoints as a list of dynamic Rig `ToolDyn` objects, with each tool wrapped in a permission policy check.
-
-### Trait Implementations
-- `FromStr` — parses MCP config from a JSON string.
-
----
-
 ## `McpRegistry`
 
 Registry that resolves MCP server definitions from `mcp.json` into Rig tools and performs name deduplication.
@@ -166,8 +135,6 @@ Registry that resolves MCP server definitions from `mcp.json` into Rig tools and
   Creates a registry from a validated configuration.
 - **`from_path(path: impl AsRef<Path>) -> Result<Self>`**
   Creates a registry from a configuration file path.
-- **`from_client(client: McpClient) -> Self`**
-  Creates a registry from an existing client manager.
 - **`config(&self) -> &McpConfig`**
   Access the underlying parsed config.
 - **`validate(&self) -> Result<()>`**
@@ -185,6 +152,8 @@ Registry that resolves MCP server definitions from `mcp.json` into Rig tools and
 - **`async tools(&self, policy: PermissionPolicy) -> Result<Vec<Box<dyn ToolDyn>>>`**
   Connects to all configured MCP servers and returns Rig-compatible boxed tools wrapped in the provided policy.
 
+> `McpRegistry` is the single MCP entry point. The previous `McpClient` wrapper was removed in v0.5.0 because it delegated directly to `McpRegistry` with no additional state or logic.
+
 ---
 
 ## `McpRegistryRuntime`
@@ -201,7 +170,9 @@ Runtime registry returned after connecting to the MCP servers, holding the activ
 - **`tool_names(&self) -> impl Iterator<Item = &str>`**
   Convenience iterator over tool names.
 - **`into_tools(self) -> Vec<Box<dyn ToolDyn>>`**
-  Converts the runtime registry into boxed Rig tools.
+  Converts the runtime registry into boxed Rig tools (consumes the runtime).
+- **`tool_boxes(&self) -> Vec<Box<dyn ToolDyn>>`**
+  Clones each registered tool into a boxed Rig tool without consuming the runtime. Use this when registering MCP tools alongside internal tools in a [`ToolRegistry`](agent_tools.md).
 
 ---
 
@@ -220,16 +191,16 @@ A Rig tool wrapper that keeps the underlying MCP server connection alive. Applie
 ### Example Usage: Loading MCP Tools
 
 ```rust,no_run
-use agent_rs_lib::mcp::client::McpClient;
-use agent_rs_lib::agent::permission::PermissionPolicy;
+use agent_rs::mcp::registry::McpRegistry;
+use agent_rs::agent::permission::PermissionPolicy;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Read and connect to MCP servers defined in mcp.json
-    let client = McpClient::from_config_path("./mcp.json")?;
+    let registry = McpRegistry::from_path("./mcp.json")?;
 
     // Connect and load tools with an AllowAll permission policy
-    let mcp_tools = client.tools(PermissionPolicy::AllowAll).await?;
+    let mcp_tools = registry.tools(PermissionPolicy::AllowAll).await?;
 
     println!("Loaded {} tools from MCP servers.", mcp_tools.len());
     Ok(())

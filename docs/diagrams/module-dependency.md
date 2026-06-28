@@ -38,13 +38,14 @@ graph LR
 
         managed["managed.rs<br/>ManagedExt, ManagedBuilder<br/>BuiltManagedAgent, ManagedStream"]
 
-        subgraph tools["tools/"]
-            document["document.rs<br/>ReadDocumentTool, WriteDocumentTool"]
-            search["search.rs<br/>GrepSearchTool"]
-            glob["glob.rs<br/>GlobSearchTool"]
-            directory["directory.rs<br/>ListDirectoryTool"]
-            compact["context.rs<br/>CompactTool&lt;M&gt;"]
-        end
+    subgraph tools["tools/"]
+        document["document.rs<br/>ReadDocumentTool, WriteDocumentTool"]
+        search["search.rs<br/>GrepSearchTool"]
+        glob["glob.rs<br/>GlobSearchTool"]
+        directory["directory.rs<br/>ListDirectoryTool"]
+        compact["context.rs<br/>CompactTool&lt;M&gt;"]
+        tool_registry["registry.rs<br/>ToolRegistry, ToolRegistryBuilder"]
+    end
     end
 
     subgraph rag["src/rag/ (cfg rag)"]
@@ -60,8 +61,7 @@ graph LR
     end
 
     subgraph mcp["src/mcp/"]
-        client["client.rs<br/>McpClient"]
-        registry["registry.rs<br/>McpRegistry, McpRegistryRuntime<br/>RegisteredMcpTool"]
+        registry["registry/<br/>McpRegistry, McpRegistryRuntime<br/>RegisteredMcpTool"]
     end
 
     main_rs --> lib_rs
@@ -80,6 +80,8 @@ graph LR
     agent_mod --> react
     agent_mod --> memory
     agent_mod --> tools
+    agent_mod --> dispatch
+    agent_mod --> state
 
     react --> domain_agent
     react --> domain_errors
@@ -106,13 +108,8 @@ graph LR
     obs_hooks --> domain_observability
     obs_hooks --> obs_conv
 
-    client --> domain_config
-    client --> domain_mcp
-    client --> registry
-
     registry --> domain_config
     registry --> domain_mcp
-    registry --> client
 
     style agent stroke:#4a82b8,stroke-width:2px,fill:none
     style memory stroke:#4a82b8,stroke-width:1.5px,fill:none

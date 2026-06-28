@@ -8,10 +8,9 @@ sequenceDiagram
     participant DotEnv as .env
     participant RigClient as Rig Client
     participant Embed as EmbeddingService
-    participant McpClient as McpClient
     participant McpReg as McpRegistry
     participant McpSrv as MCP Server
-    participant Tools as Internal Tools
+    participant Tools as ToolRegistry
     participant Pdf as PdfLoader
     participant Splitter as WordSplitter
     participant Rag as RagPipeline
@@ -20,12 +19,10 @@ sequenceDiagram
     Main->>DotEnv: load .env
     Main->>RigClient: new(http://127.0.0.1:1234/v1)
     Main->>Embed: new(client.embedding_model())
-    Main->>McpClient: from_path(./mcp.json)
-    activate McpClient
-    McpClient->>McpClient: parse McpConfig
-    Main->>McpReg: new(client)
-    Main->>McpReg: connect()
+    Main->>McpReg: from_path(./mcp.json)
     activate McpReg
+    McpReg->>McpReg: parse McpConfig
+    Main->>McpReg: connect()
     McpReg->>McpSrv: for each server: spawn/connect
     activate McpSrv
     McpSrv-->>McpReg: list_all_tools()
@@ -33,11 +30,9 @@ sequenceDiagram
     deactivate McpSrv
     McpReg-->>Main: McpRegistryRuntime
     deactivate McpReg
-    deactivate McpClient
-    Main->>McpReg: into_tools() as ToolDyn list
-
-    Main->>Tools: create internal tools
-    Main->>Main: merge MCP + internal + CompactTool
+    Main->>Tools: register_mcp(runtime)
+    Main->>Tools: register internal tools by group
+    Main->>Tools: enable groups + active_tools()
 
     Main->>Pdf: load(./docs/sample.pdf)
     activate Pdf

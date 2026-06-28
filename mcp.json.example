@@ -17,6 +17,14 @@
       "headers": {
         "CONTEXT7_API_KEY": "your_context7_api_key_here"
       }
+    },
+    "tavily-search-example": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "tavily-mcp"],
+      "env": {
+        "TAVILY_API_KEY": "your-tavily-api-key-here"
+      }
     }
   }
 }

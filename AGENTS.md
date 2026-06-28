@@ -2,8 +2,8 @@
 
 ## Project Snapshot
 
-Rust AI agent framework (edition 2024, v0.3.3). Library crate with examples.
-Library consumers import as `agent_rs_lib` (not `agent_rs`).
+Rust AI agent framework (edition 2024, v0.5.0). Library crate with examples.
+Library consumers import as `agent_rs`.
 
 Core deps: `rig-core` 0.38.2 (with `rmcp` feature), `rmcp` 1.7, `tokio` (full), `reqwest`, `pdf-extract`, `tracing` 0.1.
 Optional deps (feature-gated): `opentelemetry` 0.32, `opentelemetry_sdk` 0.32, `opentelemetry-otlp` 0.32, `tracing-opentelemetry` 0.33, `tracing-subscriber` 0.3 (the `opentelemetry` feature).
@@ -17,10 +17,10 @@ cargo test                     # run all tests (some #[ignore]d — see below)
 cargo test -- --include-ignored # run ignored tests too (requires local PDF files)
 cargo clippy                   # lint (no custom clippy.toml)
 cargo fmt                      # format code
-cargo run --example cli_chatbot # run the CLI chatbot example (requires --features rag)
+cargo run --example cli_chatbot --features rag # run the CLI chatbot example
 ```
 
-No CI pipeline, no pre-commit hooks, no rustfmt.toml — use `cargo fmt` with defaults.
+CI pipeline and release workflows live in `.github/workflows/`. No pre-commit hooks, no rustfmt.toml — use `cargo fmt` with defaults.
 
 ## Running the Example
 
@@ -60,23 +60,31 @@ src/
 │   ├── managed.rs        # ManagedExt, ManagedBuilder, BuiltManagedAgent, ManagedStream
 │   ├── embeddings.rs     # EmbeddingService<M> — generic over Rig EmbeddingModel
 │   ├── permission.rs     # PermissionPolicy enum + PermissionGate trait
+│   ├── dispatch/         # AgentDefinition trait + AgentDispatcher + ReAct/Managed adapters
+│   ├── state/            # AgentCheckpoint + save/load helpers
 │   ├── memory/           # ContextManager — token estimation + auto-summarize
 │   ├── model/            # execute_chat / execute_stream_chat helpers
-│   ├── tools/            # Read/Write/Grep/Glob/ListDir/ManageRag/Compact tools
+│   ├── tools/            # Read/Write/Grep/Glob/ListDir/ManageRag/Compact/ToolRegistry tools
 │   ├── utils.rs          # Shared helpers (lock_mutex)
 │   └── react/            # ReAct loop: builder → built → streaming
-│       ├── builder.rs   # ReActBuilder, NoCompaction, CompactionConfig typestates
-│       ├── built.rs     # BuiltReAct — prompt(), chat(), run_loop()
-│       ├── streaming.rs # ReActStream, ReActStreamItem — async Stream impl
-│       ├── constants.rs # REACT_PREAMBLE
-│       ├── ext.rs       # ReActExt trait
-│       ├── emitter.rs   # ReActSpanEmitter trait, NoopSpanEmitter
-│       ├── helpers.rs   # detect_final_answer, tool_error_to_string
-│       ├── callbacks.rs # ThoughtCb, ActionCb, ObservationCb, FinalCb, ErrorCb
-│       └── mod.rs       # Re-exports
+│       ├── builder.rs         # ReActBuilder, NoCompaction, CompactionConfig typestates
+│       ├── built.rs           # BuiltReAct — prompt(), chat(), run_loop() orchestrator
+│       ├── built_methods.rs   # history, checkpoint, internal callback helpers
+│       ├── streaming.rs       # ReActStream, ReActStreamItem — async Stream impl
+│       ├── stream_loop.rs     # spawned streaming loop
+│       ├── stream_process.rs  # assistant/tool item processing
+│       ├── cycle_compaction.rs# compaction trigger
+│       ├── model_call.rs      # model call + retry recovery
+│       ├── assistant_parse.rs # assistant content parsing + final-answer detection
+│       ├── tool_dispatch.rs   # tool execution loop
+│       ├── constants.rs       # REACT_PREAMBLE
+│       ├── ext.rs             # ReActExt trait
+│       ├── emitter.rs         # ReActSpanEmitter trait, NoopSpanEmitter
+│       ├── helpers.rs         # detect_final_answer, tool_error_to_string
+│       ├── callbacks.rs       # ThoughtCb, ActionCb, ObservationCb, FinalCb, ErrorCb
+│       └── mod.rs             # Re-exports
 ├── mcp/
-│   ├── client.rs        # McpClient — config → connect → tools
-│   └── registry.rs      # McpRegistry — stdio/HTTP transport, tool dedup, keepalive
+│   └── registry/        # McpRegistry — stdio/HTTP transport, tool dedup, keepalive
 ├── rag/                 # RAG pipeline (in-memory + SQLite/turbovec persistence), feature-gated on `rag`
 ├── observability/       # OpenTelemetry / LangSmith tracing (feature-gated on opentelemetry)
 │   ├── mod.rs           # Re-exports: TracerHandle, init_tracing, shutdown_tracing, LangSmithReActEmitter, LangSmithAgentHook
@@ -93,14 +101,14 @@ src/
     └── errors.rs        # DocumentError, CompactError, ReActError (thiserror)
 ```
 
-Key wiring: `McpClient` → `McpRegistry` → `McpRegistryRuntime` → `Vec<Box<dyn ToolDyn>>`.
-Internal tools (filesystem, RAG, compact) are added to the same tool vec in `cli_chatbot.rs`.
+Key wiring: `McpRegistry` → `McpRegistryRuntime` → `ToolRegistry` → `Vec<Box<dyn ToolDyn>>`.
+Internal tools (filesystem, RAG, compact) register into `ToolRegistry` alongside MCP tools in `cli_chatbot.rs`.
 
 ## Testing
 
 All tests must reside in the `tests/` directory rather than inside `src/`. No unit tests should be placed inline within `src/` to keep production code clean.
 
-Tests in `tests/` (17 files): `agents_tests.rs`, `document_store.rs`, `embeddings.rs`, `manage_rag.rs`, `mcp_client.rs`, `mcp_registry.rs`, `observability_tests.rs` (feature-gated on `opentelemetry`), `permission.rs`, `rag.rs`, `react_otel_tests.rs` (feature-gated on `opentelemetry`), `react_recovery_tests.rs`, `react_tests.rs`, `sandbox_tests.rs`, `shared_sandbox.rs`, `tool_tests.rs`, `turbo_index.rs` (plus `mod.rs`).
+Tests in `tests/` (17+ files): `agents_tests.rs`, `document_store.rs`, `embeddings.rs`, `manage_rag.rs`, `mcp_registry.rs`, `observability_tests.rs` (feature-gated on `opentelemetry`), `permission.rs`, `rag.rs`, `react_otel_tests.rs` (feature-gated on `opentelemetry`), `react_recovery_tests.rs`, `react_tests.rs`, `sandbox_tests.rs`, `shared_sandbox.rs`, `tool_tests.rs`, `turbo_index.rs`, `tool_registry.rs`, `dispatch.rs`, `state.rs`, `react_e2e.rs` (plus `common/mod.rs`, `mod.rs`).
 - `test_read_pdf` in `tool_tests.rs` is `#[ignore]` — needs a local PDF file, will fail in CI.
 - Tool tests use `tempfile` for sandbox isolation.
 - MCP tests need live MCP servers or will fail — not safe to run blindly.

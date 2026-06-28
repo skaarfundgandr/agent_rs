@@ -137,7 +137,7 @@ Logs are emitted at `info` level under the target `"permission"` containing stru
 
 ```rust
 use std::sync::Arc;
-use agent_rs_lib::agent::permission::{
+use agent_rs::agent::permission::{
     PermissionPolicy, PermissionGate, PermissionResult, PolicyMap, LoggingObserver
 };
 

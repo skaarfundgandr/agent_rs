@@ -8,11 +8,11 @@ automatically — no call-site changes are needed.
 ## Public API (feature-gated on `opentelemetry`)
 
 ```rust,ignore
-use agent_rs_lib::observability::{
+use agent_rs::observability::{
     init_tracing, shutdown_tracing, TracerHandle,
     LangSmithReActEmitter, LangSmithAgentHook,
 };
-use agent_rs_lib::domain::observability::LangSmithConfig;
+use agent_rs::domain::observability::LangSmithConfig;
 ```
 
 - **`LangSmithConfig`** (in `domain::observability`) — pure data: `endpoint`,
@@ -71,8 +71,8 @@ usage onto the same spans.
 ## Usage Example
 
 ```rust,ignore
-use agent_rs_lib::observability::{init_tracing, shutdown_tracing, LangSmithReActEmitter, LangSmithAgentHook};
-use agent_rs_lib::domain::observability::LangSmithConfig;
+use agent_rs::observability::{init_tracing, shutdown_tracing, LangSmithReActEmitter, LangSmithAgentHook};
+use agent_rs::domain::observability::LangSmithConfig;
 
 let cfg = LangSmithConfig::from_env_or_default("LANGSMITH_API_KEY")?;
 let handle = init_tracing(&cfg)?;
