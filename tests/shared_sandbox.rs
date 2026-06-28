@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-use agent_rs_lib::domain::errors::DocumentError;
-use agent_rs_lib::security::{
+use agent_rs::domain::errors::DocumentError;
+use agent_rs::security::{
     SandboxConfig, SharedSandbox, find_containing_root_shared, validate_sandboxed_path_shared,
 };
 use std::fs;

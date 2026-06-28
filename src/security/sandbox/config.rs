@@ -10,9 +10,9 @@ use std::path::{Path, PathBuf};
 /// # Examples
 ///
 /// ```rust,no_run
-/// # fn main() -> Result<(), agent_rs_lib::domain::errors::DocumentError> {
+/// # fn main() -> Result<(), agent_rs::domain::errors::DocumentError> {
 /// use std::path::PathBuf;
-/// use agent_rs_lib::security::SandboxConfig;
+/// use agent_rs::security::SandboxConfig;
 ///
 /// // Single root (backward-compatible)
 /// let single = SandboxConfig::single("/home/user/workspace")?;

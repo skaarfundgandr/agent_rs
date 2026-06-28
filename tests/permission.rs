@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-use agent_rs_lib::agent::permission::{
+use agent_rs::agent::permission::{
     LoggingObserver, PermissionEvent, PermissionGate, PermissionObserver, PermissionPolicy,
     PermissionResult, PolicyMap,
 };

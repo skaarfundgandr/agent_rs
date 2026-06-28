@@ -1,11 +1,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg(feature = "rag")]
 
-use agent_rs_lib::agent::embeddings::EmbeddingService;
-use agent_rs_lib::agent::permission::PermissionPolicy;
-use agent_rs_lib::agent::tools::{ManageRagTool, RagSourceRegistry};
-use agent_rs_lib::rag::{ErasedEmbedder, RagPipeline};
-use agent_rs_lib::security::{SandboxConfig, SharedSandbox};
+use agent_rs::agent::embeddings::EmbeddingService;
+use agent_rs::agent::permission::PermissionPolicy;
+use agent_rs::agent::tools::{ManageRagTool, RagSourceRegistry};
+use agent_rs::rag::{ErasedEmbedder, RagPipeline};
+use agent_rs::security::{SandboxConfig, SharedSandbox};
 use rig_core::embeddings::{Embedding, EmbeddingModel};
 use rig_core::tool::Tool;
 use std::collections::HashSet;
@@ -65,7 +65,7 @@ fn build_tool(
 
 #[tokio::test]
 async fn manage_rag_add_persists_to_pipeline() {
-    use agent_rs_lib::agent::tools::rag::ManageRagArgs;
+    use agent_rs::agent::tools::rag::ManageRagArgs;
 
     let tmp = tempfile::tempdir().unwrap();
     let db = tmp.path().join("rag.db");
@@ -100,7 +100,7 @@ async fn manage_rag_add_persists_to_pipeline() {
 
 #[tokio::test]
 async fn manage_rag_list_includes_added_source() {
-    use agent_rs_lib::agent::tools::rag::ManageRagArgs;
+    use agent_rs::agent::tools::rag::ManageRagArgs;
 
     let tmp = tempfile::tempdir().unwrap();
     let db = tmp.path().join("rag.db");
@@ -135,7 +135,7 @@ async fn manage_rag_list_includes_added_source() {
 
 #[tokio::test]
 async fn manage_rag_remove_clears_pipeline() {
-    use agent_rs_lib::agent::tools::rag::ManageRagArgs;
+    use agent_rs::agent::tools::rag::ManageRagArgs;
 
     let tmp = tempfile::tempdir().unwrap();
     let db = tmp.path().join("rag.db");
@@ -174,7 +174,7 @@ async fn manage_rag_remove_clears_pipeline() {
 
 #[tokio::test]
 async fn manage_rag_add_directory_persists_to_pipeline() {
-    use agent_rs_lib::agent::tools::rag::ManageRagArgs;
+    use agent_rs::agent::tools::rag::ManageRagArgs;
 
     let tmp = tempfile::tempdir().unwrap();
     let db = tmp.path().join("rag.db");

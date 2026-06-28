@@ -3,8 +3,8 @@
 
 use std::sync::OnceLock;
 
-use agent_rs_lib::domain::observability::LangSmithConfig;
-use agent_rs_lib::observability::init_tracing;
+use agent_rs::domain::observability::LangSmithConfig;
+use agent_rs::observability::init_tracing;
 
 static INIT: OnceLock<()> = OnceLock::new();
 

@@ -2,7 +2,7 @@
 
 //! RAG subsystem: document loading, chunking, embedding, vector indexing, and
 //! SQLite-backed metadata storage. Exposed at the crate root as
-//! `agent_rs_lib::rag`.
+//! `agent_rs::rag`.
 //!
 //! All code in this module is compiled only with the `rag` Cargo feature
 //! (the lib default has no RAG code at all).

@@ -1,13 +1,13 @@
 [package]
 name = "agent_rs"
-version = "0.4.0"
+version = "0.5.0"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/skaarfundgandr/agent_rs"
 edition = "2024"
 
 [lib]
-name = "agent_rs_lib"
+name = "agent_rs"
 crate-type = ["rlib"]
 
 [profile.release]
@@ -46,6 +46,7 @@ async-trait = "0.1.88"
 tiktoken-rs = "0.12.0"
 tracing = "0.1.41"
 futures = "0.3.31"
+tempfile = "3.27.0"
 rig-fastembed = { version = "0.38.2", optional = true }
 rig-sqlite = { version = "0.38.2", optional = true }
 tokio-rusqlite = { version = "0.6", optional = true }

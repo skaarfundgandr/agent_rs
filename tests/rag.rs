@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg(feature = "rag")]
 
-use agent_rs_lib::agent::embeddings::EmbeddingService;
-use agent_rs_lib::rag::{DocumentLoader, RagPipeline, TextLoader, TextSplitter, WordSplitter};
+use agent_rs::agent::embeddings::EmbeddingService;
+use agent_rs::rag::{DocumentLoader, RagPipeline, TextLoader, TextSplitter, WordSplitter};
 use rig_core::embeddings::{Embedding, EmbeddingModel};
 use std::fs;
 use std::result::Result as StdResult;
@@ -89,7 +89,7 @@ async fn pipeline_add_source_and_search() {
     assert!(added > 0);
     assert_eq!(pipeline.chunk_count().await.unwrap() as usize, added);
 
-    let arc_embedder: Arc<dyn agent_rs_lib::rag::ErasedEmbedder> =
+    let arc_embedder: Arc<dyn agent_rs::rag::ErasedEmbedder> =
         Arc::new(EmbeddingService::new(MockEmbeddingModel));
     let index = pipeline.build(arc_embedder);
 
@@ -154,7 +154,7 @@ async fn pipeline_save_and_reopen_preserves_chunks() {
         .unwrap();
     assert!(reopened.chunk_count().await.unwrap() > 0);
 
-    let arc_embedder: Arc<dyn agent_rs_lib::rag::ErasedEmbedder> =
+    let arc_embedder: Arc<dyn agent_rs::rag::ErasedEmbedder> =
         Arc::new(EmbeddingService::new(MockEmbeddingModel));
     let index = reopened.build(arc_embedder);
     let req = VectorSearchRequest::builder()
@@ -181,7 +181,7 @@ async fn pipeline_open_or_create_rejects_mismatched_artifacts() {
 
 #[tokio::test]
 async fn pipeline_commit_pending_persists_staged_chunks() {
-    use agent_rs_lib::rag::Document;
+    use agent_rs::rag::Document;
     use std::collections::HashMap;
 
     let dir = tempfile::tempdir().unwrap();

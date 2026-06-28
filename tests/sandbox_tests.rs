@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-use agent_rs_lib::domain::errors::DocumentError;
-use agent_rs_lib::security::{
+use agent_rs::domain::errors::DocumentError;
+use agent_rs::security::{
     SandboxConfig, SharedSandbox, find_containing_root, relative_display_path,
     validate_sandboxed_path,
 };
@@ -144,8 +144,8 @@ fn test_sandbox_config_clone() {
 
 #[tokio::test]
 async fn test_symlink_glob_rejects_targets_outside_sandbox() {
-    use agent_rs_lib::agent::permission::PermissionPolicy;
-    use agent_rs_lib::agent::tools::glob::{GlobSearchArgs, GlobSearchTool};
+    use agent_rs::agent::permission::PermissionPolicy;
+    use agent_rs::agent::tools::glob::{GlobSearchArgs, GlobSearchTool};
     use rig_core::tool::Tool;
 
     let sandbox_dir = tempfile::tempdir().unwrap();
@@ -186,8 +186,8 @@ async fn test_symlink_glob_rejects_targets_outside_sandbox() {
 
 #[tokio::test]
 async fn test_symlink_grep_rejects_targets_outside_sandbox() {
-    use agent_rs_lib::agent::permission::PermissionPolicy;
-    use agent_rs_lib::agent::tools::search::{GrepSearchArgs, GrepSearchTool};
+    use agent_rs::agent::permission::PermissionPolicy;
+    use agent_rs::agent::tools::search::{GrepSearchArgs, GrepSearchTool};
     use rig_core::tool::Tool;
 
     let sandbox_dir = tempfile::tempdir().unwrap();

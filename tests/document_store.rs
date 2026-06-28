@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg(feature = "rag")]
 
-use agent_rs_lib::rag::{Chunk, DocumentStore};
+use agent_rs::rag::{Chunk, DocumentStore};
 use std::collections::HashMap;
 use tempfile::tempdir;
 

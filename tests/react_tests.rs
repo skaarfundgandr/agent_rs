@@ -1,13 +1,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_rs_lib::agent::ReActExt;
-use agent_rs_lib::agent::react::{
+use agent_rs::agent::ReActExt;
+use agent_rs::agent::react::{
     ActionCb, ObservationCb, REACT_PREAMBLE, ReActSpanEmitter, detect_final_answer,
 };
-use agent_rs_lib::domain::agent::{
-    Action, FinalAnswer, Observation, ReActStep, ReActTrace, Thought,
-};
-use agent_rs_lib::domain::errors::ReActError;
+use agent_rs::domain::agent::{Action, FinalAnswer, Observation, ReActStep, ReActTrace, Thought};
+use agent_rs::domain::errors::ReActError;
 use rig_core::OneOrMany;
 use rig_core::client::CompletionClient;
 use rig_core::message::{
@@ -300,7 +298,7 @@ fn internal_tool_turns_emit_callbacks() {
 
     let mut trace = ReActTrace::default();
     let emitter: Arc<dyn ReActSpanEmitter> = Arc::new(TestSpanEmitter);
-    agent_rs_lib::agent::react::emit_internal_tool_callbacks(
+    agent_rs::agent::react::emit_internal_tool_callbacks(
         &messages,
         0,
         &on_action,
@@ -375,7 +373,7 @@ fn internal_tool_callbacks_skip_leading_prompt_tool_result() {
 
     let mut trace = ReActTrace::default();
     let emitter: Arc<dyn ReActSpanEmitter> = Arc::new(TestSpanEmitter);
-    agent_rs_lib::agent::react::emit_internal_tool_callbacks(
+    agent_rs::agent::react::emit_internal_tool_callbacks(
         &messages,
         1,
         &None,

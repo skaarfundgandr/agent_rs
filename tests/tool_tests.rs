@@ -1,12 +1,12 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-use agent_rs_lib::agent::permission::PermissionPolicy;
-use agent_rs_lib::agent::tools::directory::{ListDirectoryArgs, ListDirectoryTool};
-use agent_rs_lib::agent::tools::document::{
+use agent_rs::agent::permission::PermissionPolicy;
+use agent_rs::agent::tools::directory::{ListDirectoryArgs, ListDirectoryTool};
+use agent_rs::agent::tools::document::{
     ReadDocumentArgs, ReadDocumentTool, WriteDocumentArgs, WriteDocumentTool,
 };
-use agent_rs_lib::agent::tools::glob::{GlobSearchArgs, GlobSearchTool};
-use agent_rs_lib::agent::tools::search::{GrepSearchArgs, GrepSearchTool};
-use agent_rs_lib::security::{SandboxConfig, SharedSandbox};
+use agent_rs::agent::tools::glob::{GlobSearchArgs, GlobSearchTool};
+use agent_rs::agent::tools::search::{GrepSearchArgs, GrepSearchTool};
+use agent_rs::security::{SandboxConfig, SharedSandbox};
 use rig_core::tool::Tool;
 use std::collections::HashSet;
 use std::fs;
@@ -115,7 +115,7 @@ async fn test_sandbox_escape_read() {
     assert!(
         matches!(
             err,
-            agent_rs_lib::domain::errors::DocumentError::PermissionDenied(_)
+            agent_rs::domain::errors::DocumentError::PermissionDenied(_)
         ),
         "Expected PermissionDenied error (gate denied), got {:?}",
         err
@@ -147,7 +147,7 @@ async fn test_sandbox_escape_write() {
     assert!(
         matches!(
             err,
-            agent_rs_lib::domain::errors::DocumentError::PermissionDenied(_)
+            agent_rs::domain::errors::DocumentError::PermissionDenied(_)
         ),
         "Expected PermissionDenied error (gate denied), got {:?}",
         err
@@ -277,7 +277,7 @@ async fn test_out_of_sandbox_read_still_consults_gate() {
     assert!(
         matches!(
             err,
-            agent_rs_lib::domain::errors::DocumentError::PermissionDenied(_)
+            agent_rs::domain::errors::DocumentError::PermissionDenied(_)
         ),
         "Expected PermissionDenied for out-of-sandbox + DenyAll, got {:?}",
         err
@@ -324,7 +324,7 @@ async fn test_list_directory_sandbox_escape() {
     assert!(
         matches!(
             err,
-            agent_rs_lib::domain::errors::DocumentError::PermissionDenied(_)
+            agent_rs::domain::errors::DocumentError::PermissionDenied(_)
         ),
         "Expected PermissionDenied error (gate denied), got {:?}",
         err
@@ -393,7 +393,7 @@ async fn test_grep_search_sandbox_escape() {
     assert!(
         matches!(
             err,
-            agent_rs_lib::domain::errors::DocumentError::PermissionDenied(_)
+            agent_rs::domain::errors::DocumentError::PermissionDenied(_)
         ),
         "Expected PermissionDenied error (gate denied), got {:?}",
         err
@@ -461,7 +461,7 @@ async fn test_glob_search_sandbox_escape() {
 
     assert!(matches!(
         err,
-        agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
+        agent_rs::domain::errors::DocumentError::SandboxEscape(_)
     ));
 }
 
@@ -561,7 +561,7 @@ async fn test_multi_root_escape_rejected() {
     assert!(
         matches!(
             err,
-            agent_rs_lib::domain::errors::DocumentError::PermissionDenied(_)
+            agent_rs::domain::errors::DocumentError::PermissionDenied(_)
         ),
         "Expected PermissionDenied error (gate denied), got {:?}",
         err
@@ -713,7 +713,7 @@ async fn test_multi_root_glob_escape_rejected() {
 
     assert!(matches!(
         err,
-        agent_rs_lib::domain::errors::DocumentError::SandboxEscape(_)
+        agent_rs::domain::errors::DocumentError::SandboxEscape(_)
     ));
 }
 

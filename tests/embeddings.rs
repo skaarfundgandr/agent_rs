@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg(feature = "rag")]
 
-use agent_rs_lib::agent::embeddings::EmbeddingService;
+use agent_rs::agent::embeddings::EmbeddingService;
 use rig_core::Embed;
 use rig_core::embeddings::embed::{EmbedError, TextEmbedder};
 use rig_core::embeddings::{Embedding, EmbeddingModel};

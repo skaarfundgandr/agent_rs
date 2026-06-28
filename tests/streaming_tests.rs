@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_rs_lib::agent::ManagedStream;
-use agent_rs_lib::agent::ReActExt;
-use agent_rs_lib::agent::react::ReActSpanEmitter;
+use agent_rs::agent::ManagedStream;
+use agent_rs::agent::ReActExt;
+use agent_rs::agent::react::ReActSpanEmitter;
 use futures::StreamExt;
 use rig_core::OneOrMany;
 use rig_core::agent::MultiTurnStreamItem;
@@ -64,7 +64,7 @@ fn test_react_builder_with_span_emitter() {
 
 #[test]
 fn test_react_stream_item_enum_variants() {
-    use agent_rs_lib::domain::agent::ReActStreamItem;
+    use agent_rs::domain::agent::ReActStreamItem;
     use std::time::Duration;
 
     let cycle_start = ReActStreamItem::CycleStart { cycle: 0 };
@@ -121,7 +121,7 @@ fn test_react_builder_compaction_accepts_callbacks() {
 
 #[test]
 fn test_react_builder_callback_types_are_arc() {
-    use agent_rs_lib::agent::react::{ActionCb, ErrorCb, FinalCb, ObservationCb, ThoughtCb};
+    use agent_rs::agent::react::{ActionCb, ErrorCb, FinalCb, ObservationCb, ThoughtCb};
     use std::sync::Arc;
 
     let _: Option<ThoughtCb> = Some(Arc::new(|_t| {}));

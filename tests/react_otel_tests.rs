@@ -3,13 +3,11 @@
 
 use std::sync::{Arc, Mutex, OnceLock};
 
-use agent_rs_lib::agent::react::ReActSpanEmitter;
-use agent_rs_lib::domain::agent::{
-    Action, FinalAnswer, Observation, ReActStep, ReActTrace, Thought,
-};
-use agent_rs_lib::domain::errors::ReActError;
-use agent_rs_lib::domain::observability::LangSmithConfig;
-use agent_rs_lib::observability::{LangSmithAgentHook, LangSmithReActEmitter, init_tracing};
+use agent_rs::agent::react::ReActSpanEmitter;
+use agent_rs::domain::agent::{Action, FinalAnswer, Observation, ReActStep, ReActTrace, Thought};
+use agent_rs::domain::errors::ReActError;
+use agent_rs::domain::observability::LangSmithConfig;
+use agent_rs::observability::{LangSmithAgentHook, LangSmithReActEmitter, init_tracing};
 use tracing::field::Visit;
 use tracing::span::{Id, Record};
 use tracing::{Event, Subscriber};
@@ -201,7 +199,7 @@ fn langsmith_react_emitter_does_not_panic_on_recording() {
 
 #[test]
 fn re_exports_are_present() {
-    use agent_rs_lib::observability::{LangSmithAgentHook, LangSmithReActEmitter};
+    use agent_rs::observability::{LangSmithAgentHook, LangSmithReActEmitter};
 
     let _emitter = LangSmithReActEmitter;
     let _hook = LangSmithAgentHook;

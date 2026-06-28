@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg(feature = "rag")]
 
-use agent_rs_lib::rag::TurboIndex;
+use agent_rs::rag::TurboIndex;
 use tempfile::tempdir;
 
 #[test]
