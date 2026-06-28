@@ -3,22 +3,20 @@
 
 #[cfg(feature = "rag")]
 mod rag_main {
-    use agent_rs_lib::agent::embeddings::EmbeddingService;
-    use agent_rs_lib::agent::permission::PermissionPolicy;
-    use agent_rs_lib::agent::tools::{
+    use agent_rs::agent::embeddings::EmbeddingService;
+    use agent_rs::agent::permission::PermissionPolicy;
+    use agent_rs::agent::tools::{
         CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ManageRagTool,
-        RagSourceRegistry, ReadDocumentTool, WriteDocumentTool,
+        RagSourceRegistry, ReadDocumentTool, ToolRegistryBuilder, WriteDocumentTool,
     };
-    use agent_rs_lib::config::McpConfig;
-    use agent_rs_lib::mcp::client::McpClient;
-    use agent_rs_lib::rag::{ErasedEmbedder, RagPipeline};
-    use agent_rs_lib::security::{SandboxConfig, SharedSandbox};
+    use agent_rs::mcp::registry::McpRegistry;
+    use agent_rs::rag::{ErasedEmbedder, RagPipeline};
+    use agent_rs::security::{SandboxConfig, SharedSandbox};
     use anyhow::Result;
     use dotenvy::dotenv;
     use rig_core::integrations::cli_chatbot::ChatBotBuilder;
     use rig_core::prelude::*;
     use rig_core::providers::openai;
-    use rig_core::tool::ToolDyn;
     use std::collections::HashSet;
     use std::env;
     use std::path::PathBuf;
@@ -129,50 +127,16 @@ mod rag_main {
             }
         };
 
-        let mut tools = if std::path::Path::new("./mcp.json").exists() {
-            McpClient::new(McpConfig::from_path("./mcp.json")?)
-                .tools(policy.clone())
-                .await?
+        let mcp_runtime = if std::path::Path::new("./mcp.json").exists() {
+            Some(
+                McpRegistry::from_path("./mcp.json")?
+                    .connect(policy.clone())
+                    .await?,
+            )
         } else {
             eprintln!("  No mcp.json found — skipping MCP tools.");
-            Vec::new()
+            None
         };
-
-        let internal_tool_names: std::collections::HashSet<String> = [
-            "read_document",
-            "write_document",
-            "list_directory",
-            "grep_search",
-            "glob_search",
-            "manage_rag",
-        ]
-        .into_iter()
-        .map(String::from)
-        .collect();
-
-        let mut mcp_collisions = Vec::new();
-        tools.retain(|t| {
-            let name = t.name();
-            if internal_tool_names.contains(&name) {
-                mcp_collisions.push(name);
-                false
-            } else {
-                true
-            }
-        });
-        if !mcp_collisions.is_empty() {
-            tracing::warn!(
-                ?mcp_collisions,
-                "MCP tools skipped: names collide with internal tools"
-            );
-        }
-
-        let compaction_agent = chat_client
-            .agent(&chat_model_name)
-            .default_max_turns(20)
-            .preamble("You are a summarization assistant.")
-            .build();
-        let compaction_tool = CompactTool::new(compaction_agent);
 
         let read_extensions = HashSet::from(["txt", "md", "pdf"].map(String::from));
         let write_extensions = HashSet::from(["txt", "md"].map(String::from));
@@ -181,40 +145,90 @@ mod rag_main {
 
         let shared_sandbox = build_shared_sandbox()?;
 
-        let internal_tools: Vec<Box<dyn ToolDyn>> = vec![
-            Box::new(ReadDocumentTool::new(
-                Arc::clone(&shared_sandbox),
-                read_extensions,
-                policy.clone(),
-            )),
-            Box::new(WriteDocumentTool::new(
-                Arc::clone(&shared_sandbox),
-                write_extensions,
-                policy.clone(),
-            )),
-            Box::new(ListDirectoryTool::new(
-                Arc::clone(&shared_sandbox),
-                policy.clone(),
-            )),
-            Box::new(GrepSearchTool::new(
-                Arc::clone(&shared_sandbox),
-                grep_extensions,
-                policy.clone(),
-            )),
-            Box::new(GlobSearchTool::new(
-                Arc::clone(&shared_sandbox),
-                policy.clone(),
-            )),
-            Box::new(ManageRagTool::new(
-                rag_registry,
-                Arc::clone(&pipeline),
-                Arc::clone(&embedder_arc),
-                Arc::clone(&shared_sandbox),
-                policy,
-            )),
-        ];
-        tools.extend(internal_tools);
-        tools.push(Box::new(compaction_tool));
+        let mut builder = ToolRegistryBuilder::new();
+
+        if let Some(ref runtime) = mcp_runtime {
+            builder = builder.register_mcp("mcp", runtime)?;
+        }
+
+        let chat_client_for_ctx = chat_client.clone();
+        let chat_model_name_for_ctx = chat_model_name.clone();
+
+        builder = builder
+            .register("filesystem", {
+                let sb = Arc::clone(&shared_sandbox);
+                let exts = read_extensions.clone();
+                let pol = policy.clone();
+                move || {
+                    Box::new(ReadDocumentTool::new(
+                        Arc::clone(&sb),
+                        exts.clone(),
+                        pol.clone(),
+                    ))
+                }
+            })?
+            .register("filesystem", {
+                let sb = Arc::clone(&shared_sandbox);
+                let exts = write_extensions.clone();
+                let pol = policy.clone();
+                move || {
+                    Box::new(WriteDocumentTool::new(
+                        Arc::clone(&sb),
+                        exts.clone(),
+                        pol.clone(),
+                    ))
+                }
+            })?
+            .register("filesystem", {
+                let sb = Arc::clone(&shared_sandbox);
+                let pol = policy.clone();
+                move || Box::new(ListDirectoryTool::new(Arc::clone(&sb), pol.clone()))
+            })?
+            .register("filesystem", {
+                let sb = Arc::clone(&shared_sandbox);
+                let exts = grep_extensions.clone();
+                let pol = policy.clone();
+                move || {
+                    Box::new(GrepSearchTool::new(
+                        Arc::clone(&sb),
+                        exts.clone(),
+                        pol.clone(),
+                    ))
+                }
+            })?
+            .register("filesystem", {
+                let sb = Arc::clone(&shared_sandbox);
+                let pol = policy.clone();
+                move || Box::new(GlobSearchTool::new(Arc::clone(&sb), pol.clone()))
+            })?
+            .register("rag", {
+                let sb = Arc::clone(&shared_sandbox);
+                let reg = Arc::clone(&rag_registry);
+                let pipe = Arc::clone(&pipeline);
+                let emb = Arc::clone(&embedder_arc);
+                let pol = policy.clone();
+                move || {
+                    Box::new(ManageRagTool::new(
+                        Arc::clone(&reg),
+                        Arc::clone(&pipe),
+                        Arc::clone(&emb),
+                        Arc::clone(&sb),
+                        pol.clone(),
+                    ))
+                }
+            })?
+            .register("context", move || {
+                let agent = chat_client_for_ctx
+                    .agent(&chat_model_name_for_ctx)
+                    .default_max_turns(20)
+                    .preamble("You are a summarization assistant.")
+                    .build();
+                Box::new(CompactTool::new(agent)) as Box<dyn rig_core::tool::ToolDyn>
+            })?
+            .enable(&["mcp", "filesystem", "rag", "context"]);
+
+        let registry = builder.build();
+        let tools = registry.active_tools();
 
         // ---------- agent ----------
         let agent = chat_client
