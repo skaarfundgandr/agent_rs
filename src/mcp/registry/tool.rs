@@ -12,6 +12,7 @@ use crate::domain::errors::DocumentError;
 static STDIN_MUTEX: Mutex<()> = Mutex::const_new(());
 
 /// A Rig tool wrapper that keeps the underlying MCP server connection alive.
+#[derive(Clone)]
 pub struct RegisteredMcpTool {
     server_name: String,
     pub(super) tool_name: String,

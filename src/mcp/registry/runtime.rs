@@ -52,6 +52,16 @@ impl McpRegistryRuntime {
         self.tools.iter().map(|tool| tool.tool_name.as_str())
     }
 
+    /// Borrow each registered tool as boxed `ToolDyn` (clones Arc-backed wrapper)
+    /// without consuming the runtime. Use when a ToolRegistry needs to register
+    /// MCP tools alongside internal ones (see Phase 2).
+    pub fn tool_boxes(&self) -> Vec<Box<dyn ToolDyn>> {
+        self.tools
+            .iter()
+            .map(|t| Box::new(t.clone()) as Box<dyn ToolDyn>)
+            .collect()
+    }
+
     /// Convert the runtime registry into boxed Rig tools.
     ///
     /// # Returns

@@ -26,18 +26,18 @@
 
 #[cfg(feature = "opentelemetry")]
 mod otel_main {
-    use agent_rs_lib::agent::ReActExt;
-    use agent_rs_lib::agent::permission::PermissionPolicy;
-    use agent_rs_lib::agent::tools::{
+    use agent_rs::agent::ReActExt;
+    use agent_rs::agent::permission::PermissionPolicy;
+    use agent_rs::agent::tools::{
         GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool,
     };
-    use agent_rs_lib::config::McpConfig;
-    use agent_rs_lib::domain::observability::LangSmithConfig;
-    use agent_rs_lib::mcp::client::McpClient;
-    use agent_rs_lib::observability::{
+    use agent_rs::config::McpConfig;
+    use agent_rs::domain::observability::LangSmithConfig;
+    use agent_rs::mcp::registry::McpRegistry;
+    use agent_rs::observability::{
         LangSmithAgentHook, LangSmithReActEmitter, init_tracing, shutdown_tracing,
     };
-    use agent_rs_lib::security::{SandboxConfig, SharedSandbox};
+    use agent_rs::security::{SandboxConfig, SharedSandbox};
     use anyhow::{Result, bail};
     use dotenvy::dotenv;
     use rig_core::client::CompletionClient;
@@ -145,7 +145,7 @@ mod otel_main {
 
         // ---------- optional MCP tools ----------
         match McpConfig::from_path("./mcp.json") {
-            Ok(cfg) => match McpClient::new(cfg).tools(policy.clone()).await {
+            Ok(cfg) => match McpRegistry::new(cfg).tools(policy.clone()).await {
                 Ok(mcp_tools) => {
                     eprintln!("Loaded {} MCP tools from ./mcp.json", mcp_tools.len());
                     tools.extend(mcp_tools);
@@ -175,7 +175,7 @@ mod otel_main {
         // ---------- interactive prompt loop ----------
         println!("LangSmith ReAct CLI Chatbot. Type 'exit' or 'quit' to end.");
 
-        use agent_rs_lib::observability::conventions::KIND_AGENT;
+        use agent_rs::observability::conventions::KIND_AGENT;
         use tracing::Instrument;
 
         let react = agent

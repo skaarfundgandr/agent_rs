@@ -7,14 +7,13 @@ use rig_core::tool::ToolDyn;
 use crate::agent::permission::PermissionPolicy;
 use crate::domain::config::McpConfig;
 use crate::domain::mcp::{McpServerDef, ResolvedMcpServer};
-use crate::mcp::client::McpClient;
 
 use super::connect::{ConnectedMcpServer, connect_resolved_server};
 use super::runtime::McpRegistryRuntime;
 
 /// Registry that resolves MCP server definitions from `mcp.json` into Rig tools.
 pub struct McpRegistry {
-    client: McpClient,
+    config: McpConfig,
 }
 
 impl McpRegistry {
@@ -28,9 +27,7 @@ impl McpRegistry {
     ///
     /// Returns the initialized `McpRegistry`.
     pub fn new(config: McpConfig) -> Self {
-        Self {
-            client: McpClient::new(config),
-        }
+        Self { config }
     }
 
     /// Create a registry from a configuration file path.
@@ -50,26 +47,13 @@ impl McpRegistry {
         Ok(Self::new(McpConfig::from_path(path)?))
     }
 
-    /// Create a registry from an existing client wrapper.
-    ///
-    /// # Arguments
-    ///
-    /// * `client` - The existing `McpClient`.
-    ///
-    /// # Returns
-    ///
-    /// Returns the initialized `McpRegistry`.
-    pub fn from_client(client: McpClient) -> Self {
-        Self { client }
-    }
-
     /// Access the underlying parsed config.
     ///
     /// # Returns
     ///
     /// Returns a reference to the `McpConfig`.
     pub fn config(&self) -> &McpConfig {
-        self.client.config()
+        &self.config
     }
 
     /// Validate the registry configuration.
@@ -82,7 +66,7 @@ impl McpRegistry {
     ///
     /// Returns an error if the configuration validation fails.
     pub fn validate(&self) -> Result<()> {
-        self.client.validate()
+        self.config.validate()
     }
 
     /// Get a server definition by name.
@@ -95,7 +79,7 @@ impl McpRegistry {
     ///
     /// Returns `Some(&McpServerDef)` if found, or `None` otherwise.
     pub fn server(&self, name: &str) -> Option<&McpServerDef> {
-        self.client.get_server_def(name)
+        self.config.mcp_servers.get(name)
     }
 
     /// Resolve a single MCP server into a normalized transport spec.
@@ -112,7 +96,7 @@ impl McpRegistry {
     ///
     /// Returns an error if the server is not found or fails to resolve.
     pub fn resolved_server(&self, name: &str) -> Result<ResolvedMcpServer> {
-        self.client.get_resolved_server(name)
+        self.config.resolved_server(name)
     }
 
     /// Resolve every configured server into transport specs.
@@ -125,7 +109,7 @@ impl McpRegistry {
     ///
     /// Returns an error if any server configuration fails to resolve.
     pub fn resolved_servers(&self) -> Result<Vec<ResolvedMcpServer>> {
-        self.client.config().resolved_servers()
+        self.config.resolved_servers()
     }
 
     /// Return the configured server names.
@@ -134,7 +118,7 @@ impl McpRegistry {
     ///
     /// Returns an iterator yielding the name string slices of all configured servers.
     pub fn server_names(&self) -> impl Iterator<Item = &str> {
-        self.client.server_names()
+        self.config.mcp_servers.keys().map(String::as_str)
     }
 
     /// Connect to all configured MCP servers and collect their tools.
