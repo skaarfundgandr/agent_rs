@@ -83,6 +83,17 @@ impl Visit for FieldVisitor {
 }
 
 impl<S: Subscriber> Layer<S> for TraceCapture {
+    fn on_new_span(&self, attrs: &tracing::span::Attributes<'_>, _id: &Id, _ctx: Context<'_, S>) {
+        let mut visitor = FieldVisitor(Vec::new());
+        attrs.record(&mut visitor);
+        if !visitor.0.is_empty() {
+            self.records
+                .lock()
+                .unwrap()
+                .push(CapturedRecord { fields: visitor.0 });
+        }
+    }
+
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
         let mut visitor = FieldVisitor(Vec::new());
         event.record(&mut visitor);

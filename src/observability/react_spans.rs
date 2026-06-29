@@ -1,11 +1,12 @@
 //! OTel span emission for ReAct-loop cycles.
 //!
-//! Since the emitter methods are called from `BuiltReAct::prompt()` / `BuiltReAct::chat()` (which is
-//! async), we cannot borrow a `tracing::Span` across an await point. Instead,
-//! we **augment the current span** via `Span::current().record(...)` — the
-//! rig-emitted `chat` / `execute_tool` span is the parent context, and it is
-//! already being exported to OTel by the subscriber layer installed in
-//! [`super::langsmith::init_tracing`].
+//! Each emitter method creates a **dedicated child span** for the ReAct event
+//! (cycle, thought, action, observation). This keeps the top-level agent span
+//! — created by the caller with `input.value` = the user's prompt — untouched:
+//! tool args/results go on their own TOOL child spans, not the parent.
+//!
+//! `emit_error` is the exception: it marks the current (parent) span as
+//! errored, which is the desired behaviour for a failed ReAct run.
 
 use crate::agent::react::ReActSpanEmitter;
 use crate::domain::agent::{Action, Observation, ReActTrace, Thought};
@@ -14,19 +15,22 @@ use crate::observability::conventions::*;
 use opentelemetry::trace::Status;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-/// OTel-aware [`ReActSpanEmitter`] that records LangSmith run-typing
-/// attributes on the current `tracing` span.
+/// OTel-aware [`ReActSpanEmitter`] that emits LangSmith-typed child spans for
+/// each ReAct lifecycle event.
 #[derive(Debug, Default, Clone)]
 pub struct LangSmithReActEmitter;
 
 impl ReActSpanEmitter for LangSmithReActEmitter {
     fn emit_thought(&self, thought: &Thought) {
-        let span = tracing::Span::current();
-        span.record(LANGSMITH_SPAN_KIND, KIND_CHAIN);
-        span.record(OPENINFERENCE_SPAN_KIND, "CHAIN");
-        span.record(GEN_AI_OPERATION_NAME, "reasoning");
-        span.record(GEN_AI_REASONING, thought.reasoning.as_str());
-        span.record("react.cycle", thought.cycle as i64);
+        let span = tracing::info_span!(
+            "react_thought",
+            "langsmith.span.kind" = KIND_CHAIN,
+            "openinference.span.kind" = "CHAIN",
+            "gen_ai.operation.name" = "reasoning",
+            "gen_ai.content.reasoning" = %thought.reasoning,
+            "react.cycle" = thought.cycle as i64,
+        );
+        let _enter = span.enter();
 
         tracing::info!(
             cycle = thought.cycle,
@@ -36,11 +40,14 @@ impl ReActSpanEmitter for LangSmithReActEmitter {
     }
 
     fn emit_cycle_start(&self, cycle: usize) {
-        let span = tracing::Span::current();
-        span.record(LANGSMITH_SPAN_KIND, KIND_CHAIN);
-        span.record(OPENINFERENCE_SPAN_KIND, "CHAIN");
-        span.record(GEN_AI_OPERATION_NAME, "react_cycle");
-        span.record("react.cycle", cycle as i64);
+        let span = tracing::info_span!(
+            "react_cycle",
+            "langsmith.span.kind" = KIND_CHAIN,
+            "openinference.span.kind" = "CHAIN",
+            "gen_ai.operation.name" = "react_cycle",
+            "react.cycle" = cycle as i64,
+        );
+        let _enter = span.enter();
 
         tracing::info!(cycle, "react cycle start");
     }
@@ -57,23 +64,36 @@ impl ReActSpanEmitter for LangSmithReActEmitter {
     }
 
     fn emit_action(&self, action: &Action) {
-        let span = tracing::Span::current();
-        span.record(LANGSMITH_SPAN_KIND, KIND_AGENT);
-        span.record(OPENINFERENCE_SPAN_KIND, "AGENT");
-        span.record(GEN_AI_OPERATION_NAME, "react_action");
-        span.record(GEN_AI_TOOL_NAME, action.tool_name.as_str());
-        span.record(INPUT_VALUE, action.args.as_str());
-        span.record("react.cycle", action.cycle as i64);
+        let span = tracing::info_span!(
+            "react_action",
+            "langsmith.span.kind" = KIND_AGENT,
+            "openinference.span.kind" = "AGENT",
+            "gen_ai.operation.name" = "react_action",
+            "gen_ai.tool.name" = %action.tool_name,
+            "input.value" = %action.args,
+            "react.cycle" = action.cycle as i64,
+        );
+        let _enter = span.enter();
+
+        tracing::info!(
+            cycle = action.cycle,
+            tool_name = %action.tool_name,
+            "react tool action"
+        );
     }
 
     fn emit_observation(&self, observation: &Observation) {
-        let span = tracing::Span::current();
-        span.record(LANGSMITH_SPAN_KIND, KIND_TOOL);
-        span.record(OPENINFERENCE_SPAN_KIND, "TOOL");
-        span.record(GEN_AI_TOOL_NAME, observation.tool_name.as_str());
-        span.record(OUTPUT_VALUE, observation.result.as_str());
-        span.record("react.is_error", observation.is_error);
-        span.record("react.duration_ms", observation.duration.as_millis() as u64);
+        let span = tracing::info_span!(
+            "react_observation",
+            "langsmith.span.kind" = KIND_TOOL,
+            "openinference.span.kind" = "TOOL",
+            "gen_ai.tool.name" = %observation.tool_name,
+            "output.value" = %observation.result,
+            "react.is_error" = observation.is_error,
+            "react.duration_ms" = observation.duration.as_millis() as u64,
+            "react.cycle" = observation.cycle as i64,
+        );
+        let _enter = span.enter();
 
         if observation.is_error {
             span.set_status(Status::error(format!(
