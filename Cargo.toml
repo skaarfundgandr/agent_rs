@@ -78,3 +78,14 @@ opentelemetry = [
 [[example]]
 name = "langsmith_react"
 required-features = ["opentelemetry"]
+
+[[example]]
+name = "web_researcher"
+required-features = ["rag"]
+
+[[example]]
+name = "multi_agent_coder"
+
+[[example]]
+name = "db_assistant"
+
