@@ -1,141 +1,183 @@
 # AgentRS
 
-**A high-performance Rust-based AI agent framework with native RAG support and MCP integration.**
+**A high-performance Rust-based AI agent framework extending [Rig](https://github.com/0xPlayground/rig) with native RAG support, MCP integration, and advanced memory management.**
+
+> [!WARNING]
+> **Active Development:** This project is under active development. Breaking changes are to be expected as we stabilize the APIs toward v1.0.
 
 ---
 
 ## 📖 About
 
-**AgentRS** is a lightweight yet powerful framework designed for developers building agentic workflows in Rust. It bridges the gap between large language models and real-world tools by providing a seamless integration layer for the **Model Context Protocol (MCP)** and **Retrieval-Augmented Generation (RAG)**.
+**AgentRS** is an extension library built on top of the **[Rig](https://github.com/0xPlayground/rig)** agent framework (`rig-core`). It adds enterprise-grade capabilities for context control, execution security, and vector store operations in Rust.
 
-Whether you're building a CLI-based research assistant or a complex automated workflow, AgentRS handles the heavy lifting of context management, document processing, and tool orchestration, allowing you to focus on the logic that matters.
-
-### Why AgentRS?
-- **Efficiency:** Built on Rust for maximum performance and safety.
-- **Context Awareness:** Native support for PDF extraction and semantic search.
-- **Memory Management:** Intelligent auto-compaction to keep your context window clean and cost-effective.
-- **Extensibility:** First-class support for MCP tools and custom internal implementations.
+It integrates local semantic search via **[fastembed](https://github.com/AnushShetty/fastembed-rs)** and persistent on-disk vector databases using **[turbovec](https://github.com/skaarfundgandr/turbovec)**, enabling highly efficient Retrieval-Augmented Generation (RAG) workflows out-of-the-box.
 
 ---
 
 ## ✨ Key Features
 
-*   **Model Context Protocol (MCP):** Easily connect to and consume tools from any MCP-compliant server.
-*   **Dynamic RAG Store:** Built-in PDF parsing and chunking engine with vector search capabilities.
-*   **Auto-Compacting Memory:** Automatically summarizes long conversation histories to manage token limits without losing critical context.
-*   **Internal Toolset:** Ready-to-use tools for reading/writing local documents and managing session state.
-*   **Ergonomic API:** A fluent builder pattern for configuring agents, embeddings, and chat interfaces.
+*   **Rig Extension:** Extends standard `rig-core` agents with customizable ReAct loops, structured callbacks, and agent dispatching.
+*   **Dynamic RAG Store:** Seamlessly chunk and index PDFs, Markdown, and text files using `fastembed` and `turbovec`.
+*   **Model Context Protocol (MCP):** Connect stdio or HTTP MCP servers dynamically to load tools with deduplication.
+*   **Secure Execution Sandbox:** Enforce path-traversal constraints and run commands/filesystem tools in restricted roots.
+*   **Permission Gateways:** Fine-grained policies (`AllowAll`, `DenyAll`, `CliPrompt`, or `Custom`) to intercept tool calls before execution.
+*   **Auto-Compacting Memory:** Smart history compression/summarization that automatically reduces token usage without losing conversation context.
+*   **OpenTelemetry & LangSmith:** Native OTel span exporters to trace agent execution loops directly inside LangSmith.
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Installation
 
-### Prerequisites
-
-*   **Rust (edition 2024):** Ensure you have the latest stable Rust toolchain installed.
-*   **OpenAI-Compatible Provider:** A local or cloud-based model provider (e.g., LM Studio, OpenAI, or Google Gemma).
-*   **Environment Variables(Optional):** An `.env` file with the following keys:
-    ```env
-    API_KEY=your_api_key_here
-    CHAT_MODEL=google/gemma-4-e4b
-    ```
-
-### Installation
-
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/skaarfundgandr/agent_rs.git
-    cd agent_rs
-    ```
-
-2.  **Build the project:**
-    ```bash
-    cargo build --release
-    ```
-
-3. **Run tests to verify setup:**
-    ```bash
-    cargo test
-    ```
-
-### Adding as a Dependency
-
-To use **AgentRS** as a library in your own project, add the following to your `Cargo.toml`:
+Add the following to your `Cargo.toml` to use `agent_rs` in your project:
 
 ```toml
 [dependencies]
 agent_rs = { git = "https://github.com/skaarfundgandr/agent_rs.git" }
 ```
 
-> [!NOTE]
-> The crate will be available in your code as `agent_rs`.
-
 ---
 
-## 🛠️ Usage
+## 💻 Code Examples
 
-Running the built-in CLI chatbot is simple:
+### 1. Build a ReAct Loop Agent
 
-1. Ensure your `.env` is configured.
-2. Set up your MCP servers. Copy `mcp.json.example` to `mcp.json` and customize it with your MCP server details:
-   ```bash
-   cp mcp.json.example mcp.json
-   ```
+Build an agent that reasons and calls tools iteratively:
 
-### Running the Agent
-```bash
-cargo run
+```rust
+use agent_rs::agent::ReActExt;
+use rig_core::providers::openai;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = openai::CompletionsClient::from_env();
+    
+    // Build agent with registered tools
+    let agent = client
+        .agent("gpt-4")
+        .preamble("You are a helpful calculation assistant.")
+        .tool(CalculatorTool)
+        .build();
+
+    // Wrap agent in the ReAct loop executor
+    let react = agent
+        .react()
+        .max_cycles(5)
+        .build();
+
+    // Prompt the agent (returns a trace containing all reasoning steps and final answer)
+    let trace = react.prompt("Calculate 15 + 27 * 3").await?;
+    if let Some(final_answer) = trace.final_answer {
+        println!("Answer: {}", final_answer.text);
+    }
+    Ok(())
+}
 ```
 
-### Code Example: Building a Custom Agent
+### 2. Managed Agent with Auto-Compaction
+
+Automatically compact history with summaries when conversation length exceeds a token threshold:
+
+```rust
+use agent_rs::agent::ManagedExt;
+use rig_core::providers::openai;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = openai::CompletionsClient::from_env();
+    let agent = client.agent("gpt-4").build();
+
+    // Construct a managed agent with automatic token-based memory compaction
+    let managed = agent
+        .managed()
+        .with_compaction()
+        .threshold(8000) // triggers summary compaction at 8k tokens
+        .build();
+
+    let response = managed.chat_compact("Let's plan a coding project...").await?;
+    println!("Response: {}", response);
+    Ok(())
+}
+```
+
+### 3. Dynamic RAG Pipeline (turbovec + fastembed)
+
+Set up a vector database index that updates dynamically on-the-fly:
+
 ```rust
 use std::path::Path;
 use std::sync::Arc;
 use agent_rs::agent::embeddings::EmbeddingService;
 use agent_rs::rag::RagPipeline;
+use rig_core::providers::openai;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // 1. Initialize local fastembed embeddings
-    let service = EmbeddingService::from_fastembed("Xenova/bge-small-en-v1.5".parse()?)?;
-    let dim = service.ndims();
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = openai::CompletionsClient::from_env();
 
-    // 2. Open or create persistent RAG pipeline
+    // Load local fastembed embedding model
+    let embedder = EmbeddingService::from_fastembed("Xenova/bge-small-en-v1.5".parse()?)?;
+    let dim = embedder.ndims();
+
+    // Load or create a persistent turbovec RAG database
     let pipeline = RagPipeline::open_or_create(
-        Path::new("rag_data/rag.db"),
-        Path::new("rag_data/rag.tvim"),
+        Path::new("rag.db"),
+        Path::new("rag.tvim"),
         dim,
         4, // bit_width
+        None, // use default allowed extensions (pdf, txt, md)
     ).await?;
 
-    // 3. Ingest a file
-    let chunks = pipeline.add_source(Path::new("./my_docs.pdf"), &service).await?;
-    pipeline.save(Path::new("rag_data/rag.tvim")).await?;
+    // Ingest a document dynamically during agent execution
+    pipeline.add_source_dyn(Path::new("./notes.pdf"), &embedder).await?;
 
-    // 4. Build rig-compatible index for agents
-    let index = pipeline.build(Arc::new(service));
-
-    // 5. Create the Agent
+    // Expose RAG pipeline as a Rig index for dynamic context loading
+    let index = pipeline.build(Arc::new(embedder));
     let agent = client
-        .agent("chat-model")
-        .preamble("You are a helpful research assistant.")
-        .dynamic_context(4, index)
+        .agent("gpt-4")
+        .dynamic_context(3, index) // retrieves top 3 chunks automatically
         .build();
 
     Ok(())
 }
 ```
 
+---
+
+## 📚 Documentation Reference
+
+Detailed API documentation is located in the [docs/api/](docs/api/README.md) directory:
+
+*   **Core Agent Loops**: [ReAct Loop](docs/api/react_loop.md) | [Memory & Context](docs/api/memory_and_agent_context.md)
+*   **Integrations**: [MCP Registry](docs/api/config_and_mcp_modules.md) | [RAG Pipeline](docs/api/rag_pipeline.md)
+*   **Security & Gates**: [Security Sandbox](docs/api/security_sandbox.md) | [Permission System](docs/api/permission_system.md)
+*   **Diagnostics**: [Observability & OpenTelemetry](docs/api/observability.md) | [Domain Errors](docs/api/domain_errors.md)
+
+### Architectural Diagrams
+
+See visual layouts and sequence flows in the [docs/diagrams/](docs/diagrams/) directory:
+*   [C4 System Architecture](docs/diagrams/c4-architecture.md)
+*   [Class Struct Dependency](docs/diagrams/class-diagram.md)
+*   [Execution Sequence Flowchart](docs/diagrams/flowchart.md)
+
+---
+
+## 🛠️ Examples
+
+To see the framework in action, refer to the [examples/README.md](examples/README.md) file.
+
+---
+
 ## 🤝 Contributing
 
-We welcome contributions! To get started:
-1.  Fork the repository.
-2.  Create a feature branch (`git checkout -b feature/amazing-feature`).
-3.  Commit your changes (`git commit -m 'Add amazing feature'`).
-4.  Push to the branch (`git push origin feature/amazing-feature`).
-5.  Open a Pull Request.
-
-Please ensure all tests pass and your code follows the established Rust idioms.
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/amazing-feature`).
+3. Format with `cargo fmt` and run checks/tests:
+   ```bash
+   cargo clippy --all-targets --all-features
+   cargo test --all-features
+   ```
+4. Push to branch and open a Pull Request.
 
 ---
 
