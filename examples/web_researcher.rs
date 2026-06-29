@@ -13,6 +13,7 @@
 
 #[cfg(feature = "rag")]
 mod researcher_main {
+    use agent_rs::agent::ReActExt;
     use agent_rs::agent::embeddings::EmbeddingService;
     use agent_rs::agent::permission::PermissionPolicy;
     use agent_rs::agent::tools::{
@@ -22,7 +23,7 @@ mod researcher_main {
     use agent_rs::security::{SandboxConfig, SharedSandbox};
     use anyhow::Result;
     use dotenvy::dotenv;
-    use rig_core::completion::{Prompt, ToolDefinition};
+    use rig_core::completion::ToolDefinition;
     use rig_core::prelude::*;
     use rig_core::providers::openai;
     use rig_core::tool::Tool;
@@ -244,6 +245,9 @@ mod researcher_main {
             )
             .dynamic_context(2, index)
             .default_max_turns(20)
+            .build()
+            .react()
+            .max_cycles(50)
             .build();
 
         let args: Vec<String> = env::args().collect();
@@ -256,7 +260,10 @@ mod researcher_main {
         println!("Research Prompt: {}", prompt);
         println!("Running agent. Please wait...");
         let output = agent.prompt(&prompt).await?;
-        println!("\n=== Research Report ===\n{}", output);
+        println!(
+            "\n=== Research Report ===\n{}",
+            output.final_answer.unwrap().text
+        );
 
         // Clean up temporary research note file if it was created
         if Path::new("research_notes.txt").exists() {
