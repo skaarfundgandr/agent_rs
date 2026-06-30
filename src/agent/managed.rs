@@ -11,7 +11,6 @@ use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::memory::ContextManager;
 use crate::agent::model::chat::{execute_chat, execute_stream_chat};
-use crate::agent::utils::{Mutex, lock_mutex};
 
 use super::react::{CompactionConfig, NoCompaction};
 
@@ -33,7 +32,6 @@ where
     fn managed(&self) -> ManagedBuilder<'_, M, P, NoCompaction> {
         ManagedBuilder {
             agent: self,
-            initial_history: Vec::new(),
             max_retries: 3,
             compaction: NoCompaction,
         }
@@ -95,7 +93,6 @@ where
     P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     agent: &'a Agent<M, P>,
-    initial_history: Vec<Message>,
     max_retries: u32,
     compaction: CompState,
 }
@@ -107,14 +104,6 @@ where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
-    /// Seed the initial conversation history.
-    pub fn with_history(self, history: Vec<Message>) -> Self {
-        Self {
-            initial_history: history,
-            ..self
-        }
-    }
-
     /// Set the maximum number of retries for completion calls on transient errors.
     ///
     /// Retries occur with exponential backoff (500ms * 2^attempt) and are
@@ -146,7 +135,6 @@ where
     {
         ManagedBuilder {
             agent: self.agent,
-            initial_history: self.initial_history,
             max_retries: self.max_retries,
             compaction: CompactionConfig {
                 model: self.agent.clone(),
@@ -161,7 +149,6 @@ where
     pub fn build(self) -> BuiltManagedAgent<M, P, ()> {
         BuiltManagedAgent {
             agent: self.agent.clone(),
-            history: Arc::new(Mutex::new(self.initial_history)),
             max_retries: self.max_retries,
             context_manager: None,
             _compaction: PhantomData,
@@ -195,7 +182,6 @@ where
     ) -> ManagedBuilder<'a, M, P, CompactionConfig<NewC>> {
         ManagedBuilder {
             agent: self.agent,
-            initial_history: self.initial_history,
             max_retries: self.max_retries,
             compaction: CompactionConfig {
                 model,
@@ -252,7 +238,6 @@ where
 
         BuiltManagedAgent {
             agent: self.agent.clone(),
-            history: Arc::new(Mutex::new(self.initial_history)),
             max_retries: self.max_retries,
             context_manager: Some(Arc::new(ctx)),
             _compaction: PhantomData,
@@ -272,7 +257,6 @@ where
     P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     agent: Agent<M, P>,
-    history: Arc<Mutex<Vec<Message>>>,
     max_retries: u32,
     context_manager: Option<Arc<dyn Any + Send + Sync>>,
     _compaction: PhantomData<C>,
@@ -285,11 +269,6 @@ where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
-    /// Return a snapshot of the current conversation history.
-    pub fn history(&self) -> Vec<Message> {
-        lock_mutex(&self.history).clone()
-    }
-
     /// Return the configured `max_retries` limit.
     pub fn max_retries(&self) -> u32 {
         self.max_retries
@@ -306,22 +285,25 @@ where
     /// Execute a chat prompt **without** mutating shared history.
     pub async fn prompt(&self, msg: impl Into<String>) -> Result<String, PromptError> {
         let msg = msg.into();
-        let mut working = lock_mutex(&self.history).clone();
+        let mut working = Vec::new();
         retry_chat(&self.agent, &msg, &mut working, self.max_retries).await
     }
 
     /// Execute a chat prompt **with** history mutation on success.
     ///
-    /// On success, the shared history is replaced with the new working history.
-    /// On error, the shared history is not modified.
-    pub async fn chat(&self, msg: impl Into<String>) -> Result<String, PromptError> {
+    /// On success, pushes the user message and assistant response to the
+    /// caller's history. On error, the caller's history is not modified.
+    pub async fn chat(
+        &self,
+        msg: impl Into<String>,
+        history: &mut Vec<Message>,
+    ) -> Result<String, PromptError> {
         let msg = msg.into();
-        let mut working = lock_mutex(&self.history).clone();
+        let mut working = history.clone();
         let result = retry_chat(&self.agent, &msg, &mut working, self.max_retries).await;
         if let Ok(final_text) = &result {
-            let mut h = lock_mutex(&self.history);
-            h.push(Message::user(msg.as_str()));
-            h.push(Message::assistant(final_text));
+            history.push(Message::user(msg.as_str()));
+            history.push(Message::assistant(final_text));
         }
         result
     }
@@ -330,40 +312,37 @@ where
     pub async fn stream_prompt(
         &self,
         msg: impl Into<String>,
-    ) -> Result<ManagedStream<M::StreamingResponse>, PromptError>
+    ) -> Result<ManagedStream<'_, M::StreamingResponse>, PromptError>
     where
         M: StreamingChat<M, M::StreamingResponse>,
         M::StreamingResponse: rig_core::completion::GetTokenUsage + Send + 'static,
         Agent<M, P>: StreamingChat<M, M::StreamingResponse, Hook = P>,
     {
         let msg = msg.into();
-        let working = lock_mutex(&self.history).clone();
+        let working = Vec::new();
         let rig_stream = execute_stream_chat(&self.agent, &msg, working)
             .multi_turn(self.agent.default_max_turns.unwrap_or(20))
             .await;
-        Ok(ManagedStream::new(rig_stream, None, msg))
+        Ok(ManagedStream::new(rig_stream, None, msg, None))
     }
 
     /// Stream a chat prompt **with** history mutation on completion.
-    pub async fn stream_chat(
+    pub async fn stream_chat<'a>(
         &self,
         msg: impl Into<String>,
-    ) -> Result<ManagedStream<M::StreamingResponse>, PromptError>
+        history: &'a mut Vec<Message>,
+    ) -> Result<ManagedStream<'a, M::StreamingResponse>, PromptError>
     where
         M: StreamingChat<M, M::StreamingResponse>,
         M::StreamingResponse: rig_core::completion::GetTokenUsage + Send + 'static,
         Agent<M, P>: StreamingChat<M, M::StreamingResponse, Hook = P>,
     {
         let msg = msg.into();
-        let working = lock_mutex(&self.history).clone();
+        let working = history.clone();
         let rig_stream = execute_stream_chat(&self.agent, &msg, working)
             .multi_turn(self.agent.default_max_turns.unwrap_or(20))
             .await;
-        Ok(ManagedStream::new(
-            rig_stream,
-            Some(Arc::clone(&self.history)),
-            msg,
-        ))
+        Ok(ManagedStream::new(rig_stream, Some(history), msg, None))
     }
 }
 
@@ -385,7 +364,7 @@ where
     /// Execute a chat prompt **without** mutating shared history, with compaction.
     pub async fn prompt_compact(&self, msg: impl Into<String>) -> Result<String, PromptError> {
         let msg = msg.into();
-        let mut working = lock_mutex(&self.history).clone();
+        let mut working = Vec::new();
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
@@ -393,17 +372,21 @@ where
     }
 
     /// Execute a chat prompt **with** history mutation on success, with compaction.
-    pub async fn chat_compact(&self, msg: impl Into<String>) -> Result<String, PromptError> {
+    pub async fn chat_compact(
+        &self,
+        msg: impl Into<String>,
+        history: &mut Vec<Message>,
+    ) -> Result<String, PromptError> {
         let msg = msg.into();
-        let mut working = lock_mutex(&self.history).clone();
+        let mut working = history.clone();
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
         let result = retry_chat(&self.agent, &msg, &mut working, self.max_retries).await;
         if let Ok(final_text) = &result {
-            let mut h = lock_mutex(&self.history);
-            h.push(Message::user(msg.as_str()));
-            h.push(Message::assistant(final_text));
+            *history = working;
+            history.push(Message::user(msg.as_str()));
+            history.push(Message::assistant(final_text));
         }
         result
     }
@@ -412,45 +395,47 @@ where
     pub async fn stream_prompt_compact(
         &self,
         msg: impl Into<String>,
-    ) -> Result<ManagedStream<M::StreamingResponse>, PromptError>
+    ) -> Result<ManagedStream<'_, M::StreamingResponse>, PromptError>
     where
         M: StreamingChat<M, M::StreamingResponse>,
         M::StreamingResponse: rig_core::completion::GetTokenUsage + Send + 'static,
         Agent<M, P>: StreamingChat<M, M::StreamingResponse, Hook = P>,
     {
         let msg = msg.into();
-        let mut working = lock_mutex(&self.history).clone();
+        let mut working = Vec::new();
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
         let rig_stream = execute_stream_chat(&self.agent, &msg, working)
             .multi_turn(self.agent.default_max_turns.unwrap_or(20))
             .await;
-        Ok(ManagedStream::new(rig_stream, None, msg))
+        Ok(ManagedStream::new(rig_stream, None, msg, None))
     }
 
     /// Stream a chat prompt **with** history mutation on completion, with compaction.
-    pub async fn stream_chat_compact(
+    pub async fn stream_chat_compact<'a>(
         &self,
         msg: impl Into<String>,
-    ) -> Result<ManagedStream<M::StreamingResponse>, PromptError>
+        history: &'a mut Vec<Message>,
+    ) -> Result<ManagedStream<'a, M::StreamingResponse>, PromptError>
     where
         M: StreamingChat<M, M::StreamingResponse>,
         M::StreamingResponse: rig_core::completion::GetTokenUsage + Send + 'static,
         Agent<M, P>: StreamingChat<M, M::StreamingResponse, Hook = P>,
     {
         let msg = msg.into();
-        let mut working = lock_mutex(&self.history).clone();
+        let mut working = history.clone();
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
-        let rig_stream = execute_stream_chat(&self.agent, &msg, working)
+        let rig_stream = execute_stream_chat(&self.agent, &msg, working.clone())
             .multi_turn(self.agent.default_max_turns.unwrap_or(20))
             .await;
         Ok(ManagedStream::new(
             rig_stream,
-            Some(Arc::clone(&self.history)),
+            Some(history),
             msg,
+            Some(working),
         ))
     }
 }
@@ -459,19 +444,24 @@ where
 
 /// A stream wrapper for a managed agent chat session.
 ///
-/// Once the stream finishes and yields the `FinalResponse`, the shared history
-/// (if provided) is updated with the final accumulated messages.
+/// Once the stream finishes and yields the `FinalResponse`, the optional
+/// history output is updated with the user message and assistant response.
 #[must_use = "streams must be polled to completion to update history"]
-pub struct ManagedStream<R: Send + 'static> {
+pub struct ManagedStream<'h, R: Send + 'static> {
     inner: tokio::sync::mpsc::Receiver<Result<MultiTurnStreamItem<R>, StreamingError>>,
     is_finished: bool,
+    history_out: Option<&'h mut Vec<Message>>,
+    prompt_text: String,
+    history_appended: bool,
+    replace_baseline: Option<Vec<Message>>,
 }
 
-impl<R: Send + 'static> ManagedStream<R> {
+impl<'h, R: Send + 'static> ManagedStream<'h, R> {
     pub fn new<S>(
         stream: S,
-        shared_history: Option<Arc<Mutex<Vec<Message>>>>,
+        history_out: Option<&'h mut Vec<Message>>,
         prompt_text: String,
+        replace_baseline: Option<Vec<Message>>,
     ) -> Self
     where
         S: futures::Stream<Item = Result<MultiTurnStreamItem<R>, StreamingError>>
@@ -484,20 +474,8 @@ impl<R: Send + 'static> ManagedStream<R> {
         tokio::spawn(async move {
             use futures::StreamExt;
             let mut stream = stream;
-            let mut history_appended = false;
 
             while let Some(item) = stream.next().await {
-                if let Ok(MultiTurnStreamItem::FinalResponse(ref final_res)) = item
-                    && let Some(ref shared_history) = shared_history
-                    && !history_appended
-                {
-                    let final_text = final_res.response().to_string();
-                    let mut h = lock_mutex(shared_history);
-                    h.push(Message::user(&prompt_text));
-                    h.push(Message::assistant(&final_text));
-                    history_appended = true;
-                }
-
                 if tx.send(item).await.is_err() {
                     break;
                 }
@@ -507,11 +485,15 @@ impl<R: Send + 'static> ManagedStream<R> {
         Self {
             inner: rx,
             is_finished: false,
+            history_out,
+            prompt_text,
+            history_appended: false,
+            replace_baseline,
         }
     }
 }
 
-impl<R: Send + 'static> futures::Stream for ManagedStream<R> {
+impl<'h, R: Send + 'static> futures::Stream for ManagedStream<'h, R> {
     type Item = Result<MultiTurnStreamItem<R>, StreamingError>;
 
     fn poll_next(
@@ -522,15 +504,31 @@ impl<R: Send + 'static> futures::Stream for ManagedStream<R> {
             return std::task::Poll::Ready(None);
         }
 
-        match std::pin::Pin::new(&mut self.inner).poll_recv(cx) {
+        let this = &mut *self;
+
+        match std::pin::Pin::new(&mut this.inner).poll_recv(cx) {
             std::task::Poll::Ready(Some(item)) => {
+                if !this.history_appended
+                    && let Ok(MultiTurnStreamItem::FinalResponse(ref final_res)) = item
+                {
+                    let prompt = this.prompt_text.clone();
+                    let response = final_res.response().to_string();
+                    if let Some(h) = &mut this.history_out {
+                        if let Some(baseline) = this.replace_baseline.take() {
+                            **h = baseline;
+                        }
+                        h.push(Message::user(&prompt));
+                        h.push(Message::assistant(response));
+                    }
+                    this.history_appended = true;
+                }
                 if matches!(&item, Ok(MultiTurnStreamItem::FinalResponse(_))) {
-                    self.is_finished = true;
+                    this.is_finished = true;
                 }
                 std::task::Poll::Ready(Some(item))
             }
             std::task::Poll::Ready(None) => {
-                self.is_finished = true;
+                this.is_finished = true;
                 std::task::Poll::Ready(None)
             }
             std::task::Poll::Pending => std::task::Poll::Pending,
