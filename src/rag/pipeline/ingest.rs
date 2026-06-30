@@ -3,6 +3,7 @@
 use super::state::RagPipeline;
 use super::{sync, walker};
 use crate::agent::embeddings::EmbeddingService;
+use crate::domain::rag::{RagSource, RagSourceType};
 use crate::rag::ErasedEmbedder;
 use crate::rag::loader::{DEFAULT_EXTENSIONS, DocumentLoader, PdfLoader, TextLoader};
 use crate::rag::splitter::{TextSplitter, WordSplitter};
@@ -10,7 +11,7 @@ use anyhow::{Result, bail};
 use rig_core::embeddings::EmbeddingModel;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 impl RagPipeline {
     /// Load a file from disk, chunk it, embed via the given service, and
@@ -124,7 +125,7 @@ impl RagPipeline {
         Ok(total_chunks)
     }
 
-    fn effective_extensions(&self) -> HashSet<String> {
+    pub(crate) fn effective_extensions(&self) -> HashSet<String> {
         self.supported_extensions
             .clone()
             .unwrap_or_else(|| DEFAULT_EXTENSIONS.iter().map(|s| s.to_string()).collect())
@@ -149,5 +150,42 @@ impl RagPipeline {
             }
         }
         Ok(count)
+    }
+
+    /// Persist a registered source (canonical path + type) to the SQLite
+    /// `rag_sources` table. This table is used to rebuild the in-memory
+    /// [`RagSourceRegistry`] after a restart.
+    pub(crate) async fn register_source(
+        &self,
+        path: &Path,
+        source_type: RagSourceType,
+    ) -> Result<()> {
+        let source_type_str = match source_type {
+            RagSourceType::File => "file",
+            RagSourceType::Directory => "directory",
+        };
+        self.store
+            .insert_source(&path.display().to_string(), source_type_str)
+            .await
+    }
+
+    /// Remove a registered source from the SQLite `rag_sources` table.
+    pub(crate) async fn unregister_source(&self, path: &Path) -> Result<()> {
+        self.store.delete_source(&path.display().to_string()).await
+    }
+
+    /// Load all registered sources from the SQLite `rag_sources` table.
+    pub(crate) async fn list_registered_sources(&self) -> Result<Vec<RagSource>> {
+        let rows = self.store.list_sources_with_types().await?;
+        Ok(rows
+            .into_iter()
+            .map(|(path, source_type)| RagSource {
+                path: PathBuf::from(path),
+                source_type: match source_type.as_str() {
+                    "directory" => RagSourceType::Directory,
+                    _ => RagSourceType::File,
+                },
+            })
+            .collect())
     }
 }

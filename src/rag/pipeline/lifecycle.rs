@@ -97,15 +97,6 @@ impl RagPipeline {
         self.store.chunk_count().await
     }
 
-    /// List unique source names currently persisted in the store.
-    ///
-    /// Filenames only — full canonical paths are not stored (see
-    /// [`RagSourceRegistry::hydrate_from_store`] for the lossy hydration
-    /// note).
-    pub(crate) async fn list_sources(&self) -> Result<Vec<String>> {
-        self.store.list_sources().await
-    }
-
     /// Access the underlying store (for advanced use).
     pub fn store(&self) -> &Arc<DocumentStore> {
         &self.store
