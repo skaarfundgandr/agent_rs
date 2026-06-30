@@ -44,7 +44,8 @@ async fn test_read_pdf() {
         HashSet::from(["txt", "md", "pdf"].map(String::from)),
         PermissionPolicy::AllowAll,
     );
-    let path = "Stellaron Architecture Overview.pdf";
+    // reason: needs pdf-extract library which may not be available in all CI environments
+    let path = "tests/fixtures/sample.pdf";
 
     let args = ReadDocumentArgs {
         path: path.to_string(),
@@ -52,7 +53,7 @@ async fn test_read_pdf() {
     let result = tool.call(args).await.unwrap();
 
     assert!(!result.is_empty());
-    assert!(result.contains("Stellaron"));
+    assert!(result.contains("Hello from sample.pdf"));
 }
 
 #[tokio::test]

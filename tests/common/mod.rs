@@ -2,11 +2,12 @@
 #![allow(dead_code, clippy::duplicate_mod, clippy::manual_async_fn)]
 
 use rig_core::OneOrMany;
-use rig_core::agent::AgentBuilder;
+use rig_core::agent::{AgentBuilder, StreamingPromptRequest};
 use rig_core::completion::{
     CompletionError, CompletionModel, CompletionRequest, CompletionResponse, Usage,
 };
 use rig_core::message::{AssistantContent, ToolCall, ToolFunction};
+use rig_core::streaming::{RawStreamingChoice, StreamingChat, StreamingCompletionResponse};
 use rig_core::tool::Tool;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -18,6 +19,8 @@ use std::sync::{Arc, Mutex};
 #[derive(Clone, Debug)]
 pub struct MockCompletionModel {
     responses: Arc<Mutex<VecDeque<MockResponse>>>,
+    /// Optional canned text for streaming responses.
+    streaming_text: Option<String>,
 }
 
 /// What the mock returns for a single `completion()` call.
@@ -36,6 +39,15 @@ impl MockCompletionModel {
     pub fn new(responses: Vec<MockResponse>) -> Self {
         Self {
             responses: Arc::new(Mutex::new(VecDeque::from(responses))),
+            streaming_text: None,
+        }
+    }
+
+    /// Create a mock that supports streaming with the given canned text.
+    pub fn with_streaming_text(text: &str) -> Self {
+        Self {
+            responses: Arc::new(Mutex::new(VecDeque::new())),
+            streaming_text: Some(text.to_string()),
         }
     }
 
@@ -105,11 +117,44 @@ impl CompletionModel for MockCompletionModel {
             CompletionError,
         >,
     > + Send {
-        async {
-            Err(CompletionError::ProviderError(
-                "mock: streaming not supported".into(),
-            ))
+        let text = self.streaming_text.clone();
+        async move {
+            match text {
+                Some(t) => Ok(mock_streaming_response(&t)),
+                None => Err(CompletionError::ProviderError(
+                    "mock: streaming not configured (use with_streaming_text)".into(),
+                )),
+            }
         }
+    }
+}
+
+/// Build a mock streaming response that yields the given text as a single chunk.
+pub fn mock_streaming_response(text: &str) -> StreamingCompletionResponse<()> {
+    let chunks: Vec<Result<RawStreamingChoice<()>, CompletionError>> =
+        vec![Ok(RawStreamingChoice::Message(text.to_string()))];
+    let stream = futures::stream::iter(chunks);
+    StreamingCompletionResponse::stream(Box::pin(stream))
+}
+
+impl StreamingChat<MockCompletionModel, ()> for MockCompletionModel {
+    type Hook = ();
+
+    fn stream_chat<I, T>(
+        &self,
+        prompt: impl Into<rig_core::message::Message> + rig_core::wasm_compat::WasmCompatSend,
+        chat_history: I,
+    ) -> StreamingPromptRequest<MockCompletionModel, ()>
+    where
+        I: IntoIterator<Item = T> + rig_core::wasm_compat::WasmCompatSend,
+        T: Into<rig_core::message::Message>,
+    {
+        // Build a minimal Agent via AgentBuilder, wrap in Arc, and pass to
+        // StreamingPromptRequest::new(). Agent is non-exhaustive, so we
+        // must go through the builder.
+        let agent = AgentBuilder::new(self.clone()).default_max_turns(1).build();
+        StreamingPromptRequest::<MockCompletionModel, ()>::new(Arc::new(agent), prompt)
+            .with_history(chat_history)
     }
 }
 

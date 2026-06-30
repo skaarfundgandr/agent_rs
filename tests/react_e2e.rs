@@ -181,3 +181,73 @@ async fn test_prompt_vs_chat_history_mutation() {
     let _ = built.chat("test", &mut h2).await;
     assert!(!h2.is_empty(), "chat() should append to history");
 }
+
+/// `stream_chat` writes the final history back on `Completed`.
+#[tokio::test]
+async fn test_stream_chat_writes_history_on_completion() {
+    use futures::StreamExt;
+
+    let model = MockCompletionModel::with_streaming_text("Final Answer: streamed");
+    let agent = rig_core::agent::AgentBuilder::new(model)
+        .default_max_turns(1)
+        .build();
+    let built = agent.react().max_cycles(3).build();
+
+    let mut history: Vec<Message> = Vec::new();
+    let mut stream = built
+        .stream_chat("hello", &mut history)
+        .expect("stream_chat should succeed");
+
+    // Consume all items from the stream
+    while let Some(_item) = stream.next().await {
+        // drain
+    }
+
+    // After the stream completes, history should have been written back
+    assert!(
+        !history.is_empty(),
+        "stream_chat should write history back on completion"
+    );
+    // Should contain user message + assistant response
+    assert!(
+        history.len() >= 2,
+        "history should contain at least user + assistant messages, got {}",
+        history.len()
+    );
+}
+
+/// `stream_chat` that errors mid-stream does NOT mutate history.
+#[tokio::test]
+async fn test_stream_chat_error_does_not_mutate_history() {
+    use futures::StreamExt;
+
+    // Use a model with no streaming text — stream() returns an error
+    let model = MockCompletionModel::new(vec![]);
+    let agent = rig_core::agent::AgentBuilder::new(model)
+        .default_max_turns(1)
+        .build();
+    let built = agent.react().max_cycles(3).build();
+
+    let mut history: Vec<Message> = Vec::new();
+    let result = built.stream_chat("hello", &mut history);
+
+    match result {
+        Ok(mut stream) => {
+            // Consume all items — should get an error event, no Completed
+            while let Some(item) = stream.next().await {
+                if let agent_rs::domain::agent::ReActStreamItem::Error { .. } = item {
+                    break;
+                }
+            }
+        }
+        Err(_) => {
+            // stream_chat itself errored — history should be untouched
+        }
+    }
+
+    // History should NOT have been mutated on error
+    assert!(
+        history.is_empty(),
+        "stream_chat error should not mutate history"
+    );
+}
