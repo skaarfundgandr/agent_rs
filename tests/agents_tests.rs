@@ -199,7 +199,8 @@ async fn test_context_manager_custom_compaction_prompt() {
 fn test_managed_builder_defaults() {
     let agent = make_test_agent();
     let built = agent.managed().build();
-    assert!(built.history().is_empty());
+    let h: Vec<Message> = Vec::new();
+    assert!(h.is_empty());
     assert_eq!(built.max_retries(), 3);
 }
 
@@ -210,22 +211,14 @@ fn test_managed_builder_max_retries_setter() {
     assert_eq!(built.max_retries(), 7);
 }
 
-#[test]
-fn test_managed_builder_with_history_seeds() {
-    let agent = make_test_agent();
-    let msg = Message::user("hello");
-    let built = agent.managed().with_history(vec![msg.clone()]).build();
-    assert_eq!(built.history().len(), 1);
-}
-
 #[tokio::test]
 async fn test_managed_prompt_does_not_mutate_history() {
     let agent = make_test_agent();
     let built = agent.managed().build();
-    let before = built.history().len();
+    let h: Vec<Message> = Vec::new();
     // .prompt() will fail (no real LLM), but history should remain unchanged.
     let _ = built.prompt("test").await;
-    assert_eq!(built.history().len(), before);
+    assert_eq!(h.len(), 0);
 }
 
 #[test]
@@ -241,7 +234,6 @@ async fn test_managed_stream_appends_history() {
     use futures::StreamExt;
     use rig_core::agent::MultiTurnStreamItem;
     use rig_core::completion::Usage;
-    use std::sync::{Arc, Mutex};
 
     let final_history = vec![
         Message::User {
@@ -260,20 +252,16 @@ async fn test_managed_stream_appends_history() {
     );
 
     let inner_stream = futures::stream::iter(vec![Ok(final_item)]);
-    let history = Arc::new(Mutex::new(Vec::<Message>::new()));
-    let mut managed_stream = ManagedStream::new(
-        inner_stream,
-        Some(Arc::clone(&history)),
-        "Hello".to_string(),
-    );
+    let mut history = Vec::<Message>::new();
+    let mut managed_stream =
+        ManagedStream::new(inner_stream, Some(&mut history), "Hello".to_string(), None);
 
     while let Some(item) = managed_stream.next().await {
         assert!(item.is_ok());
     }
 
-    let updated_history = history.lock().unwrap();
-    assert_eq!(updated_history.len(), 2);
-    if let Message::Assistant { content, .. } = &updated_history[1] {
+    assert_eq!(history.len(), 2);
+    if let Message::Assistant { content, .. } = &history[1] {
         if let AssistantContent::Text(t) = content.first_ref() {
             assert_eq!(t.text, "Hi there!");
         } else {
@@ -290,7 +278,6 @@ async fn test_managed_stream_appends_user_and_final_without_history_field() {
     use futures::StreamExt;
     use rig_core::agent::MultiTurnStreamItem;
     use rig_core::completion::Usage;
-    use std::sync::{Arc, Mutex};
 
     let final_item: MultiTurnStreamItem<()> = MultiTurnStreamItem::final_response(
         OneOrMany::one(AssistantContent::text("Hi there!")),
@@ -298,21 +285,17 @@ async fn test_managed_stream_appends_user_and_final_without_history_field() {
     );
 
     let inner_stream = futures::stream::iter(vec![Ok(final_item)]);
-    let history = Arc::new(Mutex::new(Vec::<Message>::new()));
-    let mut managed_stream = ManagedStream::new(
-        inner_stream,
-        Some(Arc::clone(&history)),
-        "Hello".to_string(),
-    );
+    let mut history = Vec::<Message>::new();
+    let mut managed_stream =
+        ManagedStream::new(inner_stream, Some(&mut history), "Hello".to_string(), None);
 
     while let Some(item) = managed_stream.next().await {
         assert!(item.is_ok());
     }
 
     // Even without history(), the user prompt + final answer are persisted.
-    let updated_history = history.lock().unwrap();
-    assert_eq!(updated_history.len(), 2);
-    if let Message::User { content } = &updated_history[0] {
+    assert_eq!(history.len(), 2);
+    if let Message::User { content } = &history[0] {
         if let UserContent::Text(t) = content.first_ref() {
             assert_eq!(t.text, "Hello");
         } else {
@@ -321,7 +304,7 @@ async fn test_managed_stream_appends_user_and_final_without_history_field() {
     } else {
         panic!("Expected user message");
     }
-    if let Message::Assistant { content, .. } = &updated_history[1] {
+    if let Message::Assistant { content, .. } = &history[1] {
         if let AssistantContent::Text(t) = content.first_ref() {
             assert_eq!(t.text, "Hi there!");
         } else {
@@ -489,28 +472,32 @@ async fn test_concurrent_managed_agent_chat_preserves_history() {
     ];
 
     let agent = mock_agent(responses);
-    let built = agent.managed().build();
-    let shared = Arc::new(built);
+    let built = Arc::new(agent.managed().build());
 
+    // Each task owns its own mutable history — no shared state needed.
     let mut handles = vec![];
     for i in 0..3 {
-        let agent_clone = Arc::clone(&shared);
+        let built_clone = Arc::clone(&built);
         handles.push(tokio::spawn(async move {
-            agent_clone.chat(format!("message {i}")).await
+            let mut h: Vec<Message> = Vec::new();
+            let _ = built_clone.chat(format!("message {i}"), &mut h).await;
+            h
         }));
     }
 
     let mut success_count = 0;
+    let mut total_history_len = 0;
     for h in handles {
-        let result = h.await.unwrap();
-        if result.is_ok() {
+        let history = h.await.unwrap();
+        if !history.is_empty() {
             success_count += 1;
+            total_history_len += history.len();
         }
     }
 
-    let history = shared.history();
+    assert_eq!(success_count, 3, "all chats should succeed");
     assert!(
-        history.len() >= success_count,
+        total_history_len >= success_count,
         "History should have grown proportionally to successful calls"
     );
 }

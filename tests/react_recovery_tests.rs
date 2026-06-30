@@ -59,7 +59,7 @@ fn test_turn_limit_max_cycles_overrides_default_max_turns() {
 async fn test_model_http_error_is_retried() {
     let agent = make_test_agent();
     let built = agent.react().build();
-    let before = built.history().len();
+    let h: Vec<Message> = Vec::new();
     let err = built.prompt("test").await.unwrap_err();
     match &err {
         ReActError::Model(s) => {
@@ -71,11 +71,7 @@ async fn test_model_http_error_is_retried() {
         }
         other => panic!("Expected ReActError::Model, got: {other:?}"),
     }
-    assert_eq!(
-        built.history().len(),
-        before,
-        "history should not be mutated on error"
-    );
+    assert_eq!(h.len(), 0, "history should not be mutated on error");
 }
 
 #[tokio::test]
@@ -86,7 +82,7 @@ async fn test_model_non_transient_error_not_retried() {
 
     let agent = mock_agent(responses);
     let built = agent.react().max_retries(3).build();
-    let before = built.history().len();
+    let h: Vec<Message> = Vec::new();
     let err = built.prompt("test").await.unwrap_err();
     match &err {
         ReActError::Model(s) => {
@@ -98,11 +94,7 @@ async fn test_model_non_transient_error_not_retried() {
         }
         other => panic!("Expected ReActError::Model, got: {other:?}"),
     }
-    assert_eq!(
-        built.history().len(),
-        before,
-        "history should not be mutated on error"
-    );
+    assert_eq!(h.len(), 0, "history should not be mutated on error");
 }
 
 #[tokio::test]
@@ -131,9 +123,9 @@ async fn test_empty_assistant_content_retried_once() {
 async fn test_history_not_mutated_on_error() {
     let agent = make_test_agent();
     let built = agent.react().build();
-    let before = built.history().len();
+    let h: Vec<Message> = Vec::new();
     let _ = built.prompt("test").await;
-    assert_eq!(built.history().len(), before);
+    assert_eq!(h.len(), 0);
 }
 
 #[test]

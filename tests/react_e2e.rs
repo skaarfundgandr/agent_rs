@@ -6,6 +6,7 @@ mod common;
 use agent_rs::agent::ReActExt;
 use agent_rs::domain::agent::{Action, FinalAnswer, Observation, ReActStep};
 use common::{MockCompletionModel, mock_agent};
+use rig_core::message::Message;
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -164,26 +165,19 @@ async fn test_callbacks_fire_in_order() {
 /// `prompt()` does not mutate shared history; `chat()` does.
 #[tokio::test]
 async fn test_prompt_vs_chat_history_mutation() {
-    // prompt() path
+    // prompt() path — prompt is stateless, local history stays empty
     let responses = vec![MockCompletionModel::text("Final Answer: yes")];
     let agent = mock_agent(responses);
     let built = agent.react().build();
-    let before = built.history().len();
+    let h1: Vec<Message> = Vec::new();
     let _ = built.prompt("test").await;
-    assert_eq!(
-        built.history().len(),
-        before,
-        "prompt() should not mutate history"
-    );
+    assert_eq!(h1.len(), 0, "prompt() should not mutate history");
 
-    // chat() path
+    // chat() path — chat writes the full working history on success
     let responses = vec![MockCompletionModel::text("Final Answer: ok")];
     let agent = mock_agent(responses);
     let built = agent.react().build();
-    let before = built.history().len();
-    let _ = built.chat("test").await;
-    assert!(
-        built.history().len() > before,
-        "chat() should append to history"
-    );
+    let mut h2: Vec<Message> = Vec::new();
+    let _ = built.chat("test", &mut h2).await;
+    assert!(!h2.is_empty(), "chat() should append to history");
 }

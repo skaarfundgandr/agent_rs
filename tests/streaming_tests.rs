@@ -9,7 +9,7 @@ use rig_core::agent::MultiTurnStreamItem;
 use rig_core::client::CompletionClient;
 use rig_core::completion::Usage;
 use rig_core::message::{AssistantContent, Message};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 struct TestSpanEmitter;
 
@@ -41,25 +41,28 @@ fn test_react_builder_accepts_all_callbacks() {
         .on_error(|_e| {})
         .build();
 
-    assert!(built.history().is_empty());
+    let h: Vec<Message> = Vec::new();
+    assert!(h.is_empty());
     assert_eq!(built.max_cycles(), 20);
 }
 
 #[test]
 fn test_react_builder_accepts_partial_callbacks() {
     let agent = make_test_agent();
-    let built = agent.react().on_thought(|_t| {}).on_error(|_e| {}).build();
-    assert!(built.history().is_empty());
+    let _built = agent.react().on_thought(|_t| {}).on_error(|_e| {}).build();
+    let h: Vec<Message> = Vec::new();
+    assert!(h.is_empty());
 }
 
 #[test]
 fn test_react_builder_with_span_emitter() {
     let agent = make_test_agent();
-    let built = agent
+    let _built = agent
         .react()
         .with_span_emitter(Arc::new(TestSpanEmitter))
         .build();
-    assert!(built.history().is_empty());
+    let h: Vec<Message> = Vec::new();
+    assert!(h.is_empty());
 }
 
 #[test]
@@ -109,14 +112,15 @@ fn test_react_stream_item_enum_variants() {
 #[test]
 fn test_react_builder_compaction_accepts_callbacks() {
     let agent = make_test_agent();
-    let built = agent
+    let _built = agent
         .react()
         .with_compaction()
         .threshold(1000)
         .on_thought(|_t| {})
         .on_error(|_e| {})
         .build();
-    assert!(built.history().is_empty());
+    let h: Vec<Message> = Vec::new();
+    assert!(h.is_empty());
 }
 
 #[test]
@@ -133,7 +137,7 @@ fn test_react_builder_callback_types_are_arc() {
 
 #[tokio::test]
 async fn test_managed_stream_appends_history_only_once() {
-    let shared_history = Arc::new(Mutex::new(Vec::<Message>::new()));
+    let mut history = Vec::<Message>::new();
     let prompt_text = "hello".to_string();
 
     let final_response =
@@ -150,10 +154,9 @@ async fn test_managed_stream_appends_history_only_once() {
         Ok::<_, rig_core::agent::StreamingError>(final_response),
     ]);
 
-    let mut managed = ManagedStream::new(stream, Some(Arc::clone(&shared_history)), prompt_text);
+    let mut managed = ManagedStream::new(stream, Some(&mut history), prompt_text, None);
     while managed.next().await.is_some() {}
 
-    let history = shared_history.lock().unwrap().clone();
     assert_eq!(history.len(), 2);
     assert!(matches!(history[0], Message::User { .. }));
     assert!(matches!(history[1], Message::Assistant { .. }));

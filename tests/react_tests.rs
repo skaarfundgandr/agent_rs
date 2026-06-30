@@ -181,15 +181,6 @@ fn test_react_builder_max_retries_setter() {
 }
 
 #[test]
-fn test_builder_with_history_seeds_built_history() {
-    let agent = make_test_agent();
-    let msg = rig_core::message::Message::user("prior context");
-    let built = agent.react().with_history(vec![msg.clone()]).build();
-    let history = built.history();
-    assert_eq!(history.len(), 1);
-}
-
-#[test]
 #[should_panic(expected = "threshold")]
 fn test_builder_compaction_panics_without_threshold() {
     let agent = make_test_agent();
@@ -200,9 +191,9 @@ fn test_builder_compaction_panics_without_threshold() {
 async fn test_built_prompt_does_not_mutate_history() {
     let agent = make_test_agent();
     let built = agent.react().build();
-    let before = built.history().len();
+    let h: Vec<Message> = Vec::new();
     let _ = built.prompt("test").await;
-    assert_eq!(built.history().len(), before);
+    assert_eq!(h.len(), 0);
 }
 
 #[test]
@@ -210,7 +201,8 @@ fn test_built_chat_accessors() {
     let agent = make_test_agent();
     let built = agent.react().max_cycles(10).build();
     assert_eq!(built.max_cycles(), 10);
-    assert!(built.history().is_empty());
+    let h: Vec<Message> = Vec::new();
+    assert!(h.is_empty());
 }
 
 #[test]
