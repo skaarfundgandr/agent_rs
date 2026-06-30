@@ -1,10 +1,11 @@
 //! Public builder API for constructing a [`RagPipeline`].
 
 use super::state::RagPipeline;
+use super::walker;
 use crate::agent::embeddings::EmbeddingService;
 use crate::agent::permission::PermissionPolicy;
 use crate::agent::tools::{ManageRagTool, RagSourceRegistry};
-use crate::domain::rag::{ChunkingOptions, RagSource};
+use crate::domain::rag::{ChunkingOptions, RagSource, RagSourceType};
 use crate::rag::{ErasedEmbedder, TurboVectorIndex};
 use crate::security::SharedSandbox;
 use anyhow::{Result, anyhow};
@@ -182,9 +183,39 @@ impl RagIndexer {
     ///
     /// Resolves the path via the sandbox, validates the extension via the
     /// registry, then embeds and persists the chunks. Returns the number
-    /// of chunks added.
+    /// of chunks added. Re-adding an existing source returns `Ok(0)` without
+    /// re-embedding.
     pub async fn add(&self, path: &Path) -> Result<usize> {
         let canonical = self.sandbox.resolve_path_unchecked(path);
+
+        // Fast-path: if the canonical path is already registered, there is
+        // nothing to do. This keeps re-adds cheap and avoids re-embedding.
+        {
+            let registry = self
+                .registry
+                .lock()
+                .map_err(|e| anyhow!("registry mutex poisoned: {e}"))?;
+            if registry.sources().iter().any(|s| s.path == canonical) {
+                return Ok(0);
+            }
+        }
+
+        let source_type = if canonical.is_file() {
+            RagSourceType::File
+        } else if canonical.is_dir() {
+            RagSourceType::Directory
+        } else {
+            return Err(anyhow!("Path does not exist: {}", canonical.display()));
+        };
+
+        let added = self
+            .pipeline
+            .add_source_dyn(&canonical, self.embedder.as_ref())
+            .await?;
+
+        self.pipeline
+            .register_source(&canonical, source_type)
+            .await?;
 
         {
             let mut registry = self
@@ -196,20 +227,57 @@ impl RagIndexer {
                 .map_err(|e| anyhow!("{e}"))?;
         }
 
-        let added = self
-            .pipeline
-            .add_source_dyn(&canonical, self.embedder.as_ref())
-            .await?;
         Ok(added)
     }
 
     /// Remove a source and all its chunks.
     ///
-    /// Resolves the canonical path via the sandbox, removes the registry
-    /// entry, then deletes the persisted chunks. Returns the number of
+    /// Resolves the canonical path via the sandbox, deletes the persisted
+    /// chunks, then removes the registry entry. Returns the number of
     /// chunks removed.
     pub async fn remove(&self, path: &Path) -> Result<usize> {
         let canonical = self.sandbox.resolve_path_unchecked(path);
+
+        // Verify the source is registered before mutating persistence.
+        {
+            let registry = self
+                .registry
+                .lock()
+                .map_err(|e| anyhow!("registry mutex poisoned: {e}"))?;
+            if !registry.sources().iter().any(|s| s.path == canonical) {
+                return Err(anyhow!("Source not found: {}", canonical.display()));
+            }
+        }
+
+        let removed = if canonical.is_file() {
+            let source_name = canonical
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
+            self.pipeline.remove_source(source_name).await?
+        } else if canonical.is_dir() {
+            let extensions = self.pipeline.effective_extensions();
+            let files = tokio::task::spawn_blocking({
+                let dir = canonical.clone();
+                move || walker::walk_indexable(&dir, &extensions)
+            })
+            .await
+            .map_err(|e| anyhow!("directory walk task failed: {e}"))??;
+
+            let mut total = 0usize;
+            for file in files {
+                let source_name = file
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default();
+                total += self.pipeline.remove_source(source_name).await?;
+            }
+            total
+        } else {
+            return Err(anyhow!("Path does not exist: {}", canonical.display()));
+        };
+
+        self.pipeline.unregister_source(&canonical).await?;
 
         {
             let mut registry = self
@@ -221,11 +289,6 @@ impl RagIndexer {
                 .map_err(|e| anyhow!("{e}"))?;
         }
 
-        let source_name = canonical
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default();
-        let removed = self.pipeline.remove_source(source_name).await?;
         Ok(removed)
     }
 
