@@ -25,5 +25,5 @@ mod state;
 mod sync;
 mod walker;
 
-pub use state::RagPipeline;
 pub use builder::{BuiltRag, RagIndexer, RagPipelineBuilder};
+pub use state::RagPipeline;

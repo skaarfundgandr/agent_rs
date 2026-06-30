@@ -5,9 +5,9 @@
 //! directly because the visibility is `pub(crate)` within the `pipeline`
 //! parent module.
 
+use super::builder::RagPipelineBuilder;
 use crate::domain::rag::ChunkingOptions;
 use crate::rag::{Chunk, DocumentStore, TurboIndex};
-use super::builder::RagPipelineBuilder;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::RwLock;

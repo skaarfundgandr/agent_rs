@@ -16,23 +16,20 @@ impl RagPipeline {
     /// [`Self::add_source`](super::super::RagPipeline::add_source) for the
     /// high-level path. Chunks staged this way are embedded and persisted
     /// only when [`Self::commit_pending`] is called.
-    pub fn add_chunks(mut self, chunks: Vec<Chunk>) -> Self {
+    pub fn add_chunks(&mut self, chunks: Vec<Chunk>) {
         self.pending.extend(chunks);
-        self
     }
 
     /// Stage a document by splitting via the given splitter.
-    pub fn add_document<S: TextSplitter>(mut self, document: &Document, splitter: &S) -> Self {
+    pub fn add_document<S: TextSplitter>(&mut self, document: &Document, splitter: &S) {
         self.pending.extend(splitter.split(document));
-        self
     }
 
     /// Stage multiple documents by splitting via the given splitter.
-    pub fn add_documents<S: TextSplitter>(mut self, documents: &[Document], splitter: &S) -> Self {
+    pub fn add_documents<S: TextSplitter>(&mut self, documents: &[Document], splitter: &S) {
         for doc in documents {
             self.pending.extend(splitter.split(doc));
         }
-        self
     }
 
     /// Embed and persist all staged chunks into the store + index.

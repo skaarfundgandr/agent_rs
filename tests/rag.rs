@@ -6,7 +6,6 @@ use agent_rs::rag::{DocumentLoader, RagPipeline, TextLoader, TextSplitter, WordS
 use rig_core::embeddings::{Embedding, EmbeddingModel};
 use std::fs;
 use std::result::Result as StdResult;
-use std::sync::Arc;
 
 /// Deterministic 8-dim mock embedder. Output is `[len, 1, 0, 0, 0, 0, 0, 0]`
 /// where len is the input string length. Picked dim=8 because turbovec requires
@@ -81,25 +80,29 @@ async fn pipeline_add_source_and_search() {
     )
     .unwrap();
 
-    let pipeline = RagPipeline::open_or_create(&db, &idx, 8, 4, None)
+    let rag = agent_rs::rag::RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .db_path(&db)
+        .index_path(&idx)
+        .build()
         .await
         .unwrap();
     let embedder = EmbeddingService::new(MockEmbeddingModel);
-    let added = pipeline.add_source(&file, &embedder).await.unwrap();
+    let added = rag
+        .indexer
+        .pipeline()
+        .add_source(&file, &embedder)
+        .await
+        .unwrap();
     assert!(added > 0);
-    assert_eq!(pipeline.chunk_count().await.unwrap() as usize, added);
-
-    let arc_embedder: Arc<dyn agent_rs::rag::ErasedEmbedder> =
-        Arc::new(EmbeddingService::new(MockEmbeddingModel));
-    let index = pipeline.build(arc_embedder);
+    assert_eq!(rag.indexer.chunk_count().await.unwrap() as usize, added);
 
     let req = VectorSearchRequest::builder()
         .query("Rust")
         .samples(2)
         .build();
-    let hits = index.top_n::<String>(req).await.unwrap();
+    let hits = rag.vector_index.top_n::<String>(req).await.unwrap();
     assert!(!hits.is_empty());
-    // Each hit's document should be formatted with the source name + chunk idx.
     let (_score, _id, doc) = &hits[0];
     assert!(doc.contains("[source: doc.txt"));
 }
@@ -112,17 +115,30 @@ async fn pipeline_remove_source_clears_store_and_index() {
     let file = dir.path().join("removable.txt");
     fs::write(&file, "alpha beta gamma delta epsilon zeta eta theta").unwrap();
 
-    let pipeline = RagPipeline::open_or_create(&db, &idx, 8, 4, None)
+    let rag = RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .db_path(&db)
+        .index_path(&idx)
+        .build()
         .await
         .unwrap();
     let embedder = EmbeddingService::new(MockEmbeddingModel);
-    pipeline.add_source(&file, &embedder).await.unwrap();
-    assert!(pipeline.chunk_count().await.unwrap() > 0);
+    rag.indexer
+        .pipeline()
+        .add_source(&file, &embedder)
+        .await
+        .unwrap();
+    assert!(rag.indexer.chunk_count().await.unwrap() > 0);
 
-    let removed = pipeline.remove_source("removable.txt").await.unwrap();
+    let removed = rag
+        .indexer
+        .pipeline()
+        .remove_source("removable.txt")
+        .await
+        .unwrap();
     assert!(removed > 0);
-    assert_eq!(pipeline.chunk_count().await.unwrap(), 0);
-    assert_eq!(pipeline.turbo().read().await.len(), 0);
+    assert_eq!(rag.indexer.chunk_count().await.unwrap(), 0);
+    assert_eq!(rag.indexer.pipeline().turbo().read().await.len(), 0);
 }
 
 #[tokio::test]
@@ -138,30 +154,39 @@ async fn pipeline_save_and_reopen_preserves_chunks() {
 
     // First session: add + save.
     {
-        let pipeline = RagPipeline::open_or_create(&db, &idx, 8, 4, None)
+        let rag = RagPipeline::builder()
+            .embedder(EmbeddingService::new(MockEmbeddingModel))
+            .db_path(&db)
+            .index_path(&idx)
+            .build()
             .await
             .unwrap();
         let embedder = EmbeddingService::new(MockEmbeddingModel);
-        pipeline.add_source(&file, &embedder).await.unwrap();
-        pipeline.save(&idx).await.unwrap();
+        rag.indexer
+            .pipeline()
+            .add_source(&file, &embedder)
+            .await
+            .unwrap();
+        rag.indexer.pipeline().save(&idx).await.unwrap();
         assert!(db.exists());
         assert!(idx.exists());
     }
 
     // Second session: reopen and verify.
-    let reopened = RagPipeline::open_or_create(&db, &idx, 8, 4, None)
+    let rag2 = RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .db_path(&db)
+        .index_path(&idx)
+        .build()
         .await
         .unwrap();
-    assert!(reopened.chunk_count().await.unwrap() > 0);
+    assert!(rag2.indexer.chunk_count().await.unwrap() > 0);
 
-    let arc_embedder: Arc<dyn agent_rs::rag::ErasedEmbedder> =
-        Arc::new(EmbeddingService::new(MockEmbeddingModel));
-    let index = reopened.build(arc_embedder);
     let req = VectorSearchRequest::builder()
         .query("one")
         .samples(1)
         .build();
-    let hits = index.top_n::<String>(req).await.unwrap();
+    let hits = rag2.vector_index.top_n::<String>(req).await.unwrap();
     assert!(!hits.is_empty());
 }
 
@@ -171,11 +196,14 @@ async fn pipeline_open_or_create_rejects_mismatched_artifacts() {
     let db = dir.path().join("rag.db");
     let idx = dir.path().join("rag.tvim");
 
-    // Create index only with garbage data, then try to open — should error.
+    // Create index only with garbage data, then try to build — should error.
     fs::write(&idx, "garbage").unwrap();
-    let err = RagPipeline::open_or_create(&db, &idx, 8, 4, None).await;
-    // Either: db missing + idx exists → "RAG index file exists ... database is missing"
-    // Or: turbovec load fails on garbage → caught and surfaced.
+    let err = RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .db_path(&db)
+        .index_path(&idx)
+        .build()
+        .await;
     assert!(err.is_err());
 }
 
@@ -196,18 +224,23 @@ async fn pipeline_commit_pending_persists_staged_chunks() {
         metadata,
     };
 
-    let mut pipeline = RagPipeline::open_or_create(&db, &idx, 8, 4, None)
+    let mut rag = RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .db_path(&db)
+        .index_path(&idx)
+        .build()
         .await
         .unwrap();
+    let pipeline = rag.indexer.pipeline_mut().expect("unique indexer in test");
     let splitter = WordSplitter::new(4, 1);
-    pipeline = pipeline.add_document(&doc, &splitter);
+    pipeline.add_document(&doc, &splitter);
     assert!(pipeline.pending_count() > 0);
 
     let embedder = EmbeddingService::new(MockEmbeddingModel);
     let committed = pipeline.commit_pending(&embedder).await.unwrap();
     assert!(committed > 0);
     assert_eq!(pipeline.pending_count(), 0);
-    assert_eq!(pipeline.chunk_count().await.unwrap() as usize, committed);
+    assert_eq!(rag.indexer.chunk_count().await.unwrap() as usize, committed);
 }
 
 #[tokio::test]
@@ -235,15 +268,24 @@ async fn pipeline_add_source_walks_directory() {
     )
     .unwrap();
 
-    let pipeline = RagPipeline::open_or_create(&db, &idx, 8, 4, None)
+    let rag = RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .db_path(&db)
+        .index_path(&idx)
+        .build()
         .await
         .unwrap();
     let embedder = EmbeddingService::new(MockEmbeddingModel);
-    let added = pipeline.add_source(&sub, &embedder).await.unwrap();
+    let added = rag
+        .indexer
+        .pipeline()
+        .add_source(&sub, &embedder)
+        .await
+        .unwrap();
 
     // All three files should have been indexed.
     assert!(added > 0);
-    assert_eq!(pipeline.chunk_count().await.unwrap() as usize, added);
+    assert_eq!(rag.indexer.chunk_count().await.unwrap() as usize, added);
 }
 
 #[tokio::test]
@@ -262,15 +304,24 @@ async fn pipeline_add_source_dir_skips_unsupported_extensions() {
     fs::write(sub.join("skip.csv"), "col1,col2,col3").unwrap();
     fs::write(sub.join("also_skip.json"), r#"{"key": "value"}"#).unwrap();
 
-    let pipeline = RagPipeline::open_or_create(&db, &idx, 8, 4, None)
+    let rag = RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .db_path(&db)
+        .index_path(&idx)
+        .build()
         .await
         .unwrap();
     let embedder = EmbeddingService::new(MockEmbeddingModel);
-    let added = pipeline.add_source(&sub, &embedder).await.unwrap();
+    let added = rag
+        .indexer
+        .pipeline()
+        .add_source(&sub, &embedder)
+        .await
+        .unwrap();
 
     // Only the .txt file should have been indexed.
     assert!(added > 0);
-    assert_eq!(pipeline.chunk_count().await.unwrap() as usize, added);
+    assert_eq!(rag.indexer.chunk_count().await.unwrap() as usize, added);
 }
 
 #[tokio::test]
@@ -285,17 +336,25 @@ async fn pipeline_add_source_dir_respects_custom_extensions() {
     fs::write(sub.join("b.rs"), "fn main() { println!(\"hello\"); }").unwrap();
 
     // Only index .rs files.
-    let extensions: std::collections::HashSet<String> =
-        std::collections::HashSet::from(["rs"].map(String::from));
-    let pipeline = RagPipeline::open_or_create(&db, &idx, 8, 4, Some(extensions))
+    let rag = RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .db_path(&db)
+        .index_path(&idx)
+        .extensions(["rs"])
+        .build()
         .await
         .unwrap();
     let embedder = EmbeddingService::new(MockEmbeddingModel);
-    let added = pipeline.add_source(&sub, &embedder).await.unwrap();
+    let added = rag
+        .indexer
+        .pipeline()
+        .add_source(&sub, &embedder)
+        .await
+        .unwrap();
 
     // Only the .rs file should have been indexed.
     assert!(added > 0);
-    assert_eq!(pipeline.chunk_count().await.unwrap() as usize, added);
+    assert_eq!(rag.indexer.chunk_count().await.unwrap() as usize, added);
 }
 
 #[tokio::test]
@@ -313,15 +372,24 @@ async fn pipeline_add_source_dir_skips_hidden_files() {
     .unwrap();
     fs::write(sub.join(".hidden.txt"), "secret hidden content here").unwrap();
 
-    let pipeline = RagPipeline::open_or_create(&db, &idx, 8, 4, None)
+    let rag = RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .db_path(&db)
+        .index_path(&idx)
+        .build()
         .await
         .unwrap();
     let embedder = EmbeddingService::new(MockEmbeddingModel);
-    let added = pipeline.add_source(&sub, &embedder).await.unwrap();
+    let added = rag
+        .indexer
+        .pipeline()
+        .add_source(&sub, &embedder)
+        .await
+        .unwrap();
 
     // Only the visible file should have been indexed.
     assert!(added > 0);
-    assert_eq!(pipeline.chunk_count().await.unwrap() as usize, added);
+    assert_eq!(rag.indexer.chunk_count().await.unwrap() as usize, added);
 }
 
 #[tokio::test]
@@ -333,11 +401,15 @@ async fn pipeline_add_source_dir_errors_on_empty_directory() {
     let sub = dir.path().join("empty");
     fs::create_dir(&sub).unwrap();
 
-    let pipeline = RagPipeline::open_or_create(&db, &idx, 8, 4, None)
+    let rag = RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .db_path(&db)
+        .index_path(&idx)
+        .build()
         .await
         .unwrap();
     let embedder = EmbeddingService::new(MockEmbeddingModel);
-    let err = pipeline.add_source(&sub, &embedder).await;
+    let err = rag.indexer.pipeline().add_source(&sub, &embedder).await;
 
     assert!(err.is_err());
     assert!(err.unwrap_err().to_string().contains("no supported files"));
@@ -364,13 +436,22 @@ async fn pipeline_add_source_dir_nested_walks_recursively() {
     )
     .unwrap();
 
-    let pipeline = RagPipeline::open_or_create(&db, &idx, 8, 4, None)
+    let rag = RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .db_path(&db)
+        .index_path(&idx)
+        .build()
         .await
         .unwrap();
     let embedder = EmbeddingService::new(MockEmbeddingModel);
-    let added = pipeline.add_source(&sub, &embedder).await.unwrap();
+    let added = rag
+        .indexer
+        .pipeline()
+        .add_source(&sub, &embedder)
+        .await
+        .unwrap();
 
     // Both files from different nesting levels should be indexed.
     assert!(added > 0);
-    assert_eq!(pipeline.chunk_count().await.unwrap() as usize, added);
+    assert_eq!(rag.indexer.chunk_count().await.unwrap() as usize, added);
 }

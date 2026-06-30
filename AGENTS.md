@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-Rust AI agent framework (edition 2024, v0.5.0). Library crate with examples.
+Rust AI agent framework (edition 2024, v0.6.0). Library crate with examples.
 Library consumers import as `agent_rs`.
 
 Core deps: `rig-core` 0.38.2 (with `rmcp` feature), `rmcp` 1.7, `tokio` (full), `reqwest`, `pdf-extract`, `tracing` 0.1.
@@ -86,6 +86,13 @@ src/
 ├── mcp/
 │   └── registry/        # McpRegistry — stdio/HTTP transport, tool dedup, keepalive
 ├── rag/                 # RAG pipeline (in-memory + SQLite/turbovec persistence), feature-gated on `rag`
+│   └── pipeline/
+│       ├── builder.rs   # RagPipelineBuilder, BuiltRag, RagIndexer (public builder API)
+│       ├── state.rs     # RagPipeline struct definition
+│       ├── lifecycle.rs # open_or_create (pub(crate)), save, build
+│       ├── ingest.rs    # add_source, add_directory, remove_source
+│       ├── staging.rs   # add_chunks, add_document, commit_pending (staging API)
+│       └── ...          # sync, walker, mod.rs
 ├── observability/       # OpenTelemetry / LangSmith tracing (feature-gated on opentelemetry)
 │   ├── mod.rs           # Re-exports: TracerHandle, init_tracing, shutdown_tracing, LangSmithReActEmitter, LangSmithAgentHook
 │   ├── langsmith.rs     # OTLP/HTTP exporter + tracing subscriber wiring
@@ -121,6 +128,7 @@ Tests in `tests/` (17+ files): `agents_tests.rs`, `document_store.rs`, `embeddin
 - Tools that enforce sandbox hold an `Arc<SharedSandbox>` rather than a `SandboxConfig`. `SharedSandbox` supports incremental `add_root` / `remove_root` / `add_roots` / `contains_root` for per-root changes; `set` remains the full-replacement escape hatch when swapping the whole config.
 - MCP tool name deduplication: duplicate names across servers cause a hard error at connect time.
 - `RagStoreBuilder` was removed in v0.2.0 — use `PdfLoader` + `WordSplitter` + `RagPipeline` instead.
+- RAG construction: use `RagPipeline::builder()` → `.embedder(service).store_at(dir).build().await` → `BuiltRag { vector_index, indexer }`. The `RagIndexer` provides `add/remove/list/tool` methods. `open_or_create` and `from_parts` are `pub(crate)`.
 - RAG persistence: `RagPipeline` stores chunk metadata in SQLite and vectors in turbovec (`.tvim`). Both files must stay in sync; delete both to recover from "out of sync" errors.
 - The `rag` feature gates all RAG code. Without it, RAG types are compiled out entirely.
 - The `opentelemetry` feature gates the LangSmith OTel tracing path. Without it, `src/observability/` compiles to nothing and `domain/observability::LangSmithConfig` is `cfg`-out.

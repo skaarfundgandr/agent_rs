@@ -106,7 +106,6 @@ Set up a vector database index that updates dynamically on-the-fly:
 
 ```rust
 use std::path::Path;
-use std::sync::Arc;
 use agent_rs::agent::embeddings::EmbeddingService;
 use agent_rs::rag::RagPipeline;
 use rig_core::providers::openai;
@@ -117,25 +116,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load local fastembed embedding model
     let embedder = EmbeddingService::from_fastembed("Xenova/bge-small-en-v1.5".parse()?)?;
-    let dim = embedder.ndims();
 
-    // Load or create a persistent turbovec RAG database
-    let pipeline = RagPipeline::open_or_create(
-        Path::new("rag.db"),
-        Path::new("rag.tvim"),
-        dim,
-        4, // bit_width
-        None, // use default allowed extensions (pdf, txt, md)
-    ).await?;
+    // Build a persistent RAG pipeline with the builder API
+    let rag = RagPipeline::builder()
+        .embedder(embedder)
+        .store_at("./rag_data/")
+        .extensions(["txt", "md", "pdf"])
+        .build()
+        .await?;
 
     // Ingest a document dynamically during agent execution
-    pipeline.add_source_dyn(Path::new("./notes.pdf"), &embedder).await?;
+    rag.indexer.add(Path::new("./notes.pdf")).await?;
 
     // Expose RAG pipeline as a Rig index for dynamic context loading
-    let index = pipeline.build(Arc::new(embedder));
     let agent = client
         .agent("gpt-4")
-        .dynamic_context(3, index) // retrieves top 3 chunks automatically
+        .dynamic_context(3, rag.vector_index) // retrieves top 3 chunks automatically
         .build();
 
     Ok(())

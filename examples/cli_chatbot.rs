@@ -6,11 +6,11 @@ mod rag_main {
     use agent_rs::agent::embeddings::EmbeddingService;
     use agent_rs::agent::permission::PermissionPolicy;
     use agent_rs::agent::tools::{
-        CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ManageRagTool,
-        RagSourceRegistry, ReadDocumentTool, ToolRegistryBuilder, WriteDocumentTool,
+        CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool,
+        ToolRegistryBuilder, WriteDocumentTool,
     };
     use agent_rs::mcp::registry::McpRegistry;
-    use agent_rs::rag::{ErasedEmbedder, RagPipeline};
+    use agent_rs::rag::RagPipeline;
     use agent_rs::security::{SandboxConfig, SharedSandbox};
     use anyhow::Result;
     use dotenvy::dotenv;
@@ -20,7 +20,7 @@ mod rag_main {
     use std::collections::HashSet;
     use std::env;
     use std::path::PathBuf;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     fn build_shared_sandbox() -> Result<Arc<SharedSandbox>> {
         let config = match env::var("SANDBOX_ROOTS") {
@@ -92,27 +92,21 @@ mod rag_main {
         let embedding_dim = embedding_service.ndims();
         println!("Embedding model ready ({embedding_dim} dims).");
 
-        let embedder_arc: Arc<dyn ErasedEmbedder> = Arc::new(embedding_service);
+        let shared_sandbox = build_shared_sandbox()?;
 
-        // ---------- RAG extensions ----------
-        let rag_extensions = HashSet::from(["txt", "md", "pdf"].map(String::from));
-
-        // ---------- RAG pipeline (open-or-create) ----------
-        let pipeline = Arc::new(
-            RagPipeline::open_or_create(&db_path, &index_path, embedding_dim, 4, Some(rag_extensions.clone()))
-                .await
-                .map_err(|e| {
-                    anyhow::anyhow!(
-                        "failed to open RAG pipeline (db={db_path:?}, idx={index_path:?}, dim={embedding_dim}): {e}"
-                    )
-                })?,
-        );
+        let rag = RagPipeline::builder()
+            .embedder(embedding_service)
+            .db_path(&db_path)
+            .index_path(&index_path)
+            .extensions(["txt", "md", "pdf"])
+            .sandbox(shared_sandbox.clone())
+            .build()
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to build RAG pipeline: {e}"))?;
         println!(
-            "RAG pipeline ready ({} chunks already indexed).",
-            pipeline.chunk_count().await.unwrap_or(0)
+            "RAG ready ({} chunks).",
+            rag.indexer.chunk_count().await.unwrap_or(0)
         );
-
-        let index = pipeline.build(Arc::clone(&embedder_arc));
 
         // ---------- MCP tools + internal tools ----------
         let policy = match env::var("PERMISSION_POLICY").as_deref() {
@@ -141,9 +135,6 @@ mod rag_main {
         let read_extensions = HashSet::from(["txt", "md", "pdf"].map(String::from));
         let write_extensions = HashSet::from(["txt", "md"].map(String::from));
         let grep_extensions = HashSet::from(["txt", "md"].map(String::from));
-        let rag_registry = Arc::new(Mutex::new(RagSourceRegistry::new(rag_extensions)));
-
-        let shared_sandbox = build_shared_sandbox()?;
 
         let mut builder = ToolRegistryBuilder::new();
 
@@ -202,20 +193,9 @@ mod rag_main {
                 move || Box::new(GlobSearchTool::new(Arc::clone(&sb), pol.clone()))
             })?
             .register("rag", {
-                let sb = Arc::clone(&shared_sandbox);
-                let reg = Arc::clone(&rag_registry);
-                let pipe = Arc::clone(&pipeline);
-                let emb = Arc::clone(&embedder_arc);
+                let idx = rag.indexer.clone();
                 let pol = policy.clone();
-                move || {
-                    Box::new(ManageRagTool::new(
-                        Arc::clone(&reg),
-                        Arc::clone(&pipe),
-                        Arc::clone(&emb),
-                        Arc::clone(&sb),
-                        pol.clone(),
-                    ))
-                }
+                move || Box::new(idx.tool(pol.clone()))
             })?
             .register("context", move || {
                 let agent = chat_client_for_ctx
@@ -240,20 +220,19 @@ mod rag_main {
                  document on the fly, then query it via your knowledge — relevant \
                  passages will be supplied automatically as dynamic context.",
             )
-            .dynamic_context(rag_top_k, index)
+            .dynamic_context(rag_top_k, rag.vector_index)
             .default_max_turns(20)
             .temperature(0.6)
             .build();
 
         let chatbot = ChatBotBuilder::new().agent(agent).show_usage().build();
 
-        let pipeline_for_save = Arc::clone(&pipeline);
         let save_path = index_path;
 
         match chatbot.run().await {
             Ok(()) => {}
             Err(_) => {
-                if let Err(e) = pipeline_for_save.save(&save_path).await {
+                if let Err(e) = rag.indexer.pipeline().save(&save_path).await {
                     eprintln!("warning: failed to save RAG index on shutdown: {e}")
                 } else {
                     println!("Saved to {save_path:?}.");
@@ -261,7 +240,7 @@ mod rag_main {
             }
         };
 
-        if let Err(e) = pipeline_for_save.save(&save_path).await {
+        if let Err(e) = rag.indexer.pipeline().save(&save_path).await {
             eprintln!("warning: failed to save RAG index on shutdown: {e}")
         } else {
             println!("Saved to {save_path:?}.");

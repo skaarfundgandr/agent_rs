@@ -68,7 +68,8 @@ impl RagPipeline {
         // observable after a restart.
         let _ = self.remove_source(&source).await?;
 
-        let splitter = WordSplitter::new(self.chunking.chunk_words, self.chunking.chunk_overlap_words);
+        let splitter =
+            WordSplitter::new(self.chunking.chunk_words, self.chunking.chunk_overlap_words);
         let chunks = splitter.split(&document);
         if chunks.is_empty() {
             bail!("source {:?} produced no chunks", path);

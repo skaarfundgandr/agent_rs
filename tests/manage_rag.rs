@@ -3,15 +3,14 @@
 
 use agent_rs::agent::embeddings::EmbeddingService;
 use agent_rs::agent::permission::PermissionPolicy;
-use agent_rs::agent::tools::{ManageRagTool, RagSourceRegistry};
-use agent_rs::rag::{ErasedEmbedder, RagPipeline};
+use agent_rs::agent::tools::ManageRagTool;
+use agent_rs::rag::RagPipeline;
 use agent_rs::security::{SandboxConfig, SharedSandbox};
 use rig_core::embeddings::{Embedding, EmbeddingModel};
 use rig_core::tool::Tool;
-use std::collections::HashSet;
 use std::fs;
 use std::result::Result as StdResult;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 #[derive(Clone)]
 struct MockEmbeddingModel;
@@ -42,25 +41,20 @@ impl EmbeddingModel for MockEmbeddingModel {
     }
 }
 
-fn build_tool(
-    sandbox_root: &std::path::Path,
-    pipeline: Arc<RagPipeline>,
-) -> (Arc<Mutex<RagSourceRegistry>>, ManageRagTool) {
-    let sandbox = Arc::new(SharedSandbox::from(
-        SandboxConfig::single(sandbox_root).unwrap(),
-    ));
-    let registry = Arc::new(Mutex::new(RagSourceRegistry::new(HashSet::from(
-        ["txt", "md"].map(String::from),
-    ))));
-    let embedder: Arc<dyn ErasedEmbedder> = Arc::new(EmbeddingService::new(MockEmbeddingModel));
-    let tool = ManageRagTool::new(
-        Arc::clone(&registry),
-        pipeline,
-        embedder,
-        Arc::clone(&sandbox),
-        PermissionPolicy::AllowAll,
-    );
-    (registry, tool)
+async fn build_tool(sandbox_root: &std::path::Path) -> (ManageRagTool, Arc<RagPipeline>) {
+    let rag = RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .store_at(sandbox_root)
+        .extensions(["txt", "md"])
+        .sandbox(Arc::new(SharedSandbox::from(
+            SandboxConfig::single(sandbox_root).unwrap(),
+        )))
+        .build()
+        .await
+        .unwrap();
+    let pipeline = rag.indexer.pipeline().clone();
+    let tool = rag.indexer.tool(PermissionPolicy::AllowAll);
+    (tool, pipeline)
 }
 
 #[tokio::test]
@@ -68,13 +62,6 @@ async fn manage_rag_add_persists_to_pipeline() {
     use agent_rs::agent::tools::rag::ManageRagArgs;
 
     let tmp = tempfile::tempdir().unwrap();
-    let db = tmp.path().join("rag.db");
-    let idx = tmp.path().join("rag.tvim");
-    let pipeline = Arc::new(
-        RagPipeline::open_or_create(&db, &idx, 8, 4, None)
-            .await
-            .unwrap(),
-    );
 
     let file = tmp.path().join("a.txt");
     fs::write(
@@ -83,7 +70,7 @@ async fn manage_rag_add_persists_to_pipeline() {
     )
     .unwrap();
 
-    let (_reg, tool) = build_tool(tmp.path(), Arc::clone(&pipeline));
+    let (tool, pipeline) = build_tool(tmp.path()).await;
 
     let result = tool
         .call(ManageRagArgs {
@@ -103,18 +90,11 @@ async fn manage_rag_list_includes_added_source() {
     use agent_rs::agent::tools::rag::ManageRagArgs;
 
     let tmp = tempfile::tempdir().unwrap();
-    let db = tmp.path().join("rag.db");
-    let idx = tmp.path().join("rag.tvim");
-    let pipeline = Arc::new(
-        RagPipeline::open_or_create(&db, &idx, 8, 4, None)
-            .await
-            .unwrap(),
-    );
 
     let file = tmp.path().join("listed.txt");
     fs::write(&file, "one two three four five six seven eight").unwrap();
 
-    let (_reg, tool) = build_tool(tmp.path(), Arc::clone(&pipeline));
+    let (tool, _pipeline) = build_tool(tmp.path()).await;
 
     tool.call(ManageRagArgs {
         action: "add".to_string(),
@@ -138,18 +118,11 @@ async fn manage_rag_remove_clears_pipeline() {
     use agent_rs::agent::tools::rag::ManageRagArgs;
 
     let tmp = tempfile::tempdir().unwrap();
-    let db = tmp.path().join("rag.db");
-    let idx = tmp.path().join("rag.tvim");
-    let pipeline = Arc::new(
-        RagPipeline::open_or_create(&db, &idx, 8, 4, None)
-            .await
-            .unwrap(),
-    );
 
     let file = tmp.path().join("rm.txt");
     fs::write(&file, "alpha beta gamma delta epsilon zeta eta theta iota").unwrap();
 
-    let (_reg, tool) = build_tool(tmp.path(), Arc::clone(&pipeline));
+    let (tool, pipeline) = build_tool(tmp.path()).await;
 
     tool.call(ManageRagArgs {
         action: "add".to_string(),
@@ -177,13 +150,6 @@ async fn manage_rag_add_directory_persists_to_pipeline() {
     use agent_rs::agent::tools::rag::ManageRagArgs;
 
     let tmp = tempfile::tempdir().unwrap();
-    let db = tmp.path().join("rag.db");
-    let idx = tmp.path().join("rag.tvim");
-    let pipeline = Arc::new(
-        RagPipeline::open_or_create(&db, &idx, 8, 4, None)
-            .await
-            .unwrap(),
-    );
 
     let sub = tmp.path().join("docs");
     fs::create_dir(&sub).unwrap();
@@ -198,7 +164,7 @@ async fn manage_rag_add_directory_persists_to_pipeline() {
     )
     .unwrap();
 
-    let (_reg, tool) = build_tool(tmp.path(), Arc::clone(&pipeline));
+    let (tool, pipeline) = build_tool(tmp.path()).await;
 
     let result = tool
         .call(ManageRagArgs {

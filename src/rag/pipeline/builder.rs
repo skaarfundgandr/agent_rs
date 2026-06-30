@@ -26,7 +26,7 @@ pub struct RagPipelineBuilder {
     extensions: Option<HashSet<String>>,
     chunking: ChunkingOptions,
     bit_width: usize,
-    sandbox: Option<SharedSandbox>,
+    sandbox: Option<Arc<SharedSandbox>>,
 }
 
 impl RagPipelineBuilder {
@@ -108,7 +108,7 @@ impl RagPipelineBuilder {
     }
 
     /// Set the sandbox for path validation. Defaults to CWD.
-    pub fn sandbox(mut self, s: impl Into<SharedSandbox>) -> Self {
+    pub fn sandbox(mut self, s: impl Into<Arc<SharedSandbox>>) -> Self {
         self.sandbox = Some(s.into());
         self
     }
@@ -136,23 +136,26 @@ impl RagPipelineBuilder {
             .unwrap_or_else(|| "rag_data/rag.tvim".into());
 
         let mut pipeline =
-            RagPipeline::open_or_create(&db, &idx, dim, self.bit_width, Some(exts.clone()))
-                .await?;
+            RagPipeline::open_or_create(&db, &idx, dim, self.bit_width, Some(exts.clone())).await?;
         pipeline.chunking = self.chunking;
 
         let vector_index = pipeline.build(Arc::clone(&embedder));
 
-        let registry =
-            RagSourceRegistry::hydrate_from_store(&pipeline, exts).await?;
+        let registry = RagSourceRegistry::hydrate_from_store(&pipeline, exts).await?;
 
         let indexer = RagIndexer {
             pipeline: Arc::new(pipeline),
             embedder,
             registry: Arc::new(Mutex::new(registry)),
-            sandbox: Arc::new(self.sandbox.unwrap_or_default()),
+            sandbox: self
+                .sandbox
+                .unwrap_or_else(|| Arc::new(SharedSandbox::default())),
         };
 
-        Ok(BuiltRag { vector_index, indexer })
+        Ok(BuiltRag {
+            vector_index,
+            indexer,
+        })
     }
 }
 
@@ -236,10 +239,7 @@ impl RagIndexer {
 
     /// Returns `true` if no sources are registered.
     pub fn is_empty(&self) -> bool {
-        self.registry
-            .lock()
-            .map(|g| g.is_empty())
-            .unwrap_or(true)
+        self.registry.lock().map(|g| g.is_empty()).unwrap_or(true)
     }
 
     /// Number of chunks currently persisted in the pipeline.
@@ -250,6 +250,13 @@ impl RagIndexer {
     /// Access the underlying pipeline (staging API escape hatch).
     pub fn pipeline(&self) -> &Arc<RagPipeline> {
         &self.pipeline
+    }
+
+    /// Mutable access to the pipeline (for staging API use in tests).
+    /// Returns `None` if the pipeline Arc is shared (e.g., another clone
+    /// of this indexer exists).
+    pub fn pipeline_mut(&mut self) -> Option<&mut RagPipeline> {
+        Arc::get_mut(&mut self.pipeline)
     }
 
     /// Access the sandbox (for `ManageRagTool` permission gating).

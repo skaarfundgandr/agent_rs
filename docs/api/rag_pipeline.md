@@ -72,19 +72,52 @@ pub trait TextSplitter {
 
 Persistent, on-disk RAG pipeline backed by SQLite (chunk metadata) and turbovec (vector ANN index). Start here to build a RAG system.
 
-> **Two on-disk files:** `rag_chunks` (SQLite, metadata + chunk text) and `.tvim` (turbovec, vector index). They must stay in sync; deleting both is the recovery procedure if `open_or_create` errors with "out of sync".
+> **Two on-disk files:** `rag_chunks` (SQLite, metadata + chunk text) and `.tvim` (turbovec, vector index). They must stay in sync; deleting both is the recovery procedure if the builder errors with "out of sync".
 
-### Methods
-- **`open_or_create(db_path, index_path, dim, bit_width) -> Result<Self>`**
-  Opens or creates the SQLite database and turbovec index. `dim` is the embedding dimension (must match your embedder); `bit_width` controls turbovec quantization (4 = 4-bit, good default).
+### Builder API (recommended)
+
+Use `RagPipeline::builder()` for a fluent construction path:
+
+```rust
+let rag = RagPipeline::builder()
+    .embedder(embedding_service)      // EmbeddingService<M>, auto-erased
+    .store_at("./rag_data/")          // shorthand for db_path + index_path
+    // OR: .db_path("..."), .index_path("...")
+    .extensions(["txt", "md", "pdf"]) // file types to index (default: txt, md, pdf)
+    .chunk_words(220)                 // words per chunk (default: 220)
+    .chunk_overlap_words(40)          // overlap (default: 40)
+    .bit_width(4)                     // turbovec quantization (default: 4)
+    .sandbox(my_sandbox)              // optional, defaults to CWD
+    .build()
+    .await?;
+// Returns BuiltRag { vector_index, indexer }
+```
+
+### `BuiltRag`
+
+Output of the builder. Contains:
+- **`vector_index: TurboVectorIndex`** — plug into `agent.dynamic_context(k, rag.vector_index)`.
+- **`indexer: RagIndexer`** — ingestion handle for managing sources.
+
+### `RagIndexer`
+
+Owns the pipeline, embedder, source registry, and sandbox. Methods:
+- **`add(&path) -> Result<usize>`** — register + index a file or directory (sandbox-aware).
+- **`remove(&path) -> Result<usize>`** — unregister + delete chunks (sandbox-aware).
+- **`list() -> Vec<RagSource>`** — list registered sources.
+- **`is_empty() -> bool`** — check if any sources are registered.
+- **`chunk_count() -> Result<i64>`** — number of persisted chunks.
+- **`pipeline() -> &Arc<RagPipeline>`** — access the underlying pipeline (staging API escape hatch).
+- **`tool(policy) -> ManageRagTool`** — create a rig-compatible tool delegate.
+
+### Pipeline Methods (via `rag.indexer.pipeline()`)
+
 - **`add_source(path, &EmbeddingService<M>) -> Result<usize>`**
-  High-level file ingestion: loads, chunks, embeds, and persists. Returns chunk count. File type is selected by extension (`.pdf` → `PdfLoader`, else `TextLoader`).
+  High-level file ingestion: loads, chunks, embeds, and persists. Returns chunk count.
 - **`add_source_dyn(path, &dyn ErasedEmbedder) -> Result<usize>`**
-  Same as `add_source` but accepts a trait object — use with `Arc<dyn ErasedEmbedder>`.
+  Same as `add_source` but accepts a trait object.
 - **`remove_source(source_name) -> Result<usize>`**
   Drops every chunk whose `source` matches. Returns number removed.
-- **`build(embedder: Arc<dyn ErasedEmbedder>) -> TurboVectorIndex`**
-  Returns a rig-compatible `VectorStoreIndex` view sharing the same underlying state.
 - **`save(&index_path) -> Result<()>`**
   Persists the turbovec index to disk.
 - **`commit_pending(&service) -> Result<usize>`**
@@ -116,10 +149,8 @@ pub trait ErasedEmbedder: Send + Sync {
 
 ```rust,no_run
 use std::path::Path;
-use std::sync::Arc;
 use agent_rs::agent::embeddings::EmbeddingService;
-use agent_rs::rag::{DocumentLoader, PdfLoader, RagPipeline, WordSplitter};
-use agent_rs::rag::ErasedEmbedder;
+use agent_rs::rag::RagPipeline;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -127,25 +158,23 @@ async fn main() -> anyhow::Result<()> {
     let service = EmbeddingService::from_fastembed(
         rig_fastembed::FastembedModel::AllMiniLML6V2,
     )?;
-    let dim = service.ndims();
 
-    // 2. Open or create persistent RAG pipeline
-    let pipeline = RagPipeline::open_or_create(
-        Path::new("rag_data/rag.db"),
-        Path::new("rag_data/rag.tvim"),
-        dim,
-        4, // bit_width
-    ).await?;
+    // 2. Build persistent RAG pipeline
+    let rag = RagPipeline::builder()
+        .embedder(service)
+        .store_at("rag_data/")
+        .build()
+        .await?;
 
     // 3. Ingest a PDF
-    let chunks = pipeline.add_source(Path::new("orientation.pdf"), &service).await?;
+    let chunks = rag.indexer.add(Path::new("orientation.pdf")).await?;
     println!("Indexed {chunks} chunks");
 
     // 4. Save to disk
-    pipeline.save(Path::new("rag_data/rag.tvim")).await?;
+    rag.indexer.pipeline().save(Path::new("rag_data/rag.tvim")).await?;
 
-    // 5. Build rig-compatible index for agents
-    let _index = pipeline.build(Arc::new(service));
+    // 5. Use vector_index with agents
+    let _index = rag.vector_index;
     Ok(())
 }
 ```

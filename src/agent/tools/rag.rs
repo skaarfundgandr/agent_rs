@@ -301,11 +301,8 @@ impl Tool for ManageRagTool {
             false
         } else {
             let p = args.path.as_deref().unwrap_or("");
-            crate::security::validate_sandboxed_path_shared(
-                self.indexer.sandbox(),
-                Path::new(p),
-            )
-            .is_err()
+            crate::security::validate_sandboxed_path_shared(self.indexer.sandbox(), Path::new(p))
+                .is_err()
         };
         if needs_gate {
             self.indexer

@@ -10,16 +10,15 @@
 //! ```
 
 #![cfg_attr(not(feature = "rag"), allow(unused))]
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 #[cfg(feature = "rag")]
 mod researcher_main {
     use agent_rs::agent::ReActExt;
     use agent_rs::agent::embeddings::EmbeddingService;
     use agent_rs::agent::permission::PermissionPolicy;
-    use agent_rs::agent::tools::{
-        ManageRagTool, RagSourceRegistry, ToolRegistryBuilder, WriteDocumentTool,
-    };
-    use agent_rs::rag::{ErasedEmbedder, RagPipeline};
+    use agent_rs::agent::tools::{ToolRegistryBuilder, WriteDocumentTool};
+    use agent_rs::rag::RagPipeline;
     use agent_rs::security::{SandboxConfig, SharedSandbox};
     use anyhow::Result;
     use dotenvy::dotenv;
@@ -31,7 +30,7 @@ mod researcher_main {
     use std::collections::HashSet;
     use std::env;
     use std::path::{Path, PathBuf};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     // Define custom errors for our mock tools
     #[derive(Debug, thiserror::Error)]
@@ -170,26 +169,18 @@ mod researcher_main {
             anyhow::anyhow!("Unknown FASTEMBED_MODEL '{fastembed_model_name}': {e}")
         })?;
         let embedding_service = EmbeddingService::from_fastembed(fastembed_variant)?;
-        let embedding_dim = embedding_service.ndims();
-        let embedder_arc: Arc<dyn ErasedEmbedder> = Arc::new(embedding_service);
-
-        let rag_extensions = HashSet::from(["txt", "md"].map(String::from));
-        let pipeline = Arc::new(
-            RagPipeline::open_or_create(
-                &db_path,
-                &index_path,
-                embedding_dim,
-                4,
-                Some(rag_extensions.clone()),
-            )
-            .await?,
-        );
-        let index = pipeline.build(Arc::clone(&embedder_arc));
 
         let shared_sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single("./")?));
-        let policy = PermissionPolicy::AllowAll; // Allow the agent to search/write/RAG without prompts in this example
 
-        let rag_registry = Arc::new(Mutex::new(RagSourceRegistry::new(rag_extensions)));
+        let rag = RagPipeline::builder()
+            .embedder(embedding_service)
+            .db_path(&db_path)
+            .index_path(&index_path)
+            .extensions(["txt", "md"])
+            .sandbox(shared_sandbox.clone())
+            .build()
+            .await?;
+        let policy = PermissionPolicy::AllowAll;
 
         // Register tools
         let registry = ToolRegistryBuilder::new()
@@ -208,20 +199,9 @@ mod researcher_main {
                 }
             })?
             .register("rag", {
-                let sb = Arc::clone(&shared_sandbox);
-                let reg = Arc::clone(&rag_registry);
-                let pipe = Arc::clone(&pipeline);
-                let emb = Arc::clone(&embedder_arc);
+                let idx = rag.indexer.clone();
                 let pol = policy.clone();
-                move || {
-                    Box::new(ManageRagTool::new(
-                        Arc::clone(&reg),
-                        Arc::clone(&pipe),
-                        Arc::clone(&emb),
-                        Arc::clone(&sb),
-                        pol.clone(),
-                    ))
-                }
+                move || Box::new(idx.tool(pol.clone()))
             })?
             .enable(&["research", "filesystem", "rag"])
             .build();
@@ -243,7 +223,7 @@ mod researcher_main {
                 4. Use `manage_rag` with action='add' and path='research_notes.txt' to index it. \
                 5. Once indexed, answer the user's research question in detail based on the dynamic RAG context."
             )
-            .dynamic_context(2, index)
+            .dynamic_context(2, rag.vector_index)
             .default_max_turns(20)
             .build()
             .react()
