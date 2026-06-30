@@ -224,11 +224,17 @@ classDiagram
     direction TB
     class BuiltManagedAgent~M, P, C~ {
         -agent Agent~M~
-        -history SharedHistory
+        -max_retries u32
         -context_manager OptionalContextManager
-        +history() Vec~Message~
-        +prompt(msg) Response
-        +chat(msg) Response
+        +max_retries() u32
+        +prompt(msg) String
+        +chat(msg, &mut history) String
+        +stream_prompt(msg) ManagedStream
+        +stream_chat(msg, &mut history) ManagedStream
+        +prompt_compact(msg) String
+        +chat_compact(msg, &mut history) String
+        +stream_prompt_compact(msg) ManagedStream
+        +stream_chat_compact(msg, &mut history) ManagedStream
     }
 
     class ManagedExt {
@@ -238,9 +244,9 @@ classDiagram
 
     class ManagedBuilder~M, P, CompState~ {
         -agent Agent~M~
-        -initial_history Vec~Message~
+        -max_retries u32
         -compaction CompState
-        +with_history(history) Self
+        +max_retries(n) Self
         +with_compaction() ManagedBuilder
         +build() BuiltManagedAgent
     }
@@ -292,7 +298,7 @@ classDiagram
     ManagedBuilder ..> BuiltManagedAgent : build()
     ManagedBuilder --> CompactionConfig : configures
 
-    note for BuiltManagedAgent "SharedHistory = Arc<Mutex<Vec<Message>>>\nOptionalContextManager = Option<Arc<dyn Any>>"
+    note for BuiltManagedAgent "OptionalContextManager = Option<Arc<dyn Any>>\nCaller owns history Vec<Message>"
     
     ReadDocumentTool ..|> Tool
     WriteDocumentTool ..|> Tool

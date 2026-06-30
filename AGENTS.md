@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-Rust AI agent framework (edition 2024, v0.6.0). Library crate with examples.
+Rust AI agent framework (edition 2024, v0.7.0). Library crate with examples.
 Library consumers import as `agent_rs`.
 
 Core deps: `rig-core` 0.38.2 (with `rmcp` feature), `rmcp` 1.7, `tokio` (full), `reqwest`, `pdf-extract`, `tracing` 0.1.
@@ -61,14 +61,36 @@ src/
 │   ├── embeddings.rs     # EmbeddingService<M> — generic over Rig EmbeddingModel
 │   ├── permission.rs     # PermissionPolicy enum + PermissionGate trait
 │   ├── dispatch/         # AgentDefinition trait + AgentDispatcher + ReAct/Managed adapters
+│   │   ├── adapters.rs       # ReAct and Managed adapter implementations
+│   │   ├── definition.rs     # AgentDefinition trait definition
+│   │   ├── dispatcher.rs     # AgentDispatcher runtime
+│   │   └── mod.rs            # Re-exports
 │   ├── state/            # AgentCheckpoint + save/load helpers
+│   │   ├── checkpoint.rs     # AgentCheckpoint, CheckpointMetadata structs
+│   │   ├── io.rs             # save_checkpoint, load_checkpoint functions
+│   │   └── mod.rs            # Re-exports
 │   ├── memory/           # ContextManager — token estimation + auto-summarize
+│   │   ├── context.rs        # ContextManager<C>, Compact trait
+│   │   ├── tokenizer.rs      # count_string_tokens, count_messages_tokens
+│   │   └── mod.rs            # Re-exports
 │   ├── model/            # execute_chat / execute_stream_chat helpers
+│   │   ├── chat.rs           # execute_chat, execute_stream_chat functions
+│   │   └── mod.rs            # Re-exports
 │   ├── tools/            # Read/Write/Grep/Glob/ListDir/ManageRag/Compact/ToolRegistry tools
+│   │   ├── document.rs       # ReadDocumentTool, WriteDocumentTool
+│   │   ├── search.rs         # GrepSearchTool
+│   │   ├── glob.rs           # GlobSearchTool
+│   │   ├── directory.rs      # ListDirectoryTool
+│   │   ├── rag.rs            # ManageRagTool
+│   │   ├── context.rs        # CompactTool<M>
+│   │   ├── registry.rs       # ToolRegistry, ToolRegistryBuilder
+│   │   └── mod.rs            # Re-exports
 │   └── react/            # ReAct loop: builder → built → streaming
 │       ├── builder.rs         # ReActBuilder, NoCompaction, CompactionConfig typestates
 │       ├── built.rs           # BuiltReAct — prompt(), chat(msg, &mut history), run_loop() orchestrator
-│       ├── built_methods.rs   # checkpoint, internal callback helpers
+│       ├── built_no_compaction.rs # prompt(), chat(), stream_prompt(), stream_chat() without compaction
+│       ├── built_compaction.rs    # prompt_compact(), chat_compact(), stream_prompt_compact(), stream_chat_compact()
+│       ├── built_methods.rs   # max_cycles(), max_retries(), react_preamble(), emit_internal_tool_callbacks()
 │       ├── streaming.rs       # ReActStream, ReActStreamItem — async Stream impl
 │       ├── stream_loop.rs     # spawned streaming loop
 │       ├── stream_process.rs  # assistant/tool item processing
@@ -84,6 +106,12 @@ src/
 │       └── mod.rs             # Re-exports
 ├── mcp/
 │   └── registry/        # McpRegistry — stdio/HTTP transport, tool dedup, keepalive
+│       ├── connect.rs        # Transport connection logic (stdio, HTTP)
+│       ├── core.rs           # McpRegistry core struct and builder
+│       ├── parse.rs          # McpConfig parsing and validation
+│       ├── runtime.rs        # McpRegistryRuntime — live server handles
+│       ├── tool.rs           # RegisteredMcpTool wrapper
+│       └── mod.rs            # Re-exports
 ├── rag/                 # RAG pipeline (in-memory + SQLite/turbovec persistence), feature-gated on `rag`
 │   └── pipeline/
 │       ├── builder.rs   # RagPipelineBuilder, BuiltRag, RagIndexer (public builder API)
@@ -131,6 +159,7 @@ Tests in `tests/` (17+ files): `agents_tests.rs`, `document_store.rs`, `embeddin
 - RAG persistence: `RagPipeline` stores chunk metadata in SQLite and vectors in turbovec (`.tvim`). Both files must stay in sync; delete both to recover from "out of sync" errors.
 - The `rag` feature gates all RAG code. Without it, RAG types are compiled out entirely.
 - The `opentelemetry` feature gates the LangSmith OTel tracing path. Without it, `src/observability/` compiles to nothing and `domain/observability::LangSmithConfig` is `cfg`-out.
+- **History ownership:** `BuiltReAct::chat()` takes `&mut Vec<Message>` and replaces it with the full working trace on success; `BuiltManagedAgent::chat()` pushes user+assistant only. On error, the caller's history is left untouched. Builder methods `with_history()` and `history()` accessors are removed — caller owns the vec.
 - `domain/` holds pure data types + errors only. Behaviour lives in root-level modules (`agent/`, `observability/`). Pure config structs that mirror loader-side modules live in `domain/<topic>.rs` (e.g. `LangSmithConfig` in `domain/observability.rs` mirrors the runtime wiring in `src/observability/langsmith.rs`).
 
 ## MCP Config
@@ -144,5 +173,6 @@ Tests in `tests/` (17+ files): `agents_tests.rs`, `document_store.rs`, `embeddin
 ## Docs
 
 - `docs/api/` — API reference docs (split by section). See [API Reference Overview](docs/api/README.md)
-- `docs/migration-0.2.0.md` — migration guide
+- `docs/migration-0.2.0.md` — migration guide (v0.1.0 → v0.2.0)
+- `.opencode/migration-0.7.0.md` — migration guide (v0.6.0 → v0.7.0): caller-owned history, removed `with_history()`/`history()`, removed `utils.rs`
 - `docs/diagrams/` — architecture diagrams (C4, class, sequence, state, module dependency)

@@ -10,7 +10,6 @@
 > | `stream_chat_compact(msg)` | `stream_chat_compact(msg, &mut history)` |
 > | `with_history(vec)` on builder | **Removed.** Pass history to `chat()` directly. |
 > | `history()` accessor | **Removed.** Caller owns the history vec. |
-> | `to_checkpoint(phase, cycles)` | `to_checkpoint(&history, phase, cycles)` |
 >
 > `prompt()`, `stream_prompt()`, `prompt_compact()`, and `stream_prompt_compact()`
 > are **unchanged** — they are stateless by rig-core convention and never touch history.
@@ -52,7 +51,6 @@ use agent_rs::agent::{ReActExt, ReActBuilder, BuiltReAct, ReActSpanEmitter, REAC
   - `prompt(msg)` — stateless; returns `Result<ReActTrace, ReActError>`. No history interaction.
   - `chat(msg, &mut history)` — caller-owned history; on success writes the full working trace into `*history`. Returns `Result<String, ReActError>`.
   - `stream_prompt(msg)` / `stream_chat(msg, &mut history)` — streaming variants returning `ReActStream`. On `Completed`, `stream_chat` writes `*history = final_history`.
-  - `to_checkpoint(&history, phase, cycles)` — snapshot into `AgentCheckpoint` (caller passes history explicitly).
   - `max_cycles()` — accessor for the configured limit.
   - `max_retries()` — accessor for the configured retry limit.
 - **`ReActSpanEmitter`** — trait with no-op defaults for `emit_cycle_start`,
@@ -105,7 +103,7 @@ println!("{answer}");
 ## Per-Cycle Mechanics
 
 1. `Span::current().record(...)` is augmented with `langsmith.span.kind = "chain"` / `react.cycle = N`.
-2. `agent.prompt(preamble + prompt).with_history(history).extended_details().await` — single completion.
+2. `agent.prompt(preamble + prompt)` — single completion (stateless, no history interaction).
 3. The returned messages are pushed into the working history clone.
 4. The last assistant message is classified:
    - `AssistantContent::Reasoning(r)` / pre-tool-call `Text(t)` → emit `Thought`.
