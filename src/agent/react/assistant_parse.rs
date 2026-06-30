@@ -92,20 +92,3 @@ pub(crate) fn emit_final_answer_from_output(
     span_emitter.emit_cycle_end(cycle, trace);
     fa
 }
-
-/// Append prompt + assistant response to shared history when
-/// `append_to_shared_history` is true.
-pub(crate) fn append_to_history_if_needed(
-    append: bool,
-    shared_history: &std::sync::Arc<crate::agent::utils::Mutex<Vec<Message>>>,
-    prompt: &str,
-    response_text: &str,
-) {
-    if append {
-        let mut h = crate::agent::utils::lock_mutex(shared_history);
-        h.push(Message::User {
-            content: rig_core::OneOrMany::one(rig_core::message::UserContent::text(prompt)),
-        });
-        h.push(Message::assistant(response_text));
-    }
-}

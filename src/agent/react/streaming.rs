@@ -11,7 +11,6 @@ use rig_core::streaming::StreamingChat;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::react::Compact;
-use crate::agent::utils::Mutex;
 use crate::domain::agent::ReActStreamItem;
 
 pub(crate) struct StreamShared<M, P, C>
@@ -20,7 +19,6 @@ where
     P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     pub(crate) agent: Agent<M, P>,
-    pub(crate) history: Arc<Mutex<Vec<Message>>>,
     pub(crate) tool_timeout_secs: u64,
     pub(crate) on_thought: Option<super::callbacks::ThoughtCb>,
     pub(crate) on_action: Option<super::callbacks::ActionCb>,
@@ -31,7 +29,7 @@ where
     pub(crate) _compaction: PhantomData<fn(M, P, C)>,
 }
 
-pub struct ReActStream<M, P, C = ()>
+pub struct ReActStream<'h, M, P, C = ()>
 where
     M: CompletionModel
         + StreamingChat<M, M::StreamingResponse>
@@ -43,6 +41,7 @@ where
 {
     rx: tokio::sync::mpsc::Receiver<ReActStreamItem>,
     is_finished: bool,
+    history_out: Option<&'h mut Vec<Message>>,
     _phantom: PhantomData<fn(M, P, C)>,
 }
 
@@ -55,7 +54,7 @@ pub(crate) fn prompt_error_from_streaming(
     }
 }
 
-impl<M, P, C> ReActStream<M, P, C>
+impl<'h, M, P, C> ReActStream<'h, M, P, C>
 where
     M: CompletionModel
         + StreamingChat<M, M::StreamingResponse>
@@ -74,14 +73,13 @@ where
         max_retries: u32,
         react_preamble: Option<String>,
         span_emitter: Arc<dyn super::emitter::ReActSpanEmitter>,
-        append_on_complete: bool,
         prompt_text: String,
+        history_out: Option<&'h mut Vec<Message>>,
     ) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel(64);
 
         let ctx = super::stream_loop::StreamingLoopContext {
             agent: shared.agent.clone(),
-            history_clone: Arc::clone(&shared.history),
             on_thought_cb: shared.on_thought.clone(),
             on_action_cb: shared.on_action.clone(),
             on_observation_cb: shared.on_observation.clone(),
@@ -91,7 +89,6 @@ where
             max_cycles,
             max_retries,
             span_emitter,
-            append_on_complete,
             prompt_text,
             history_snapshot,
             context_manager: shared.context_manager.clone(),
@@ -105,6 +102,7 @@ where
         Self {
             rx,
             is_finished: false,
+            history_out,
             _phantom: PhantomData,
         }
     }
@@ -128,7 +126,7 @@ pub(crate) async fn send_or_break(
     tx.send(item).await.is_err()
 }
 
-impl<M, P, C> Stream for ReActStream<M, P, C>
+impl<'h, M, P, C> Stream for ReActStream<'h, M, P, C>
 where
     M: CompletionModel
         + StreamingChat<M, M::StreamingResponse>
@@ -148,10 +146,18 @@ where
 
         match Pin::new(&mut self.rx).poll_recv(cx) {
             Poll::Ready(Some(item)) => {
-                if matches!(
-                    &item,
-                    ReActStreamItem::Completed { .. } | ReActStreamItem::Error { .. }
-                ) {
+                if let ReActStreamItem::Completed {
+                    trace: _,
+                    ref final_history,
+                } = item
+                {
+                    self.is_finished = true;
+                    if let Some(h) = &mut self.history_out {
+                        **h = final_history.clone();
+                    }
+                    return Poll::Ready(Some(item));
+                }
+                if matches!(&item, ReActStreamItem::Error { .. }) {
                     self.is_finished = true;
                 }
                 Poll::Ready(Some(item))

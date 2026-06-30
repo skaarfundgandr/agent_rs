@@ -9,8 +9,6 @@ use crate::agent::react::Compact;
 use crate::domain::agent::ReActTrace;
 use crate::domain::errors::ReActError;
 
-use crate::agent::utils::Mutex;
-
 use super::callbacks::{ErrorCb, FinalCb, ThoughtCb};
 use super::emitter::ReActSpanEmitter;
 
@@ -26,7 +24,6 @@ where
     P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     pub(crate) agent: Agent<M, P>,
-    pub(crate) history: Arc<Mutex<Vec<Message>>>,
     pub(crate) max_cycles: usize,
     pub(crate) max_retries: u32,
     pub(crate) react_preamble: Option<String>,
@@ -42,8 +39,7 @@ where
 }
 
 /// Standalone ReAct loop that works on a local `Vec<Message>` clone.
-/// On success when `append_to_shared_history` is true, appends to the
-/// shared history via the Mutex.
+/// Returns the trace and the final working history on success.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_loop<M, P>(
     agent: &Agent<M, P>,
@@ -59,10 +55,8 @@ pub(crate) async fn run_loop<M, P>(
     on_observation: &Option<super::callbacks::ObservationCb>,
     on_final: &Option<FinalCb>,
     on_error: &Option<ErrorCb>,
-    shared_history: &Arc<Mutex<Vec<Message>>>,
-    append_to_shared_history: bool,
     context_manager: Option<&(dyn Compact + Send + Sync)>,
-) -> Result<ReActTrace, ReActError>
+) -> Result<(ReActTrace, Vec<Message>), ReActError>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
@@ -167,20 +161,14 @@ where
                 span_emitter.emit_cycle_end(cycle, &trace);
                 return Err(err);
             }
-            let fa = super::assistant_parse::emit_final_answer_from_output(
+            let _fa = super::assistant_parse::emit_final_answer_from_output(
                 text,
                 cycle,
                 &mut trace,
                 on_final,
                 span_emitter,
             );
-            super::assistant_parse::append_to_history_if_needed(
-                append_to_shared_history,
-                shared_history,
-                prompt,
-                &fa.text,
-            );
-            return Ok(trace);
+            return Ok((trace, working_history));
         }
 
         let thought_text = parsed.reasoning_texts.join("\n").trim().to_string();
@@ -200,20 +188,14 @@ where
 
         if let Some(text) = super::assistant_parse::try_detect_final_answer(&parsed.trailing_texts)
         {
-            let fa = super::assistant_parse::emit_final_answer_from_output(
+            let _fa = super::assistant_parse::emit_final_answer_from_output(
                 text,
                 cycle,
                 &mut trace,
                 on_final,
                 span_emitter,
             );
-            super::assistant_parse::append_to_history_if_needed(
-                append_to_shared_history,
-                shared_history,
-                prompt,
-                &fa.text,
-            );
-            return Ok(trace);
+            return Ok((trace, working_history));
         }
 
         let dispatch_result = super::tool_dispatch::dispatch_tool_calls(

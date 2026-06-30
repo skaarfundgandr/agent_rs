@@ -11,7 +11,6 @@ use crate::agent::react::Compact;
 use crate::agent::state::checkpoint::{
     AgentCheckpoint, CURRENT_SCHEMA_VERSION, CheckpointMetadata, now_timestamp,
 };
-use crate::agent::utils::lock_mutex;
 use crate::domain::agent::{Action, Observation, ReActStep, ReActTrace};
 
 use super::built::BuiltReAct;
@@ -36,11 +35,6 @@ where
     M: rig_core::completion::CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
-    /// Return a snapshot of the current conversation history.
-    pub fn history(&self) -> Vec<Message> {
-        lock_mutex(&self.history).clone()
-    }
-
     /// Return the configured `max_cycles` limit.
     pub fn max_cycles(&self) -> usize {
         self.max_cycles
@@ -65,10 +59,14 @@ where
     /// `compacted_context` is left `None` because it is application-managed:
     /// populate it after calling this method if your app tracks a separate
     /// summary string.
-    pub fn to_checkpoint(&self, phase: &str, cycles_completed: usize) -> AgentCheckpoint {
-        let history = lock_mutex(&self.history).clone();
+    pub fn to_checkpoint(
+        &self,
+        history: &[Message],
+        phase: &str,
+        cycles_completed: usize,
+    ) -> AgentCheckpoint {
         AgentCheckpoint {
-            history,
+            history: history.to_vec(),
             compacted_context: None,
             phase: phase.to_string(),
             partial_results: std::collections::HashMap::new(),

@@ -10,7 +10,6 @@ use rig_core::streaming::StreamingChat;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::react::Compact;
-use crate::agent::utils::Mutex;
 use crate::domain::agent::{FinalAnswer, ReActStep, ReActStreamItem, ReActTrace};
 use crate::domain::errors::ReActError;
 
@@ -32,7 +31,6 @@ where
     C: Send + Sync + 'static,
 {
     pub agent: Agent<M, P>,
-    pub history_clone: Arc<Mutex<Vec<Message>>>,
     pub on_thought_cb: Option<ThoughtCb>,
     pub on_action_cb: Option<ActionCb>,
     pub on_observation_cb: Option<ObservationCb>,
@@ -42,7 +40,6 @@ where
     pub max_cycles: usize,
     pub max_retries: u32,
     pub span_emitter: Arc<dyn ReActSpanEmitter>,
-    pub append_on_complete: bool,
     pub prompt_text: String,
     pub history_snapshot: Vec<Message>,
     pub context_manager: Option<Arc<dyn Compact + Send + Sync>>,
@@ -68,7 +65,6 @@ where
 {
     let StreamingLoopContext {
         agent,
-        history_clone,
         on_thought_cb,
         on_action_cb,
         on_observation_cb,
@@ -78,7 +74,6 @@ where
         max_cycles,
         max_retries,
         span_emitter,
-        append_on_complete,
         prompt_text,
         history_snapshot,
         context_manager,
@@ -109,7 +104,9 @@ where
     let mut current_cycle: usize = 0;
     let mut loop_continue = true;
     let mut error_emitted = false;
+    let mut completed_sent = false;
     let mut final_answer_buffer = String::new();
+    let mut final_history: Option<Vec<Message>> = None;
     let mut pending_tool_calls: HashMap<String, (String, Instant)> = HashMap::new();
 
     while loop_continue && current_cycle < max_cycles {
@@ -310,7 +307,7 @@ where
 
                     if !final_text.is_empty() {
                         let fa = FinalAnswer {
-                            text: final_text,
+                            text: final_text.clone(),
                             cycles: current_cycle + 1,
                         };
                         trace.steps.push(ReActStep::FinalAnswer(fa.clone()));
@@ -320,19 +317,19 @@ where
                         }
                     }
 
-                    if append_on_complete {
-                        let mut h = crate::agent::utils::lock_mutex(&history_clone);
-                        h.push(Message::User {
-                            content: rig_core::OneOrMany::one(
-                                rig_core::message::UserContent::text(&prompt_text),
-                            ),
-                        });
-                        if let Some(fa) = &trace.final_answer {
-                            h.push(Message::assistant(&fa.text));
-                        }
+                    let mut fh = history_snapshot.clone();
+                    fh.push(Message::User {
+                        content: rig_core::OneOrMany::one(rig_core::message::UserContent::text(
+                            &prompt_text,
+                        )),
+                    });
+                    if !final_text.is_empty() {
+                        fh.push(Message::assistant(&final_text));
                     }
+                    final_history = Some(fh);
 
                     span_emitter.emit_cycle_end(current_cycle, &trace);
+                    completed_sent = true;
                     loop_continue = false;
                     break;
                 }
@@ -341,20 +338,24 @@ where
         }
     }
 
-    if !error_emitted {
-        if trace.final_answer.is_some() {
-            let _ = tx.send(ReActStreamItem::Completed { trace }).await;
-        } else {
-            let err = ReActError::MaxCyclesExceeded { cycles: max_cycles };
-            if let Some(cb) = &on_error_cb {
-                cb(&err);
-            }
-            span_emitter.emit_error(&err);
-            let _ = tx
-                .send(ReActStreamItem::Error {
-                    error: err.to_string(),
-                })
-                .await;
+    if !error_emitted && !completed_sent {
+        let err = ReActError::MaxCyclesExceeded { cycles: max_cycles };
+        if let Some(cb) = &on_error_cb {
+            cb(&err);
         }
+        span_emitter.emit_error(&err);
+        let _ = tx
+            .send(ReActStreamItem::Error {
+                error: err.to_string(),
+            })
+            .await;
+    } else if completed_sent {
+        let fh = final_history.take().unwrap_or_default();
+        let _ = tx
+            .send(ReActStreamItem::Completed {
+                trace,
+                final_history: fh,
+            })
+            .await;
     }
 }

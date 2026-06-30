@@ -2,9 +2,9 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use rig_core::completion::CompletionModel;
+use rig_core::message::Message;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
-use crate::agent::utils::lock_mutex;
 use crate::domain::errors::ReActError;
 
 use super::built::{BuiltReAct, run_loop};
@@ -20,11 +20,10 @@ where
         msg: impl Into<String>,
     ) -> Result<crate::domain::agent::ReActTrace, ReActError> {
         let msg = msg.into();
-        let snapshot = lock_mutex(&self.history).clone();
-        run_loop(
+        let (trace, _) = run_loop(
             &self.agent,
             &msg,
-            &snapshot,
+            &[],
             self.max_cycles,
             self.max_retries,
             self.tool_timeout_secs,
@@ -35,36 +34,37 @@ where
             &self.on_observation,
             &self.on_final,
             &self.on_error,
-            &self.history,
-            false,
-            None,
-        )
-        .await
-    }
-
-    /// Execute a ReAct chat **with** history mutation on success.
-    pub async fn chat(&self, msg: impl Into<String>) -> Result<String, ReActError> {
-        let msg = msg.into();
-        let snapshot = lock_mutex(&self.history).clone();
-        let trace = run_loop(
-            &self.agent,
-            &msg,
-            &snapshot,
-            self.max_cycles,
-            self.max_retries,
-            self.tool_timeout_secs,
-            &self.react_preamble,
-            &self.span_emitter,
-            &self.on_thought,
-            &self.on_action,
-            &self.on_observation,
-            &self.on_final,
-            &self.on_error,
-            &self.history,
-            true,
             None,
         )
         .await?;
+        Ok(trace)
+    }
+
+    /// Execute a ReAct chat **with** caller-owned history mutation on success.
+    pub async fn chat(
+        &self,
+        msg: impl Into<String>,
+        history: &mut Vec<Message>,
+    ) -> Result<String, ReActError> {
+        let msg = msg.into();
+        let (trace, working) = run_loop(
+            &self.agent,
+            &msg,
+            history,
+            self.max_cycles,
+            self.max_retries,
+            self.tool_timeout_secs,
+            &self.react_preamble,
+            &self.span_emitter,
+            &self.on_thought,
+            &self.on_action,
+            &self.on_observation,
+            &self.on_final,
+            &self.on_error,
+            None,
+        )
+        .await?;
+        *history = working;
         Ok(trace.final_answer.map(|fa| fa.text).unwrap_or_default())
     }
 }
@@ -80,16 +80,14 @@ where
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
 {
     /// Stream a ReAct prompt. Does **not** mutate shared history.
-    pub fn stream_prompt(
+    pub fn stream_prompt<'h>(
         &self,
         msg: impl Into<String>,
-    ) -> Result<super::streaming::ReActStream<M, P, ()>, ReActError> {
+    ) -> Result<super::streaming::ReActStream<'h, M, P, ()>, ReActError> {
         let msg = msg.into();
-        let snapshot = lock_mutex(&self.history).clone();
         Ok(super::streaming::ReActStream::new(
             Arc::new(super::streaming::StreamShared {
                 agent: self.agent.clone(),
-                history: Arc::clone(&self.history),
                 tool_timeout_secs: self.tool_timeout_secs,
                 on_thought: self.on_thought.as_ref().map(Arc::clone),
                 on_action: self.on_action.as_ref().map(Arc::clone),
@@ -99,27 +97,27 @@ where
                 context_manager: None,
                 _compaction: PhantomData,
             }),
-            snapshot,
+            Vec::new(),
             self.max_cycles,
             self.max_retries,
             self.react_preamble.clone(),
             Arc::clone(&self.span_emitter),
-            false,
             msg,
+            None,
         ))
     }
 
-    /// Stream a ReAct chat. Mutates shared history on completion.
-    pub fn stream_chat(
+    /// Stream a ReAct chat. Caller-owned history is written back on completion.
+    pub fn stream_chat<'h>(
         &self,
         msg: impl Into<String>,
-    ) -> Result<super::streaming::ReActStream<M, P, ()>, ReActError> {
+        history: &'h mut Vec<Message>,
+    ) -> Result<super::streaming::ReActStream<'h, M, P, ()>, ReActError> {
         let msg = msg.into();
-        let snapshot = lock_mutex(&self.history).clone();
+        let snapshot = history.clone();
         Ok(super::streaming::ReActStream::new(
             Arc::new(super::streaming::StreamShared {
                 agent: self.agent.clone(),
-                history: Arc::clone(&self.history),
                 tool_timeout_secs: self.tool_timeout_secs,
                 on_thought: self.on_thought.as_ref().map(Arc::clone),
                 on_action: self.on_action.as_ref().map(Arc::clone),
@@ -134,8 +132,8 @@ where
             self.max_retries,
             self.react_preamble.clone(),
             Arc::clone(&self.span_emitter),
-            true,
             msg,
+            Some(history),
         ))
     }
 }

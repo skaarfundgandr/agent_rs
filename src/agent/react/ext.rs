@@ -29,7 +29,6 @@ where
             max_cycles: 20,
             max_retries: 3,
             react_preamble: None,
-            initial_history: Vec::new(),
             span_emitter: Arc::new(NoopSpanEmitter),
             on_thought: None,
             on_action: None,

@@ -36,7 +36,6 @@ where
     pub max_cycles: usize,
     pub max_retries: u32,
     pub react_preamble: Option<String>,
-    pub initial_history: Vec<Message>,
     pub span_emitter: Arc<dyn ReActSpanEmitter>,
     pub on_thought: Option<ThoughtCb>,
     pub on_action: Option<ActionCb>,
@@ -99,14 +98,6 @@ where
     pub fn react_preamble(self, preamble: Option<String>) -> Self {
         Self {
             react_preamble: preamble,
-            ..self
-        }
-    }
-
-    /// Seed the initial conversation history.
-    pub fn with_history(self, history: Vec<Message>) -> Self {
-        Self {
-            initial_history: history,
             ..self
         }
     }
@@ -196,7 +187,6 @@ where
             max_cycles: self.max_cycles,
             max_retries: self.max_retries,
             react_preamble: self.react_preamble,
-            initial_history: self.initial_history,
             span_emitter: self.span_emitter,
             on_thought: self.on_thought,
             on_action: self.on_action,
@@ -218,7 +208,6 @@ where
     pub fn build(self) -> BuiltReAct<M, P, ()> {
         BuiltReAct {
             agent: self.agent.clone(),
-            history: Arc::new(std::sync::Mutex::new(self.initial_history)),
             max_cycles: self.max_cycles,
             max_retries: self.max_retries,
             react_preamble: self.react_preamble,
@@ -267,7 +256,6 @@ where
             max_cycles: self.max_cycles,
             max_retries: self.max_retries,
             react_preamble: self.react_preamble,
-            initial_history: self.initial_history,
             span_emitter: self.span_emitter,
             on_thought: self.on_thought,
             on_action: self.on_action,
@@ -331,7 +319,6 @@ where
 
         BuiltReAct {
             agent: self.agent.clone(),
-            history: Arc::new(std::sync::Mutex::new(self.initial_history)),
             max_cycles: self.max_cycles,
             max_retries: self.max_retries,
             react_preamble: self.react_preamble,
