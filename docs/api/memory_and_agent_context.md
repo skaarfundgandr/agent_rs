@@ -1,8 +1,26 @@
 # Memory and Agent Context
 
-Automates history size management to prevent context window overflows and excessive token costs.
-
-> **Runtime reference:** See the [history compaction flowchart](../diagrams/flowchart.md) for the compaction algorithm, the [runtime sequence diagram](../diagrams/sequence-diagram.md) for how context management interacts with the chat loop, and the [class diagram](../diagrams/class-diagram.md) for `BuiltManagedAgent` and `ManagedExt`.
+> **v0.6.0 → v0.7.0 migration:**
+>
+> | Old (v0.6.0) | New (v0.7.0) |
+> |---|---|
+> | `chat(msg)` | `chat(msg, &mut history)` |
+> | `chat_compact(msg)` | `chat_compact(msg, &mut history)` |
+> | `stream_chat(msg)` | `stream_chat(msg, &mut history)` |
+> | `stream_chat_compact(msg)` | `stream_chat_compact(msg, &mut history)` |
+> | `with_history(vec)` on builder | **Removed.** Pass history to `chat()` directly. |
+> | `history()` accessor | **Removed.** Caller owns the history vec. |
+>
+> `prompt()`, `stream_prompt()`, `prompt_compact()`, and `stream_prompt_compact()`
+> are **unchanged** — they are stateless by rig-core convention.
+>
+> **Key behavioral difference (ReAct vs Managed):**
+> - **ReAct `chat()`** replaces the caller's `&mut Vec<Message>` with the full working
+>   trace (every tool call, observation, assistant turn).
+> - **Managed `chat()`** pushes only `Message::user` + `Message::assistant` to the
+>   caller's history on success — a simpler append pattern.
+>
+> In both cases, on error the caller's history is left untouched.
 
 ---
 
@@ -10,24 +28,23 @@ Automates history size management to prevent context window overflows and excess
 
 A fully configured managed agent, ready to run prompts and chats. Constructed by calling [`.build()`](ManagedBuilder::build) on a [`ManagedBuilder`].
 
-Wraps an `Agent<M, P>` (where `M: CompletionModel` and `P: PromptHook<M>`) with shared conversation history (`Arc<Mutex<Vec<Message>>>`) and an optional compaction model `C: Prompt` that automatically summarizes history when it crosses a token threshold.
+Wraps an `Agent<M, P>` (where `M: CompletionModel` and `P: PromptHook<M>`) with an optional compaction model `C: Prompt` that automatically summarizes history when it crosses a token threshold. History is now **caller-owned** — passed as `&mut Vec<Message>` to `chat()`.
 
 ### Methods
-- **`history(&self) -> Vec<Message>`**
-  Returns a snapshot of the current conversation history.
 - **`max_retries(&self) -> u32`**
   Returns the configured retry limit for completion calls (default 3).
 - **`async prompt(&self, msg: impl Into<String>) -> Result<String, PromptError>`**
-  Executes an LLM chat turn **without** mutating shared history. Returns the response text. When compaction is enabled (with-compaction variant), history is compacted before the call.
-- **`async chat(&self, msg: impl Into<String>) -> Result<String, PromptError>`**
-  Executes an LLM chat turn **with** history mutation on success. On success, the shared history is replaced with the new working history. On error, the shared history is not modified.
-- **`async stream_prompt(&self, msg: impl Into<String>) -> Result<ManagedStream<R>, PromptError>`**
-  Streams a chat turn **without** mutating shared history.
-- **`async stream_chat(&self, msg: impl Into<String>) -> Result<ManagedStream<R>, PromptError>`**
-  Streams a chat turn **with** history mutation on completion. The shared history is updated with the final accumulated messages when the stream finishes.
+  Stateless — returns the response text. No history interaction.
+- **`async chat(&self, msg, &mut history) -> Result<String, PromptError>`**
+  On success, pushes `Message::user` + `Message::assistant` to `*history`.
+  On error, `history` is untouched.
+- **`async stream_prompt(&self, msg) -> Result<ManagedStream<R>, PromptError>`**
+  Streaming variant. Stateless — no history write-back.
+- **`async stream_chat(&self, msg, &mut history) -> Result<ManagedStream<R>, PromptError>`**
+  Streaming variant. On `FinalResponse`, pushes user+assistant to `*history`.
 
 > [!NOTE]
-> **With-compaction variants:** When built with `.with_compaction()`, additional methods are available: `prompt_compact()`, `chat_compact()`, `stream_prompt_compact()`, `stream_chat_compact()`. These compact the history before calling the LLM.
+> **With-compaction variants:** When built with `.with_compaction()`, additional methods are available: `prompt_compact()`, `chat_compact()`, `stream_prompt_compact()`, `stream_chat_compact()`. These compact the history in-place before calling the LLM.
 
 ---
 
@@ -36,8 +53,6 @@ Wraps an `Agent<M, P>` (where `M: CompletionModel` and `P: PromptHook<M>`) with 
 Builder for a managed agent. Constructed via [`ManagedExt::managed`].
 
 ### Methods
-- **`with_history(self, history: Vec<Message>) -> Self`**
-  Seeds the initial conversation history.
 - **`max_retries(self, n: u32) -> Self`**
   Sets the maximum number of retries for completion calls on transient errors
   (`HttpError`, `ProviderError`). Defaults to 3. Retries use exponential
@@ -57,11 +72,11 @@ When compaction is enabled, additional methods are available on `ManagedBuilder<
 
 ---
 
-## `ManagedStream<R>`
+## `ManagedStream<'h, R>`
 
-A stream wrapper for a managed agent chat session. Once the stream finishes and yields the `FinalResponse`, the shared history (if provided) is updated with the final accumulated messages.
+A stream wrapper for a managed agent chat session. Once the stream finishes and yields the `FinalResponse`, the caller's history (if provided) is updated with the final user+assistant messages.
 
-Implements `futures::Stream<Item = Result<MultiTurnStreamItem<R>, StreamingError>>`.
+Implements `futures::Stream<Item = Result<MultiTurnStreamItem<R>, StreamingError>>`. Holds `history_out: Option<&'h mut Vec<Message>>` for write-back on completion.
 
 ---
 
@@ -124,14 +139,13 @@ use rig_core::message::Message;
 # let openai = todo!(); // your Rig client
 let chat_agent = openai.agent("gpt-5").build();
 
-// Build a managed agent with shared history
+// Build a managed agent (no internal history — caller owns it)
 let managed = chat_agent.managed().build();
 
-let response = managed.chat("Hello, world!").await?;
+let mut history = Vec::new();
+let response = managed.chat("Hello, world!", &mut history).await?;
 println!("Response: {}", response);
-
-// History is automatically updated after chat()
-let history = managed.history();
+// history now contains user+assistant messages from this turn
 # Ok(())
 # }
 ```
@@ -155,7 +169,8 @@ let managed = chat_agent
     .compaction_model(compaction_agent)
     .build();
 
-let response = managed.chat_compact("What were my previous requests?").await?;
+let mut history = Vec::new();
+let response = managed.chat_compact("What were my previous requests?", &mut history).await?;
 # Ok(())
 # }
 ```
@@ -172,7 +187,8 @@ use futures::StreamExt;
 let chat_agent = openai.agent("gpt-5").build();
 let managed = chat_agent.managed().build();
 
-let mut stream = managed.stream_chat("Explain quantum computing.").await?;
+let mut history = Vec::new();
+let mut stream = managed.stream_chat("Explain quantum computing.", &mut history).await?;
 
 while let Some(chunk) = stream.next().await {
     match chunk {
@@ -181,6 +197,7 @@ while let Some(chunk) = stream.next().await {
         }
         Ok(MultiTurnStreamItem::FinalResponse(response)) => {
             println!("Streaming finished!");
+            // history now contains user+assistant messages
         }
         Err(err) => {
             eprintln!("Error in stream: {:?}", err);
