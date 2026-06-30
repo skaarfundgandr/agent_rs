@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod dispatch;
 #[cfg(feature = "rag")]
 pub mod embeddings;
 pub mod memory;
@@ -7,9 +8,6 @@ pub mod permission;
 pub mod react;
 pub mod state;
 pub mod tools;
-pub(crate) mod utils;
-
-pub mod dispatch;
 
 pub use agents::strip_reasoning_from_history;
 

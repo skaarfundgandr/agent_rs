@@ -65,11 +65,10 @@ src/
 │   ├── memory/           # ContextManager — token estimation + auto-summarize
 │   ├── model/            # execute_chat / execute_stream_chat helpers
 │   ├── tools/            # Read/Write/Grep/Glob/ListDir/ManageRag/Compact/ToolRegistry tools
-│   ├── utils.rs          # Shared helpers (lock_mutex)
 │   └── react/            # ReAct loop: builder → built → streaming
 │       ├── builder.rs         # ReActBuilder, NoCompaction, CompactionConfig typestates
-│       ├── built.rs           # BuiltReAct — prompt(), chat(), run_loop() orchestrator
-│       ├── built_methods.rs   # history, checkpoint, internal callback helpers
+│       ├── built.rs           # BuiltReAct — prompt(), chat(msg, &mut history), run_loop() orchestrator
+│       ├── built_methods.rs   # checkpoint, internal callback helpers
 │       ├── streaming.rs       # ReActStream, ReActStreamItem — async Stream impl
 │       ├── stream_loop.rs     # spawned streaming loop
 │       ├── stream_process.rs  # assistant/tool item processing

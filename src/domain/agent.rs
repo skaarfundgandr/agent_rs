@@ -4,6 +4,7 @@
 //! contains the loop's runtime behaviour. Types here carry no business logic
 //! and are fully serde-serialisable so they can be persisted or streamed.
 
+use rig_core::message::Message;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -97,7 +98,10 @@ pub enum ReActStreamItem {
     /// A streaming text delta for the final answer.
     FinalAnswerDelta { delta: String, cycle: usize },
     /// The ReAct loop has completed successfully.
-    Completed { trace: ReActTrace },
+    Completed {
+        trace: ReActTrace,
+        final_history: Vec<Message>,
+    },
     /// An error occurred during the ReAct loop.
     Error { error: String },
 }
