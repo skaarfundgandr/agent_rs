@@ -1,7 +1,7 @@
 //! Text splitters: turn a `Document` into `Vec<Chunk>`.
 
+use crate::domain::rag::ChunkMetadata;
 use crate::rag::{Chunk, Document};
-use std::collections::HashMap;
 
 /// Trait for splitting a document into chunks.
 pub trait TextSplitter {
@@ -72,14 +72,13 @@ impl TextSplitter for WordSplitter {
 
             if !chunk_text.trim().is_empty() {
                 let chunk_idx = chunks.len();
-                let mut metadata = HashMap::new();
-                metadata.insert("source".to_string(), source.clone());
-                metadata.insert("file_type".to_string(), file_type.clone());
-                metadata.insert("chunk_index".to_string(), chunk_idx.to_string());
-
                 chunks.push(Chunk {
                     text: chunk_text,
-                    metadata,
+                    metadata: ChunkMetadata {
+                        source: source.clone(),
+                        file_type: file_type.clone(),
+                        chunk_index: chunk_idx,
+                    },
                 });
             }
 

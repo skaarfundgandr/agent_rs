@@ -54,16 +54,8 @@ impl RagPipeline {
 
         let mut grouped: BTreeMap<(String, String), Vec<Chunk>> = BTreeMap::new();
         for c in chunks {
-            let src = c
-                .metadata
-                .get("source")
-                .cloned()
-                .unwrap_or_else(|| "unknown".to_string());
-            let ft = c
-                .metadata
-                .get("file_type")
-                .cloned()
-                .unwrap_or_else(|| "txt".to_string());
+            let src = c.metadata.source.clone();
+            let ft = c.metadata.file_type.clone();
             grouped.entry((src, ft)).or_default().push(c);
         }
 

@@ -207,7 +207,7 @@ pub struct ManageRagArgs {
     pub path: Option<String>,
 }
 
-/// A thin permission shell over [`RagIndexer`].
+/// A thin permission shell over [`crate::rag::RagIndexer`].
 ///
 /// Supports three actions via a string enum argument:
 /// - **add** — Register a file or directory as a RAG source. The path is
@@ -261,7 +261,7 @@ impl Tool for ManageRagTool {
         }
     }
 
-    /// Dispatches the requested action, delegating to [`RagIndexer`].
+    /// Dispatches the requested action, delegating to [`crate::rag::RagIndexer`].
     ///
     /// # Errors
     ///

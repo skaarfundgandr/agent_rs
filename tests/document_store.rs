@@ -1,8 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg(feature = "rag")]
 
-use agent_rs::rag::{Chunk, DocumentStore};
-use std::collections::HashMap;
+use agent_rs::rag::{Chunk, ChunkMetadata, DocumentStore};
 use tempfile::tempdir;
 
 #[tokio::test]
@@ -14,11 +13,11 @@ async fn document_store_open_insert_fetch_delete_roundtrip() {
     let chunks = vec![
         Chunk {
             text: "first chunk".to_string(),
-            metadata: HashMap::new(),
+            metadata: ChunkMetadata::default(),
         },
         Chunk {
             text: "second chunk".to_string(),
-            metadata: HashMap::new(),
+            metadata: ChunkMetadata::default(),
         },
     ];
     let ids = store

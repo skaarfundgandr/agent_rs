@@ -15,16 +15,17 @@ use tokio::sync::RwLock;
 /// Pipeline that owns the persisted RAG state.
 ///
 /// Wraps a [`DocumentStore`] (SQLite chunk metadata) and a [`TurboIndex`]
-/// (turbovec ANN vectors) and keeps them in sync. Use [`Self::open_or_create`]
-/// at startup to load existing artifacts (or initialise empty ones), then
-/// [`Self::add_source`] / [`Self::remove_source`] to manage indexed content
-/// at runtime. Call [`Self::save`] periodically (or on shutdown) to persist
-/// the turbovec index — the SQLite store is durable per-write.
+/// (turbovec ANN vectors) and keeps them in sync. Use `RagPipelineBuilder`
+/// (via [`Self::builder`]) at startup to load existing artifacts (or
+/// initialise empty ones), then `add_source` / `remove_source` to manage
+/// indexed content at runtime. Call [`Self::save`] periodically (or on
+/// shutdown) to persist the turbovec index — the SQLite store is durable
+/// per-write.
 ///
 /// Two-file persistence: SQLite database (rows of metadata) + turbovec index
-/// (.tvim binary). [`Self::open_or_create`] enforces they have a matching
-/// chunk count; if not, an error is returned and the caller should clear
-/// and rebuild.
+/// (.tvim binary). `open_or_create` (called by the builder) enforces they
+/// have a matching chunk count; if not, an error is returned and the caller
+/// should clear and rebuild.
 ///
 /// Construction also retains a `Vec<Chunk>` buffer for the lower-level
 /// add_chunks / add_document / add_documents builder methods kept for

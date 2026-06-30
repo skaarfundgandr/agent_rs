@@ -16,7 +16,7 @@ pub mod splitter;
 pub mod store;
 pub mod vector_index;
 
-pub use crate::domain::rag::{Chunk, Document, RagSource, RagSourceType};
+pub use crate::domain::rag::{Chunk, ChunkMetadata, Document, RagSource, RagSourceType};
 pub use alias::{QueryFuture, TextsFuture};
 pub use embedder::ErasedEmbedder;
 pub use index::TurboIndex;

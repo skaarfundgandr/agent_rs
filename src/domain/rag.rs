@@ -12,14 +12,37 @@ pub struct Document {
     pub metadata: HashMap<String, String>,
 }
 
+/// Typed metadata attached to each [`Chunk`].
+///
+/// Replaces the former `HashMap<String, String>` to provide compile-time
+/// field access for the keys that the pipeline actually stores and queries.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ChunkMetadata {
+    /// Source filename (e.g. `"doc.txt"`).
+    pub source: String,
+    /// File type / extension (e.g. `"txt"`, `"pdf"`).
+    pub file_type: String,
+    /// Zero-based index of this chunk within its source document.
+    pub chunk_index: usize,
+}
+
+impl Default for ChunkMetadata {
+    fn default() -> Self {
+        Self {
+            source: "unknown".to_string(),
+            file_type: "txt".to_string(),
+            chunk_index: 0,
+        }
+    }
+}
+
 /// A single chunk of text produced by splitting a [`Document`].
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Chunk {
     /// The chunk text content.
     pub text: String,
-    /// Metadata inherited from the source document plus chunk-specific keys
-    /// (e.g. `chunk_index`).
-    pub metadata: HashMap<String, String>,
+    /// Metadata inherited from the source document plus chunk-specific keys.
+    pub metadata: ChunkMetadata,
 }
 
 #[derive(Debug, Clone)]

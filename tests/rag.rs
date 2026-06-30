@@ -59,8 +59,8 @@ async fn test_text_loader_and_splitter() {
     let chunks = splitter.split(&doc);
     assert!(chunks.len() >= 2);
     assert_eq!(chunks[0].text, "This is a test file");
-    assert_eq!(chunks[0].metadata.get("source").unwrap(), source_name);
-    assert_eq!(chunks[0].metadata.get("chunk_index").unwrap(), "0");
+    assert_eq!(chunks[0].metadata.source, source_name);
+    assert_eq!(chunks[0].metadata.chunk_index, 0);
 }
 
 // ---------- New tests against the turbovec/SQLite pipeline ----------
