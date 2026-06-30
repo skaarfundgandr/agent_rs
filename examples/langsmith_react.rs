@@ -201,6 +201,7 @@ mod otel_main {
             .threshold(128_000)
             .build();
 
+        let mut history = Vec::new();
         loop {
             print!("\nreact> ");
             let _ = std::io::stdout().flush();
@@ -226,7 +227,7 @@ mod otel_main {
                 "react.cycle" = 0_i64,
             );
 
-            let trace = async { react.chat_compact(prompt).await }
+            let trace = async { react.chat_compact(prompt, &mut history).await }
                 .instrument(parent_span)
                 .await;
 

@@ -164,6 +164,13 @@ mod researcher_main {
             std::fs::create_dir_all(parent)?;
         }
 
+        // If the SQLite DB was persisted in a prior run but the turbovec index
+        // is missing, the two are out of sync — `open_or_create` would bail.
+        // Recovery: delete both and start fresh.
+        if db_path.exists() && !index_path.exists() {
+            let _ = std::fs::remove_file(&db_path);
+        }
+
         println!("Initializing RAG services...");
         let fastembed_variant = fastembed_model_name.parse().map_err(|e: String| {
             anyhow::anyhow!("Unknown FASTEMBED_MODEL '{fastembed_model_name}': {e}")
@@ -239,16 +246,24 @@ mod researcher_main {
 
         println!("Research Prompt: {}", prompt);
         println!("Running agent. Please wait...");
-        let output = agent.prompt(&prompt).await?;
-        println!(
-            "\n=== Research Report ===\n{}",
-            output.final_answer.unwrap().text
-        );
+        let result = agent.prompt(&prompt).await;
+
+        let save_path = index_path.clone();
+        if let Err(e) = rag.indexer.pipeline().save(&save_path).await {
+            eprintln!("warning: failed to save RAG index on shutdown: {e}");
+        }
+
+        let output = result?;
 
         // Clean up temporary research note file if it was created
         if Path::new("research_notes.txt").exists() {
             let _ = std::fs::remove_file("research_notes.txt");
         }
+
+        println!(
+            "\n=== Research Report ===\n{}",
+            output.final_answer.unwrap().text
+        );
 
         Ok(())
     }

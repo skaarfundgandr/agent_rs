@@ -152,9 +152,10 @@ where
         input: AgentInput,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<AgentOutput>> + Send + 'a>> {
         Box::pin(async move {
+            let mut history = Vec::new();
             let answer = self
                 .agent
-                .chat(input.prompt)
+                .chat(input.prompt, &mut history)
                 .await
                 .map_err(anyhow::Error::from)?;
             Ok(AgentOutput {
