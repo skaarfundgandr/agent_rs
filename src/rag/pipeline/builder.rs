@@ -2,8 +2,9 @@
 
 use super::state::RagPipeline;
 use crate::agent::embeddings::EmbeddingService;
-use crate::agent::tools::RagSourceRegistry;
-use crate::domain::rag::ChunkingOptions;
+use crate::agent::permission::PermissionPolicy;
+use crate::agent::tools::{ManageRagTool, RagSourceRegistry};
+use crate::domain::rag::{ChunkingOptions, RagSource};
 use crate::rag::{ErasedEmbedder, TurboVectorIndex};
 use crate::security::SharedSandbox;
 use anyhow::{Result, anyhow};
@@ -141,10 +142,13 @@ impl RagPipelineBuilder {
 
         let vector_index = pipeline.build(Arc::clone(&embedder));
 
+        let registry =
+            RagSourceRegistry::hydrate_from_store(&pipeline, exts).await?;
+
         let indexer = RagIndexer {
             pipeline: Arc::new(pipeline),
             embedder,
-            registry: Arc::new(Mutex::new(RagSourceRegistry::new(exts))),
+            registry: Arc::new(Mutex::new(registry)),
             sandbox: Arc::new(self.sandbox.unwrap_or_default()),
         };
 
@@ -161,12 +165,100 @@ pub struct BuiltRag {
 }
 
 /// Ingestion handle and tool factory. Owns the pipeline, embedder, source
-/// registry, and sandbox. Methods for `add`/`remove`/`list`/`tool` are
-/// added in Phase 2.
+/// registry, and sandbox.
 #[derive(Clone)]
 pub struct RagIndexer {
     pub(crate) pipeline: Arc<RagPipeline>,
     pub(crate) embedder: Arc<dyn ErasedEmbedder>,
     pub(crate) registry: Arc<Mutex<RagSourceRegistry>>,
     pub(crate) sandbox: Arc<SharedSandbox>,
+}
+
+impl RagIndexer {
+    /// Register and index a file or directory.
+    ///
+    /// Resolves the path via the sandbox, validates the extension via the
+    /// registry, then embeds and persists the chunks. Returns the number
+    /// of chunks added.
+    pub async fn add(&self, path: &Path) -> Result<usize> {
+        let canonical = self.sandbox.resolve_path_unchecked(path);
+
+        {
+            let mut registry = self
+                .registry
+                .lock()
+                .map_err(|e| anyhow!("registry mutex poisoned: {e}"))?;
+            registry
+                .add_source(path, &self.sandbox)
+                .map_err(|e| anyhow!("{e}"))?;
+        }
+
+        let added = self
+            .pipeline
+            .add_source_dyn(&canonical, self.embedder.as_ref())
+            .await?;
+        Ok(added)
+    }
+
+    /// Remove a source and all its chunks.
+    ///
+    /// Resolves the canonical path via the sandbox, removes the registry
+    /// entry, then deletes the persisted chunks. Returns the number of
+    /// chunks removed.
+    pub async fn remove(&self, path: &Path) -> Result<usize> {
+        let canonical = self.sandbox.resolve_path_unchecked(path);
+
+        {
+            let mut registry = self
+                .registry
+                .lock()
+                .map_err(|e| anyhow!("registry mutex poisoned: {e}"))?;
+            registry
+                .remove_source(&canonical)
+                .map_err(|e| anyhow!("{e}"))?;
+        }
+
+        let source_name = canonical
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        let removed = self.pipeline.remove_source(source_name).await?;
+        Ok(removed)
+    }
+
+    /// List all registered sources.
+    pub fn list(&self) -> Vec<RagSource> {
+        self.registry
+            .lock()
+            .map(|g| g.sources().to_vec())
+            .unwrap_or_default()
+    }
+
+    /// Returns `true` if no sources are registered.
+    pub fn is_empty(&self) -> bool {
+        self.registry
+            .lock()
+            .map(|g| g.is_empty())
+            .unwrap_or(true)
+    }
+
+    /// Number of chunks currently persisted in the pipeline.
+    pub async fn chunk_count(&self) -> Result<i64> {
+        self.pipeline.chunk_count().await
+    }
+
+    /// Access the underlying pipeline (staging API escape hatch).
+    pub fn pipeline(&self) -> &Arc<RagPipeline> {
+        &self.pipeline
+    }
+
+    /// Access the sandbox (for `ManageRagTool` permission gating).
+    pub(crate) fn sandbox(&self) -> &Arc<SharedSandbox> {
+        &self.sandbox
+    }
+
+    /// Create a [`ManageRagTool`] that delegates to this indexer.
+    pub fn tool(&self, policy: PermissionPolicy) -> ManageRagTool {
+        ManageRagTool::new(self.clone(), policy)
+    }
 }

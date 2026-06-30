@@ -14,6 +14,7 @@ impl RagPipeline {
     ///
     /// Used by `open_or_create` and tests that want full control. Most
     /// users should call [`Self::open_or_create`].
+    #[allow(dead_code)]
     pub(crate) fn from_parts(
         store: Arc<DocumentStore>,
         turbo: Arc<RwLock<TurboIndex>>,
@@ -94,6 +95,15 @@ impl RagPipeline {
     /// Number of chunks currently persisted (per SQLite).
     pub async fn chunk_count(&self) -> Result<i64> {
         self.store.chunk_count().await
+    }
+
+    /// List unique source names currently persisted in the store.
+    ///
+    /// Filenames only — full canonical paths are not stored (see
+    /// [`RagSourceRegistry::hydrate_from_store`] for the lossy hydration
+    /// note).
+    pub(crate) async fn list_sources(&self) -> Result<Vec<String>> {
+        self.store.list_sources().await
     }
 
     /// Access the underlying store (for advanced use).

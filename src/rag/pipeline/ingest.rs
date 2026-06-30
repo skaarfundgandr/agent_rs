@@ -63,6 +63,11 @@ impl RagPipeline {
             .cloned()
             .unwrap_or_else(|| "txt".to_string());
 
+        // Remove any prior chunks for this source so re-add is idempotent.
+        // This is necessary because hydration from the store makes re-adds
+        // observable after a restart.
+        let _ = self.remove_source(&source).await?;
+
         let splitter = WordSplitter::new(self.chunking.chunk_words, self.chunking.chunk_overlap_words);
         let chunks = splitter.split(&document);
         if chunks.is_empty() {

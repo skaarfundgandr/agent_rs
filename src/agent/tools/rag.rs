@@ -3,14 +3,14 @@
 use crate::agent::permission::PermissionPolicy;
 use crate::domain::errors::DocumentError;
 use crate::domain::rag::{RagSource, RagSourceType};
-use crate::rag::{ErasedEmbedder, RagPipeline};
+use crate::rag::RagPipeline;
 use crate::security::SharedSandbox;
+use anyhow::Result;
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
 use std::collections::HashSet;
-use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::path::{Path, PathBuf};
 
 /// A thread-safe registry that tracks RAG sources (files and directories).
 ///
@@ -41,6 +41,31 @@ impl RagSourceRegistry {
             sources: Vec::new(),
             supported_extensions,
         }
+    }
+
+    /// Rebuild the registry from sources persisted in the SQLite store.
+    ///
+    /// **Lossy**: after a restart, source paths are filenames only (the
+    /// `source` column in `rag_chunks`), not full canonical paths.
+    /// Re-adding a file is safe — idempotency is ensured by
+    /// [`RagPipeline::add_single_file`]'s remove-before-insert.
+    pub async fn hydrate_from_store(
+        pipeline: &RagPipeline,
+        supported_extensions: HashSet<String>,
+    ) -> Result<Self> {
+        let sources = pipeline
+            .list_sources()
+            .await?
+            .into_iter()
+            .map(|src| RagSource {
+                path: PathBuf::from(src),
+                source_type: RagSourceType::File,
+            })
+            .collect();
+        Ok(Self {
+            sources,
+            supported_extensions,
+        })
     }
 
     /// Adds a source (file or directory) to the registry.
@@ -190,7 +215,7 @@ pub struct ManageRagArgs {
     pub path: Option<String>,
 }
 
-/// A unified tool for managing RAG sources.
+/// A thin permission shell over [`RagIndexer`].
 ///
 /// Supports three actions via a string enum argument:
 /// - **add** — Register a file or directory as a RAG source. The path is
@@ -203,36 +228,14 @@ pub struct ManageRagArgs {
 /// from the updated source list via [`RagSourceRegistry::sources()`].
 #[derive(Clone)]
 pub struct ManageRagTool {
-    registry: Arc<Mutex<RagSourceRegistry>>,
-    pipeline: Arc<RagPipeline>,
-    embedder: Arc<dyn ErasedEmbedder>,
-    sandbox: Arc<SharedSandbox>,
+    pub(crate) indexer: crate::rag::RagIndexer,
     policy: PermissionPolicy,
 }
 
 impl ManageRagTool {
-    /// Creates a new `ManageRagTool` backed by the given shared registry.
-    ///
-    /// # Arguments
-    ///
-    /// * `registry` - Shared registry that this tool reads from and writes to.
-    /// * `sandbox` - Sandbox configuration within which all source paths are resolved
-    ///   and validated. Paths that escape all sandbox roots are rejected.
-    /// * `policy` - Permission policy evaluated before each tool invocation.
-    pub fn new(
-        registry: Arc<Mutex<RagSourceRegistry>>,
-        pipeline: Arc<RagPipeline>,
-        embedder: Arc<dyn ErasedEmbedder>,
-        sandbox: Arc<SharedSandbox>,
-        policy: PermissionPolicy,
-    ) -> Self {
-        Self {
-            registry,
-            pipeline,
-            embedder,
-            sandbox,
-            policy,
-        }
+    /// Creates a new `ManageRagTool` backed by the given indexer.
+    pub(crate) fn new(indexer: crate::rag::RagIndexer, policy: PermissionPolicy) -> Self {
+        Self { indexer, policy }
     }
 }
 
@@ -265,21 +268,14 @@ impl Tool for ManageRagTool {
         }
     }
 
-    /// Dispatches the requested action against the shared registry.
-    ///
-    /// Acquires the registry mutex for the duration of each operation. The
-    /// mutex is released before returning, so contention is minimal.
+    /// Dispatches the requested action, delegating to [`RagIndexer`].
     ///
     /// # Errors
     ///
     /// * [`DocumentError::Rag`] for invalid actions, missing required arguments,
-    ///   or registry-level errors (duplicate source, source not found).
+    ///   or indexer-level errors (duplicate source, source not found).
     /// * [`DocumentError::PermissionDenied`] if the permission policy rejects
     ///   the invocation.
-    /// * [`DocumentError::SandboxEscape`] if the path escapes all sandbox roots
-    ///   (via `add_source`).
-    /// * [`DocumentError::UnsupportedExtension`] if the file extension is not
-    ///   in the supported set (via `add_source`).
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let description = match args.action.as_str() {
             "add" => format!(
@@ -305,10 +301,15 @@ impl Tool for ManageRagTool {
             false
         } else {
             let p = args.path.as_deref().unwrap_or("");
-            crate::security::validate_sandboxed_path_shared(&self.sandbox, Path::new(p)).is_err()
+            crate::security::validate_sandboxed_path_shared(
+                self.indexer.sandbox(),
+                Path::new(p),
+            )
+            .is_err()
         };
         if needs_gate {
-            self.sandbox
+            self.indexer
+                .sandbox()
                 .check_permission(&self.policy, Self::NAME, &description)
                 .await?;
         }
@@ -321,23 +322,12 @@ impl Tool for ManageRagTool {
                     )
                 })?;
                 let path = Path::new(&path_str);
-
-                let confirmation = {
-                    let mut registry = self
-                        .registry
-                        .lock()
-                        .map_err(|e| DocumentError::Rag(e.to_string()))?;
-                    registry.add_source(path, &self.sandbox)?
-                };
-
-                let canonical = self.sandbox.resolve_path_unchecked(path);
                 let added = self
-                    .pipeline
-                    .add_source_dyn(&canonical, self.embedder.as_ref())
+                    .indexer
+                    .add(path)
                     .await
-                    .map_err(|e| DocumentError::Rag(format!("pipeline add failed: {e}")))?;
-
-                Ok(format!("{confirmation} (indexed {added} chunks)"))
+                    .map_err(|e| DocumentError::Rag(e.to_string()))?;
+                Ok(format!("indexed {added} chunks"))
             }
             "remove" => {
                 let path_str = args.path.ok_or_else(|| {
@@ -346,36 +336,36 @@ impl Tool for ManageRagTool {
                     )
                 })?;
                 let path = Path::new(&path_str);
-                let canonical = self.sandbox.resolve_path_unchecked(path);
-
-                let confirmation = {
-                    let mut registry = self
-                        .registry
-                        .lock()
-                        .map_err(|e| DocumentError::Rag(e.to_string()))?;
-                    registry.remove_source(&canonical)?
-                };
-
-                let source_name = canonical
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or_default();
                 let removed = self
-                    .pipeline
-                    .remove_source(source_name)
+                    .indexer
+                    .remove(path)
                     .await
-                    .map_err(|e| DocumentError::Rag(format!("pipeline remove failed: {e}")))?;
-
-                Ok(format!("{confirmation} (removed {removed} chunks)"))
+                    .map_err(|e| DocumentError::Rag(e.to_string()))?;
+                Ok(format!("removed {removed} chunks"))
             }
             "list" => {
-                let registry = self
-                    .registry
-                    .lock()
-                    .map_err(|e| DocumentError::Rag(e.to_string()))?;
-                Ok(registry.list_sources())
+                let sources = self.indexer.list();
+                let output = if sources.is_empty() {
+                    "No sources registered.".to_string()
+                } else {
+                    sources
+                        .iter()
+                        .map(|s| {
+                            let kind = match s.source_type {
+                                crate::domain::rag::RagSourceType::File => "FILE",
+                                crate::domain::rag::RagSourceType::Directory => "DIR",
+                            };
+                            format!("[{}] {}", kind, s.path.display())
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+                Ok(output)
             }
-            _ => unreachable!(),
+            _ => Err(DocumentError::Rag(format!(
+                "Unknown action '{}'. Valid actions: add, remove, list",
+                args.action
+            ))),
         }
     }
 }
