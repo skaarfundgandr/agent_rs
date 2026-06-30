@@ -11,7 +11,7 @@
 
 **AgentRS** is an extension library built on top of the **[Rig](https://github.com/0xPlayground/rig)** agent framework (`rig-core`). It adds enterprise-grade capabilities for context control, execution security, and vector store operations in Rust.
 
-It integrates local semantic search via **[fastembed](https://github.com/AnushShetty/fastembed-rs)** and persistent on-disk vector databases using **[turbovec](https://github.com/skaarfundgandr/turbovec)**, enabling highly efficient Retrieval-Augmented Generation (RAG) workflows out-of-the-box.
+It integrates local semantic search via **[fastembed](https://github.com/AnushShetty/fastembed-rs)** and persistent on-disk vector databases using **[turbovec](https://github.com/RyanCodrai/turbovec)**, enabling highly efficient Retrieval-Augmented Generation (RAG) workflows out-of-the-box.
 
 ---
 
@@ -80,6 +80,7 @@ Automatically compact history with summaries when conversation length exceeds a 
 
 ```rust
 use agent_rs::agent::ManagedExt;
+use rig_core::message::Message;
 use rig_core::providers::openai;
 
 #[tokio::main]
@@ -94,7 +95,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .threshold(8000) // triggers summary compaction at 8k tokens
         .build();
 
-    let response = managed.chat_compact("Let's plan a coding project...").await?;
+    let mut history: Vec<Message> = vec![];
+    let response = managed.chat_compact("Let's plan a coding project...", &mut history).await?;
     println!("Response: {}", response);
     Ok(())
 }
