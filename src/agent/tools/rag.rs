@@ -10,7 +10,7 @@ use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// A thread-safe registry that tracks RAG sources (files and directories).
 ///
@@ -45,23 +45,14 @@ impl RagSourceRegistry {
 
     /// Rebuild the registry from sources persisted in the SQLite store.
     ///
-    /// **Lossy**: after a restart, source paths are filenames only (the
-    /// `source` column in `rag_chunks`), not full canonical paths.
-    /// Re-adding a file is safe — idempotency is ensured by
-    /// [`RagPipeline::add_single_file`]'s remove-before-insert.
+    /// Sources are read from the dedicated `rag_sources` table, which stores
+    /// canonical paths and their types (`file` or `directory`). If the table
+    /// is empty (e.g. an older database), the registry starts empty.
     pub async fn hydrate_from_store(
         pipeline: &RagPipeline,
         supported_extensions: HashSet<String>,
     ) -> Result<Self> {
-        let sources = pipeline
-            .list_sources()
-            .await?
-            .into_iter()
-            .map(|src| RagSource {
-                path: PathBuf::from(src),
-                source_type: RagSourceType::File,
-            })
-            .collect();
+        let sources = pipeline.list_registered_sources().await?;
         Ok(Self {
             sources,
             supported_extensions,
@@ -71,8 +62,8 @@ impl RagSourceRegistry {
     /// Adds a source (file or directory) to the registry.
     ///
     /// The path is resolved relative to `sandbox` and canonicalized.
-    /// Files are checked against the supported extension set, and duplicate
-    /// paths are rejected.
+    /// Files are checked against the supported extension set. Duplicate
+    /// paths are ignored (the registry is idempotent).
     ///
     /// # Arguments
     ///
@@ -87,7 +78,7 @@ impl RagSourceRegistry {
     ///
     /// * [`DocumentError::SandboxEscape`] if the path resolves outside all sandbox roots.
     /// * [`DocumentError::UnsupportedExtension`] if the file extension is not in the supported set.
-    /// * [`DocumentError::Rag`] if the source is already indexed or the path does not exist.
+    /// * [`DocumentError::Rag`] if the path does not exist.
     pub fn add_source(
         &mut self,
         path: &Path,
@@ -96,10 +87,11 @@ impl RagSourceRegistry {
         let canonical = sandbox.resolve_path_unchecked(path);
 
         if self.sources.iter().any(|s| s.path == canonical) {
-            return Err(DocumentError::Rag(format!(
-                "Source already indexed: {}",
-                path.display()
-            )));
+            return Ok(format!(
+                "Source already indexed: {} (total: {})",
+                path.display(),
+                self.sources.len()
+            ));
         }
 
         if canonical.is_file() {
@@ -220,12 +212,13 @@ pub struct ManageRagArgs {
 /// Supports three actions via a string enum argument:
 /// - **add** — Register a file or directory as a RAG source. The path is
 ///   validated against the sandbox root and the file extension is checked
-///   against the supported set. Duplicates are rejected.
-/// - **remove** — Unregister a previously added source by path.
+///   against the supported set. Duplicate adds are ignored.
+/// - **remove** — Unregister a previously added source by path and delete
+///   its chunks from the persisted store/index.
 /// - **list** — Display all currently registered sources with their type.
 ///
-/// After modifying the registry, the consumer should rebuild the RAG index
-/// from the updated source list via [`RagSourceRegistry::sources()`].
+/// Changes are persisted directly; the consumer does not need to rebuild the
+/// index manually.
 #[derive(Clone)]
 pub struct ManageRagTool {
     pub(crate) indexer: crate::rag::RagIndexer,
@@ -249,7 +242,7 @@ impl Tool for ManageRagTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Manage RAG sources: add a file or directory, remove a source, or list all indexed sources. After add/remove, rebuild the RAG pipeline from the updated registry.".to_string(),
+            description: "Manage RAG sources: add a file or directory, remove a source, or list all indexed sources. Changes are persisted directly.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
