@@ -5,7 +5,9 @@
 //! directly because the visibility is `pub(crate)` within the `pipeline`
 //! parent module.
 
+use crate::domain::rag::ChunkingOptions;
 use crate::rag::{Chunk, DocumentStore, TurboIndex};
+use super::builder::RagPipelineBuilder;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -37,6 +39,8 @@ pub struct RagPipeline {
     /// File extensions to index when walking directories. `None` uses the
     /// built-in default set (see [`crate::rag::loader::DEFAULT_EXTENSIONS`]).
     pub(crate) supported_extensions: Option<HashSet<String>>,
+    /// Chunking configuration (chunk size + overlap).
+    pub(crate) chunking: ChunkingOptions,
 }
 
 impl RagPipeline {
@@ -51,6 +55,14 @@ impl RagPipeline {
             turbo,
             pending: Vec::new(),
             supported_extensions,
+            chunking: ChunkingOptions::default(),
         }
+    }
+
+    /// Create a [`RagPipelineBuilder`] for constructing a pipeline with a
+    /// fluent API. This is the recommended entry point for creating a
+    /// [`RagPipeline`].
+    pub fn builder() -> RagPipelineBuilder {
+        RagPipelineBuilder::new()
     }
 }

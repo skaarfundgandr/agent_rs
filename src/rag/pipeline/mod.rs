@@ -2,9 +2,8 @@
 //! [`crate::rag::index::TurboIndex`], and the loaders/splitters/embedders from the other
 //! `rag` submodules.
 //!
-//! Use [`RagPipeline::open_or_create`] at startup to load existing artifacts
-//! (or initialise empty ones), then [`RagPipeline::add_source`] /
-//! [`RagPipeline::remove_source`] to manage indexed content at runtime.
+//! Use [`RagPipeline::builder()`] at startup to construct a pipeline,
+//! then use the returned [`BuiltRag`] to manage indexed content at runtime.
 //!
 //! Implementation is split across sibling modules grouped by concern:
 //!
@@ -14,9 +13,11 @@
 //! - `walker` — directory walking for `add_directory`
 //! - `ingest` — `add_source`, `add_directory`, `remove_source`
 //! - `staging` — lower-level builder API (`add_chunks`, `commit_pending`)
+//! - `builder` — public builder API (`RagPipelineBuilder`, `BuiltRag`, `RagIndexer`)
 
 #![cfg(feature = "rag")]
 
+mod builder;
 mod ingest;
 mod lifecycle;
 mod staging;
@@ -25,3 +26,4 @@ mod sync;
 mod walker;
 
 pub use state::RagPipeline;
+pub use builder::{BuiltRag, RagIndexer, RagPipelineBuilder};

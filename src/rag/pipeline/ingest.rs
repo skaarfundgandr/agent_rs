@@ -63,7 +63,7 @@ impl RagPipeline {
             .cloned()
             .unwrap_or_else(|| "txt".to_string());
 
-        let splitter = WordSplitter::default();
+        let splitter = WordSplitter::new(self.chunking.chunk_words, self.chunking.chunk_overlap_words);
         let chunks = splitter.split(&document);
         if chunks.is_empty() {
             bail!("source {:?} produced no chunks", path);

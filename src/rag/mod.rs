@@ -21,7 +21,7 @@ pub use alias::{QueryFuture, TextsFuture};
 pub use embedder::ErasedEmbedder;
 pub use index::TurboIndex;
 pub use loader::{DocumentLoader, PdfLoader, TextLoader};
-pub use pipeline::RagPipeline;
+pub use pipeline::{BuiltRag, RagIndexer, RagPipeline, RagPipelineBuilder};
 pub use splitter::{TextSplitter, WordSplitter};
 pub use store::{DocumentStore, RagChunkRow};
 pub use vector_index::TurboVectorIndex;

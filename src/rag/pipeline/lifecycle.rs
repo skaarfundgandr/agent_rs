@@ -14,7 +14,7 @@ impl RagPipeline {
     ///
     /// Used by `open_or_create` and tests that want full control. Most
     /// users should call [`Self::open_or_create`].
-    pub fn from_parts(
+    pub(crate) fn from_parts(
         store: Arc<DocumentStore>,
         turbo: Arc<RwLock<TurboIndex>>,
         supported_extensions: Option<HashSet<String>>,
@@ -33,7 +33,7 @@ impl RagPipeline {
     ///
     /// `embedding_dim` and `bit_width` are required when creating a fresh
     /// index; they're ignored when loading.
-    pub async fn open_or_create(
+    pub(crate) async fn open_or_create(
         db_path: &Path,
         index_path: &Path,
         embedding_dim: usize,
