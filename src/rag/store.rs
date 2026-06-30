@@ -40,7 +40,11 @@ impl DocumentStore {
                     chunk_index INTEGER NOT NULL,
                     content TEXT NOT NULL
                 );
-                CREATE INDEX IF NOT EXISTS idx_source ON rag_chunks(source);",
+                CREATE INDEX IF NOT EXISTS idx_source ON rag_chunks(source);
+                CREATE TABLE IF NOT EXISTS rag_sources (
+                    path TEXT PRIMARY KEY,
+                    source_type TEXT NOT NULL
+                );",
             )?;
             Ok(())
         })
@@ -175,5 +179,50 @@ impl DocumentStore {
             })
             .await
             .context("failed to list RAG sources")
+    }
+
+    /// Persist a registered source path and its type.
+    pub async fn insert_source(&self, path: &str, source_type: &str) -> Result<()> {
+        let path = path.to_string();
+        let source_type = source_type.to_string();
+        self.conn
+            .call(move |conn| {
+                conn.execute(
+                    "INSERT OR REPLACE INTO rag_sources (path, source_type) VALUES (?1, ?2)",
+                    [&path, &source_type],
+                )?;
+                Ok(())
+            })
+            .await
+            .context("failed to insert RAG source")
+    }
+
+    /// Remove a registered source path.
+    pub async fn delete_source(&self, path: &str) -> Result<()> {
+        let path = path.to_string();
+        self.conn
+            .call(move |conn| {
+                conn.execute("DELETE FROM rag_sources WHERE path = ?1", [&path])?;
+                Ok(())
+            })
+            .await
+            .context("failed to delete RAG source")
+    }
+
+    /// List all registered sources with their types.
+    pub async fn list_sources_with_types(&self) -> Result<Vec<(String, String)>> {
+        self.conn
+            .call(|conn| {
+                let mut stmt =
+                    conn.prepare("SELECT path, source_type FROM rag_sources ORDER BY path")?;
+                let sources = stmt
+                    .query_map([], |row| {
+                        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                    })?
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                Ok(sources)
+            })
+            .await
+            .context("failed to list registered RAG sources")
     }
 }
