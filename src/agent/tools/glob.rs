@@ -5,8 +5,37 @@ use crate::security::validate_sandboxed_path_shared;
 use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
+
+/// Validate a glob match path: skip symlinks, enforce sandbox, normalize,
+/// and insert into `seen`/`matches` if new. Returns `true` if the match
+/// limit has been reached.
+fn collect_glob_match(
+    path: &Path,
+    root: &Path,
+    sandbox: &SharedSandbox,
+    seen: &mut HashSet<String>,
+    matches: &mut Vec<String>,
+    max_results: usize,
+) -> Result<bool, std::io::Error> {
+    if let Ok(meta) = std::fs::symlink_metadata(path)
+        && meta.file_type().is_symlink()
+    {
+        return Ok(matches.len() >= max_results);
+    }
+    validate_sandboxed_path_shared(sandbox, path)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string()))?;
+
+    let relative = path.strip_prefix(root).unwrap_or(path);
+    let normalized = relative.to_string_lossy().replace('\\', "/");
+
+    if seen.insert(normalized.clone()) {
+        matches.push(normalized);
+    }
+    Ok(matches.len() >= max_results)
+}
 
 /// Arguments for the `glob_search` tool.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -118,7 +147,7 @@ impl Tool for GlobSearchTool {
         };
 
         let mut matches = Vec::new();
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = HashSet::new();
         let max_results = 100;
 
         if let Some(dir_path) = dir_path {
@@ -134,32 +163,21 @@ impl Tool for GlobSearchTool {
                 let path = entry.map_err(|e| {
                     std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
                 })?;
-
-                // Skip symlinks and validate sandbox containment
-                if let Ok(meta) = std::fs::symlink_metadata(&path)
-                    && meta.file_type().is_symlink()
-                {
-                    continue;
-                }
-                validate_sandboxed_path_shared(&self.sandbox, &path).map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
-                })?;
-
-                let relative = path.strip_prefix(&dir_path).unwrap_or(&path);
-                let display = relative.to_string_lossy().into_owned();
-                let normalized = display.replace('\\', "/");
-
-                if seen.insert(normalized.clone()) {
-                    matches.push(normalized);
-                    if matches.len() >= max_results {
-                        break;
-                    }
+                if collect_glob_match(
+                    &path,
+                    &dir_path,
+                    &self.sandbox,
+                    &mut seen,
+                    &mut matches,
+                    max_results,
+                )? {
+                    break;
                 }
             }
         } else {
             // No directory specified — search from all sandbox roots
             let snapshot = self.sandbox.snapshot();
-            for canonical_root in snapshot.canonical_roots() {
+            'roots: for canonical_root in snapshot.canonical_roots() {
                 let full_pattern = canonical_root.join(pattern);
                 let pattern_str = full_pattern.to_string_lossy();
 
@@ -171,35 +189,16 @@ impl Tool for GlobSearchTool {
                     let path = entry.map_err(|e| {
                         std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
                     })?;
-
-                    // Skip symlinks and validate sandbox containment
-                    if let Ok(meta) = std::fs::symlink_metadata(&path)
-                        && meta.file_type().is_symlink()
-                    {
-                        continue;
+                    if collect_glob_match(
+                        &path,
+                        canonical_root,
+                        &self.sandbox,
+                        &mut seen,
+                        &mut matches,
+                        max_results,
+                    )? {
+                        break 'roots;
                     }
-                    validate_sandboxed_path_shared(&self.sandbox, &path).map_err(|e| {
-                        std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
-                    })?;
-
-                    let relative = path.strip_prefix(canonical_root).unwrap_or(&path);
-                    let display = relative.to_string_lossy().into_owned();
-                    let normalized = display.replace('\\', "/");
-
-                    if seen.insert(normalized.clone()) {
-                        matches.push(normalized);
-                        if matches.len() >= max_results {
-                            break;
-                        }
-                    }
-
-                    if matches.len() >= max_results {
-                        break;
-                    }
-                }
-
-                if matches.len() >= max_results {
-                    break;
                 }
             }
         }

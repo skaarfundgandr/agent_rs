@@ -14,6 +14,23 @@ use super::emitter::ReActSpanEmitter;
 
 pub use super::built_methods::emit_internal_tool_callbacks;
 
+/// Emit a `NoToolCallsAndNoFinalAnswer` error via callbacks and span emitter,
+/// then return the error. Extracted to deduplicate the two call sites in `run_loop`.
+fn emit_no_tool_calls_error(
+    cycle: usize,
+    on_error: &Option<ErrorCb>,
+    span_emitter: &Arc<dyn ReActSpanEmitter>,
+    trace: &ReActTrace,
+) -> ReActError {
+    let err = ReActError::NoToolCallsAndNoFinalAnswer { cycle };
+    if let Some(cb) = on_error {
+        cb(&err);
+    }
+    span_emitter.emit_error(&err);
+    span_emitter.emit_cycle_end(cycle, trace);
+    err
+}
+
 /// A fully configured ReAct agent, ready to run prompts and chats.
 ///
 /// Constructed by calling [`.build()`](super::ReActBuilder::build) on a
@@ -134,13 +151,12 @@ where
                         no_assistant_retried = true;
                         continue;
                     }
-                    let err = ReActError::NoToolCallsAndNoFinalAnswer { cycle };
-                    if let Some(cb) = on_error {
-                        cb(&err);
-                    }
-                    span_emitter.emit_error(&err);
-                    span_emitter.emit_cycle_end(cycle, &trace);
-                    return Err(err);
+                    return Err(emit_no_tool_calls_error(
+                        cycle,
+                        on_error,
+                        span_emitter,
+                        &trace,
+                    ));
                 }
             };
 
@@ -153,13 +169,12 @@ where
                     empty_output_retried = true;
                     continue;
                 }
-                let err = ReActError::NoToolCallsAndNoFinalAnswer { cycle };
-                if let Some(cb) = on_error {
-                    cb(&err);
-                }
-                span_emitter.emit_error(&err);
-                span_emitter.emit_cycle_end(cycle, &trace);
-                return Err(err);
+                return Err(emit_no_tool_calls_error(
+                    cycle,
+                    on_error,
+                    span_emitter,
+                    &trace,
+                ));
             }
             let _fa = super::assistant_parse::emit_final_answer_from_output(
                 text,

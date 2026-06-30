@@ -8,9 +8,6 @@ use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::memory::ContextManager;
 use crate::agent::react::Compact;
-use crate::agent::state::checkpoint::{
-    AgentCheckpoint, CURRENT_SCHEMA_VERSION, CheckpointMetadata, now_timestamp,
-};
 use crate::domain::agent::{Action, Observation, ReActStep, ReActTrace};
 
 use super::built::BuiltReAct;
@@ -48,34 +45,6 @@ where
     /// Return the optional ReAct preamble string.
     pub fn react_preamble(&self) -> Option<&str> {
         self.react_preamble.as_deref()
-    }
-
-    /// Snapshot the current conversation state into an [`AgentCheckpoint`].
-    ///
-    /// `phase` is an application-defined label (e.g. `"research"`, `"draft"`).
-    /// `cycles_completed` should come from the application's cycle counter
-    /// (the library does not store this on `BuiltReAct`).
-    ///
-    /// `compacted_context` is left `None` because it is application-managed:
-    /// populate it after calling this method if your app tracks a separate
-    /// summary string.
-    pub fn to_checkpoint(
-        &self,
-        history: &[Message],
-        phase: &str,
-        cycles_completed: usize,
-    ) -> AgentCheckpoint {
-        AgentCheckpoint {
-            history: history.to_vec(),
-            compacted_context: None,
-            phase: phase.to_string(),
-            partial_results: std::collections::HashMap::new(),
-            metadata: CheckpointMetadata {
-                created_at: now_timestamp(),
-                cycles_completed,
-                schema_version: CURRENT_SCHEMA_VERSION,
-            },
-        }
     }
 }
 
