@@ -6,11 +6,14 @@ use rig_core::agent::{AgentBuilder, StreamingPromptRequest};
 use rig_core::completion::{
     CompletionError, CompletionModel, CompletionRequest, CompletionResponse, Usage,
 };
-use rig_core::message::{AssistantContent, ToolCall, ToolFunction};
+use rig_core::message::{AssistantContent, Message, ToolCall, ToolFunction, UserContent};
 use rig_core::streaming::{RawStreamingChoice, StreamingChat, StreamingCompletionResponse};
 use rig_core::tool::Tool;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
+
+use agent_rs::agent::ReActExt;
+use agent_rs::agent::react::BuiltReAct;
 
 /// A deterministic mock [`CompletionModel`] that returns canned responses from a queue.
 ///
@@ -217,4 +220,73 @@ pub fn mock_agent(responses: Vec<MockResponse>) -> rig_core::agent::Agent<MockCo
         .tool(EchoTool)
         .default_max_turns(1)
         .build()
+}
+
+pub fn react_with_responses(
+    responses: Vec<MockResponse>,
+) -> BuiltReAct<MockCompletionModel, (), ()> {
+    let agent = mock_agent(responses);
+    agent.react().build()
+}
+
+pub fn react_with_responses_compact(
+    responses: Vec<MockResponse>,
+    threshold: usize,
+) -> BuiltReAct<MockCompletionModel, (), rig_core::agent::Agent<MockCompletionModel, ()>> {
+    let agent = mock_agent(responses);
+    agent.react().with_compaction().threshold(threshold).build()
+}
+
+pub fn mock_history(msgs: &[&str]) -> Vec<Message> {
+    msgs.iter()
+        .map(|&text| Message::User {
+            content: OneOrMany::one(UserContent::text(text)),
+        })
+        .collect()
+}
+
+#[cfg(feature = "rag")]
+pub async fn rag_pipeline(tmp: &tempfile::TempDir) -> agent_rs::rag::BuiltRag {
+    agent_rs::rag::RagPipeline::builder()
+        .embedder(agent_rs::agent::embeddings::EmbeddingService::new(
+            RagMockEmbeddingModel,
+        ))
+        .store_at(tmp.path())
+        .build()
+        .await
+        .unwrap()
+}
+
+#[cfg(feature = "rag")]
+#[derive(Clone)]
+struct RagMockEmbeddingModel;
+
+#[cfg(feature = "rag")]
+impl rig_core::embeddings::EmbeddingModel for RagMockEmbeddingModel {
+    const MAX_DOCUMENTS: usize = 8;
+    type Client = ();
+
+    fn make(_: &Self::Client, _: impl Into<String>, _: Option<usize>) -> Self {
+        Self
+    }
+
+    fn ndims(&self) -> usize {
+        8
+    }
+
+    async fn embed_texts(
+        &self,
+        texts: impl IntoIterator<Item = String> + Send,
+    ) -> std::result::Result<
+        Vec<rig_core::embeddings::Embedding>,
+        rig_core::embeddings::EmbeddingError,
+    > {
+        Ok(texts
+            .into_iter()
+            .map(|text| rig_core::embeddings::Embedding {
+                document: text.clone(),
+                vec: vec![text.len() as f64, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            })
+            .collect())
+    }
 }

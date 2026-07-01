@@ -6,9 +6,10 @@ mod common;
 use agent_rs::agent::ReActExt;
 use agent_rs::agent::react::{ReActSpanEmitter, recover_turn_limit_history};
 use agent_rs::domain::errors::ReActError;
+use common::mock_history;
 use rig_core::client::CompletionClient;
 use rig_core::completion::request::PromptError;
-use rig_core::message::{Message, UserContent};
+use rig_core::message::Message;
 use std::time::Duration;
 
 // ---------------------------------------------------------------------------
@@ -154,14 +155,6 @@ fn test_observation_is_error_on_wrong_tool_name() {
 // Turn-limit recovery tests
 // ---------------------------------------------------------------------------
 
-/// Build a simple user turn `Message` (mirrors how the ReAct loop constructs
-/// the effective prompt).
-fn user_msg(text: &str) -> Message {
-    Message::User {
-        content: rig_core::OneOrMany::one(UserContent::text(text)),
-    }
-}
-
 /// `recover_turn_limit_history` must extract the partial progress carried by a
 /// `MaxTurnsError`. This is the data the pre-fix code discarded, causing the
 /// "hard stuck" loop where each cycle re-sent an identical request.
@@ -170,8 +163,11 @@ fn recover_turn_limit_history_extracts_partial_progress() {
     // In rig-core's `MaxTurnsError`, `chat_history` is `build_full_history`
     // — i.e. the snapshot + the cycle's prompt + progress, with the final
     // pending message as its last element (mirrored by the `prompt` field).
-    let snapshot = vec![user_msg("snapshot-1"), user_msg("snapshot-2")];
-    let prompt = user_msg("pending tool result");
+    let snapshot = mock_history(&["snapshot-1", "snapshot-2"]);
+    let prompt = mock_history(&["pending tool result"])
+        .into_iter()
+        .next()
+        .unwrap();
     let mut full_history = snapshot.clone();
     full_history.push(prompt.clone());
     let err = PromptError::MaxTurnsError {

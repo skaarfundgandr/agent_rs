@@ -40,6 +40,24 @@ fn make_test_agent() -> rig_core::agent::Agent<
         .build()
 }
 
+fn make_obs_callback(observations: &Arc<Mutex<Vec<Observation>>>) -> Option<ObservationCb> {
+    let obs = Arc::clone(observations);
+    Some(Arc::new(move |o| obs.lock().unwrap().push(o.clone())))
+}
+
+fn make_tool_call_msg(call_id: &str, name: &str, args: serde_json::Value) -> Message {
+    Message::Assistant {
+        id: None,
+        content: OneOrMany::one(AssistantContent::ToolCall(ToolCall::new(
+            call_id.to_string(),
+            ToolFunction {
+                name: name.to_string(),
+                arguments: args,
+            },
+        ))),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -252,10 +270,7 @@ fn internal_tool_turns_emit_callbacks() {
         actions_clone.lock().unwrap().push(a.clone())
     }));
 
-    let observations_clone = Arc::clone(&observations);
-    let on_observation: Option<ObservationCb> = Some(Arc::new(move |o| {
-        observations_clone.lock().unwrap().push(o.clone())
-    }));
+    let on_observation = make_obs_callback(&observations);
 
     let messages = vec![
         // Initial user prompt.
@@ -263,16 +278,12 @@ fn internal_tool_turns_emit_callbacks() {
             content: OneOrMany::one(UserContent::text("read a file")),
         },
         // First assistant turn: tool call executed internally by rig-core.
-        Message::Assistant {
-            id: None,
-            content: OneOrMany::one(AssistantContent::ToolCall(ToolCall::new(
-                "tc-1".to_string(),
-                ToolFunction {
-                    name: "read_file".to_string(),
-                    arguments: serde_json::json!({"path": "README.md"}),
-                },
-            ))),
-        },
+        make_tool_call_msg(
+            "tc-1",
+            "read_file",
+            serde_json::json!({"path": "README.md"}),
+        ),
+        // Corresponding tool result.
         // Corresponding tool result.
         Message::User {
             content: OneOrMany::one(UserContent::ToolResult(rig_core::message::ToolResult {
@@ -325,10 +336,7 @@ fn internal_tool_turns_emit_callbacks() {
 #[test]
 fn internal_tool_callbacks_skip_leading_prompt_tool_result() {
     let observations = Arc::new(Mutex::new(Vec::<Observation>::new()));
-    let observations_clone = Arc::clone(&observations);
-    let on_observation: Option<ObservationCb> = Some(Arc::new(move |o| {
-        observations_clone.lock().unwrap().push(o.clone())
-    }));
+    let on_observation = make_obs_callback(&observations);
 
     // First message is the prompt for this `agent.prompt()` call, modelled as
     // a tool result from the previous cycle.
@@ -340,16 +348,11 @@ fn internal_tool_callbacks_skip_leading_prompt_tool_result() {
                 content: OneOrMany::one(ToolResultContent::text("previous result")),
             })),
         },
-        Message::Assistant {
-            id: None,
-            content: OneOrMany::one(AssistantContent::ToolCall(ToolCall::new(
-                "tc-1".to_string(),
-                ToolFunction {
-                    name: "read_file".to_string(),
-                    arguments: serde_json::json!({"path": "README.md"}),
-                },
-            ))),
-        },
+        make_tool_call_msg(
+            "tc-1",
+            "read_file",
+            serde_json::json!({"path": "README.md"}),
+        ),
         Message::User {
             content: OneOrMany::one(UserContent::ToolResult(rig_core::message::ToolResult {
                 id: "tc-1".to_string(),

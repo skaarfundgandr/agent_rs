@@ -12,6 +12,18 @@ use std::collections::HashSet;
 use std::fs;
 use std::sync::Arc;
 
+fn make_multi_root_sandbox() -> (tempfile::TempDir, tempfile::TempDir, Arc<SharedSandbox>) {
+    let primary = tempfile::tempdir().unwrap();
+    let secondary = tempfile::tempdir().unwrap();
+    let sandbox = Arc::new(SharedSandbox::from(
+        SandboxConfig::new(vec![
+            primary.path().to_path_buf(),
+            secondary.path().to_path_buf(),
+        ])
+        .unwrap(),
+    ));
+    (primary, secondary, sandbox)
+}
 #[tokio::test]
 async fn test_read_txt() {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -472,16 +484,7 @@ async fn test_glob_search_sandbox_escape() {
 
 #[tokio::test]
 async fn test_multi_root_read_from_secondary() {
-    let primary = tempfile::tempdir().unwrap();
-    let secondary = tempfile::tempdir().unwrap();
-
-    let sandbox = Arc::new(SharedSandbox::from(
-        SandboxConfig::new(vec![
-            primary.path().to_path_buf(),
-            secondary.path().to_path_buf(),
-        ])
-        .unwrap(),
-    ));
+    let (primary, secondary, sandbox) = make_multi_root_sandbox();
 
     // File lives in secondary root
     fs::write(secondary.path().join("shared.txt"), "from secondary").unwrap();
@@ -501,16 +504,7 @@ async fn test_multi_root_read_from_secondary() {
 
 #[tokio::test]
 async fn test_multi_root_write_to_primary() {
-    let primary = tempfile::tempdir().unwrap();
-    let secondary = tempfile::tempdir().unwrap();
-
-    let sandbox = Arc::new(SharedSandbox::from(
-        SandboxConfig::new(vec![
-            primary.path().to_path_buf(),
-            secondary.path().to_path_buf(),
-        ])
-        .unwrap(),
-    ));
+    let (primary, secondary, sandbox) = make_multi_root_sandbox();
 
     let tool = WriteDocumentTool::new(
         Arc::clone(&sandbox),
@@ -536,16 +530,7 @@ async fn test_multi_root_write_to_primary() {
 #[tokio::test]
 async fn test_multi_root_escape_rejected() {
     // See `test_sandbox_escape_read` for the rationale.
-    let primary = tempfile::tempdir().unwrap();
-    let secondary = tempfile::tempdir().unwrap();
-
-    let sandbox = Arc::new(SharedSandbox::from(
-        SandboxConfig::new(vec![
-            primary.path().to_path_buf(),
-            secondary.path().to_path_buf(),
-        ])
-        .unwrap(),
-    ));
+    let (primary, secondary, sandbox) = make_multi_root_sandbox();
 
     let tool = ReadDocumentTool::new(
         Arc::clone(&sandbox),
@@ -571,19 +556,10 @@ async fn test_multi_root_escape_rejected() {
 
 #[tokio::test]
 async fn test_multi_root_list_directory() {
-    let primary = tempfile::tempdir().unwrap();
-    let secondary = tempfile::tempdir().unwrap();
+    let (primary, secondary, sandbox) = make_multi_root_sandbox();
 
     fs::write(primary.path().join("primary.txt"), "p").unwrap();
     fs::write(secondary.path().join("secondary.txt"), "s").unwrap();
-
-    let sandbox = Arc::new(SharedSandbox::from(
-        SandboxConfig::new(vec![
-            primary.path().to_path_buf(),
-            secondary.path().to_path_buf(),
-        ])
-        .unwrap(),
-    ));
 
     let tool = ListDirectoryTool::new(Arc::clone(&sandbox), PermissionPolicy::AllowAll);
 
@@ -604,19 +580,10 @@ async fn test_multi_root_list_directory() {
 
 #[tokio::test]
 async fn test_multi_root_grep() {
-    let primary = tempfile::tempdir().unwrap();
-    let secondary = tempfile::tempdir().unwrap();
+    let (primary, secondary, sandbox) = make_multi_root_sandbox();
 
     fs::write(primary.path().join("main.txt"), "Hello from primary").unwrap();
     fs::write(secondary.path().join("docs.txt"), "Hello from secondary").unwrap();
-
-    let sandbox = Arc::new(SharedSandbox::from(
-        SandboxConfig::new(vec![
-            primary.path().to_path_buf(),
-            secondary.path().to_path_buf(),
-        ])
-        .unwrap(),
-    ));
 
     let allowed = HashSet::from(["txt"].map(String::from));
     let tool = GrepSearchTool::new(Arc::clone(&sandbox), allowed, PermissionPolicy::AllowAll);
@@ -635,19 +602,10 @@ async fn test_multi_root_grep() {
 
 #[tokio::test]
 async fn test_multi_root_grep_from_secondary() {
-    let primary = tempfile::tempdir().unwrap();
-    let secondary = tempfile::tempdir().unwrap();
+    let (primary, secondary, sandbox) = make_multi_root_sandbox();
 
     fs::write(primary.path().join("main.txt"), "Hello from primary").unwrap();
     fs::write(secondary.path().join("docs.txt"), "Hello from secondary").unwrap();
-
-    let sandbox = Arc::new(SharedSandbox::from(
-        SandboxConfig::new(vec![
-            primary.path().to_path_buf(),
-            secondary.path().to_path_buf(),
-        ])
-        .unwrap(),
-    ));
 
     let allowed = HashSet::from(["txt"].map(String::from));
     let tool = GrepSearchTool::new(Arc::clone(&sandbox), allowed, PermissionPolicy::AllowAll);
@@ -665,19 +623,10 @@ async fn test_multi_root_grep_from_secondary() {
 
 #[tokio::test]
 async fn test_multi_root_glob_across_roots() {
-    let primary = tempfile::tempdir().unwrap();
-    let secondary = tempfile::tempdir().unwrap();
+    let (primary, secondary, sandbox) = make_multi_root_sandbox();
 
     fs::write(primary.path().join("a.txt"), "hello").unwrap();
     fs::write(secondary.path().join("b.txt"), "world").unwrap();
-
-    let sandbox = Arc::new(SharedSandbox::from(
-        SandboxConfig::new(vec![
-            primary.path().to_path_buf(),
-            secondary.path().to_path_buf(),
-        ])
-        .unwrap(),
-    ));
 
     let tool = GlobSearchTool::new(Arc::clone(&sandbox), PermissionPolicy::AllowAll);
 
@@ -694,15 +643,7 @@ async fn test_multi_root_glob_across_roots() {
 #[tokio::test]
 async fn test_multi_root_glob_escape_rejected() {
     let primary = tempfile::tempdir().unwrap();
-    let secondary = tempfile::tempdir().unwrap();
-
-    let sandbox = Arc::new(SharedSandbox::from(
-        SandboxConfig::new(vec![
-            primary.path().to_path_buf(),
-            secondary.path().to_path_buf(),
-        ])
-        .unwrap(),
-    ));
+    let (primary, secondary, sandbox) = make_multi_root_sandbox();
 
     let tool = GlobSearchTool::new(Arc::clone(&sandbox), PermissionPolicy::AllowAll);
 

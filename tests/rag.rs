@@ -1,8 +1,12 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg(feature = "rag")]
 
+#[path = "common/mod.rs"]
+mod common;
+
 use agent_rs::agent::embeddings::EmbeddingService;
 use agent_rs::rag::{DocumentLoader, RagPipeline, TextLoader, TextSplitter, WordSplitter};
+use common::rag_pipeline;
 use rig_core::embeddings::{Embedding, EmbeddingModel};
 use std::fs;
 use std::result::Result as StdResult;
@@ -71,8 +75,6 @@ async fn pipeline_add_source_and_search() {
     use rig_core::vector_store::request::VectorSearchRequest;
 
     let dir = tempfile::tempdir().unwrap();
-    let db = dir.path().join("rag.db");
-    let idx = dir.path().join("rag.tvim");
     let file = dir.path().join("doc.txt");
     fs::write(
         &file,
@@ -80,13 +82,7 @@ async fn pipeline_add_source_and_search() {
     )
     .unwrap();
 
-    let rag = agent_rs::rag::RagPipeline::builder()
-        .embedder(EmbeddingService::new(MockEmbeddingModel))
-        .db_path(&db)
-        .index_path(&idx)
-        .build()
-        .await
-        .unwrap();
+    let rag = rag_pipeline(&dir).await;
     let embedder = EmbeddingService::new(MockEmbeddingModel);
     let added = rag
         .indexer
@@ -110,18 +106,10 @@ async fn pipeline_add_source_and_search() {
 #[tokio::test]
 async fn pipeline_remove_source_clears_store_and_index() {
     let dir = tempfile::tempdir().unwrap();
-    let db = dir.path().join("rag.db");
-    let idx = dir.path().join("rag.tvim");
     let file = dir.path().join("removable.txt");
     fs::write(&file, "alpha beta gamma delta epsilon zeta eta theta").unwrap();
 
-    let rag = RagPipeline::builder()
-        .embedder(EmbeddingService::new(MockEmbeddingModel))
-        .db_path(&db)
-        .index_path(&idx)
-        .build()
-        .await
-        .unwrap();
+    let rag = rag_pipeline(&dir).await;
     let embedder = EmbeddingService::new(MockEmbeddingModel);
     rag.indexer
         .pipeline()
@@ -147,39 +135,29 @@ async fn pipeline_save_and_reopen_preserves_chunks() {
     use rig_core::vector_store::request::VectorSearchRequest;
 
     let dir = tempfile::tempdir().unwrap();
-    let db = dir.path().join("rag.db");
-    let idx = dir.path().join("rag.tvim");
     let file = dir.path().join("persist.txt");
     fs::write(&file, "one two three four five six seven eight nine ten").unwrap();
 
     // First session: add + save.
     {
-        let rag = RagPipeline::builder()
-            .embedder(EmbeddingService::new(MockEmbeddingModel))
-            .db_path(&db)
-            .index_path(&idx)
-            .build()
-            .await
-            .unwrap();
+        let rag = rag_pipeline(&dir).await;
         let embedder = EmbeddingService::new(MockEmbeddingModel);
         rag.indexer
             .pipeline()
             .add_source(&file, &embedder)
             .await
             .unwrap();
-        rag.indexer.pipeline().save(&idx).await.unwrap();
-        assert!(db.exists());
-        assert!(idx.exists());
+        rag.indexer
+            .pipeline()
+            .save(&dir.path().join("rag.tvim"))
+            .await
+            .unwrap();
+        assert!(dir.path().join("rag.db").exists());
+        assert!(dir.path().join("rag.tvim").exists());
     }
 
     // Second session: reopen and verify.
-    let rag2 = RagPipeline::builder()
-        .embedder(EmbeddingService::new(MockEmbeddingModel))
-        .db_path(&db)
-        .index_path(&idx)
-        .build()
-        .await
-        .unwrap();
+    let rag2 = rag_pipeline(&dir).await;
     assert!(rag2.indexer.chunk_count().await.unwrap() > 0);
 
     let req = VectorSearchRequest::builder()
@@ -246,8 +224,6 @@ async fn pipeline_commit_pending_persists_staged_chunks() {
 #[tokio::test]
 async fn pipeline_add_source_walks_directory() {
     let dir = tempfile::tempdir().unwrap();
-    let db = dir.path().join("rag.db");
-    let idx = dir.path().join("rag.tvim");
 
     // Create a subdirectory with multiple text files.
     let sub = dir.path().join("docs");
@@ -268,13 +244,7 @@ async fn pipeline_add_source_walks_directory() {
     )
     .unwrap();
 
-    let rag = RagPipeline::builder()
-        .embedder(EmbeddingService::new(MockEmbeddingModel))
-        .db_path(&db)
-        .index_path(&idx)
-        .build()
-        .await
-        .unwrap();
+    let rag = rag_pipeline(&dir).await;
     let embedder = EmbeddingService::new(MockEmbeddingModel);
     let added = rag
         .indexer
@@ -291,8 +261,6 @@ async fn pipeline_add_source_walks_directory() {
 #[tokio::test]
 async fn pipeline_add_source_dir_skips_unsupported_extensions() {
     let dir = tempfile::tempdir().unwrap();
-    let db = dir.path().join("rag.db");
-    let idx = dir.path().join("rag.tvim");
 
     let sub = dir.path().join("mixed");
     fs::create_dir(&sub).unwrap();
@@ -304,13 +272,7 @@ async fn pipeline_add_source_dir_skips_unsupported_extensions() {
     fs::write(sub.join("skip.csv"), "col1,col2,col3").unwrap();
     fs::write(sub.join("also_skip.json"), r#"{"key": "value"}"#).unwrap();
 
-    let rag = RagPipeline::builder()
-        .embedder(EmbeddingService::new(MockEmbeddingModel))
-        .db_path(&db)
-        .index_path(&idx)
-        .build()
-        .await
-        .unwrap();
+    let rag = rag_pipeline(&dir).await;
     let embedder = EmbeddingService::new(MockEmbeddingModel);
     let added = rag
         .indexer
@@ -360,8 +322,6 @@ async fn pipeline_add_source_dir_respects_custom_extensions() {
 #[tokio::test]
 async fn pipeline_add_source_dir_skips_hidden_files() {
     let dir = tempfile::tempdir().unwrap();
-    let db = dir.path().join("rag.db");
-    let idx = dir.path().join("rag.tvim");
 
     let sub = dir.path().join("hidden");
     fs::create_dir(&sub).unwrap();
@@ -372,13 +332,7 @@ async fn pipeline_add_source_dir_skips_hidden_files() {
     .unwrap();
     fs::write(sub.join(".hidden.txt"), "secret hidden content here").unwrap();
 
-    let rag = RagPipeline::builder()
-        .embedder(EmbeddingService::new(MockEmbeddingModel))
-        .db_path(&db)
-        .index_path(&idx)
-        .build()
-        .await
-        .unwrap();
+    let rag = rag_pipeline(&dir).await;
     let embedder = EmbeddingService::new(MockEmbeddingModel);
     let added = rag
         .indexer
@@ -395,19 +349,11 @@ async fn pipeline_add_source_dir_skips_hidden_files() {
 #[tokio::test]
 async fn pipeline_add_source_dir_errors_on_empty_directory() {
     let dir = tempfile::tempdir().unwrap();
-    let db = dir.path().join("rag.db");
-    let idx = dir.path().join("rag.tvim");
 
     let sub = dir.path().join("empty");
     fs::create_dir(&sub).unwrap();
 
-    let rag = RagPipeline::builder()
-        .embedder(EmbeddingService::new(MockEmbeddingModel))
-        .db_path(&db)
-        .index_path(&idx)
-        .build()
-        .await
-        .unwrap();
+    let rag = rag_pipeline(&dir).await;
     let embedder = EmbeddingService::new(MockEmbeddingModel);
     let err = rag.indexer.pipeline().add_source(&sub, &embedder).await;
 
@@ -418,8 +364,6 @@ async fn pipeline_add_source_dir_errors_on_empty_directory() {
 #[tokio::test]
 async fn pipeline_add_source_dir_nested_walks_recursively() {
     let dir = tempfile::tempdir().unwrap();
-    let db = dir.path().join("rag.db");
-    let idx = dir.path().join("rag.tvim");
 
     // Create nested directory structure.
     let sub = dir.path().join("nested");
@@ -436,13 +380,7 @@ async fn pipeline_add_source_dir_nested_walks_recursively() {
     )
     .unwrap();
 
-    let rag = RagPipeline::builder()
-        .embedder(EmbeddingService::new(MockEmbeddingModel))
-        .db_path(&db)
-        .index_path(&idx)
-        .build()
-        .await
-        .unwrap();
+    let rag = rag_pipeline(&dir).await;
     let embedder = EmbeddingService::new(MockEmbeddingModel);
     let added = rag
         .indexer
