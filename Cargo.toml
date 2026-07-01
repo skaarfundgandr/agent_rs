@@ -1,6 +1,6 @@
 [package]
 name = "agent_rs"
-version = "0.7.0"
+version = "0.7.1"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/skaarfundgandr/agent_rs"
@@ -88,4 +88,3 @@ name = "multi_agent_coder"
 
 [[example]]
 name = "db_assistant"
-
