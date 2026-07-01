@@ -92,12 +92,6 @@ impl ToolDyn for RegisteredMcpTool {
                         DocumentError::PermissionDenied(format!("MCP tool {tool_name}: {reason}"));
                     return Err(ToolError::ToolCallError(Box::new(err)));
                 }
-                PermissionResult::DeferToUser => {
-                    let err = DocumentError::PermissionDenied(format!(
-                        "MCP tool {tool_name}: defer-to-user not yet supported"
-                    ));
-                    return Err(ToolError::ToolCallError(Box::new(err)));
-                }
             }
             drop(_guard);
             self.inner.call(args_owned).await

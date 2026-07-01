@@ -4,7 +4,7 @@ use std::cmp::max;
 
 use anyhow::{Context, Result, bail};
 use rig_core::embeddings::{Embedding, EmbeddingModel, embed::to_texts};
-use rig_core::{Embed, OneOrMany, client::EmbeddingsClient};
+use rig_core::{Embed, OneOrMany};
 
 use crate::rag::{ErasedEmbedder, QueryFuture, TextsFuture};
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
@@ -33,24 +33,6 @@ impl<M> EmbeddingService<M> {
     /// Returns the initialized `EmbeddingService`.
     pub fn new(model: M) -> Self {
         Self { model }
-    }
-
-    /// Consume the service and return the inner model.
-    ///
-    /// # Returns
-    ///
-    /// Returns the wrapped Rig embedding model.
-    pub fn into_inner(self) -> M {
-        self.model
-    }
-
-    /// Access the wrapped model.
-    ///
-    /// # Returns
-    ///
-    /// Returns a reference to the wrapped Rig embedding model.
-    pub fn model(&self) -> &M {
-        &self.model
     }
 }
 
@@ -147,30 +129,6 @@ where
         Ok(output)
     }
 
-    /// Embed a single document implementing Rig's `Embed` trait.
-    ///
-    /// # Arguments
-    ///
-    /// * `document` - The document instance implementing `Embed`.
-    ///
-    /// # Returns
-    ///
-    /// Returns a tuple containing the original document and its computed `Embedding` vector(s).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if extracting text or embedding the document fails.
-    pub async fn embed_document<T>(&self, document: T) -> Result<(T, OneOrMany<Embedding>)>
-    where
-        T: Embed,
-    {
-        self.embed_documents(std::iter::once(document))
-            .await?
-            .into_iter()
-            .next()
-            .context("document embedding result was unexpectedly empty")
-    }
-
     /// Embed multiple documents implementing Rig's `Embed` trait.
     ///
     /// This preserves the original document order and the order of embedded text fragments within
@@ -253,48 +211,6 @@ where
 
         Ok(result)
     }
-}
-
-/// Convenience helper that builds an [`EmbeddingService`] from any Rig embedding-capable client.
-///
-/// # Arguments
-///
-/// * `client` - The Rig client reference.
-/// * `model` - The identifier name of the embedding model.
-///
-/// # Returns
-///
-/// Returns an `EmbeddingService` configured with the client's embedding model.
-pub fn service_from_client<C>(
-    client: &C,
-    model: impl Into<String>,
-) -> EmbeddingService<C::EmbeddingModel>
-where
-    C: EmbeddingsClient,
-{
-    EmbeddingService::new(client.embedding_model(model))
-}
-
-/// Convenience helper that builds an [`EmbeddingService`] from a model name and explicit dimensions.
-///
-/// # Arguments
-///
-/// * `client` - The Rig client reference.
-/// * `model` - The identifier name of the embedding model.
-/// * `ndims` - The explicit dimensions of the model.
-///
-/// # Returns
-///
-/// Returns an `EmbeddingService` configured with the client's embedding model.
-pub fn service_from_client_with_ndims<C>(
-    client: &C,
-    model: impl Into<String>,
-    ndims: usize,
-) -> EmbeddingService<C::EmbeddingModel>
-where
-    C: EmbeddingsClient,
-{
-    EmbeddingService::new(client.embedding_model_with_ndims(model, ndims))
 }
 
 impl<M> ErasedEmbedder for EmbeddingService<M>

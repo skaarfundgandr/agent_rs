@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use agent_rs::agent::permission::{
-    LoggingObserver, PermissionEvent, PermissionGate, PermissionObserver, PermissionPolicy,
-    PermissionResult, PolicyMap,
+    PermissionEvent, PermissionGate, PermissionObserver, PermissionPolicy, PermissionResult,
+    PolicyMap,
 };
 use std::sync::Arc;
 
@@ -47,7 +47,6 @@ async fn is_allow_helper() {
         }
         .is_allow()
     );
-    assert!(!PermissionResult::DeferToUser.is_allow());
 }
 
 #[tokio::test]
@@ -104,17 +103,4 @@ async fn policy_map_observer_fires_with_correct_variant() {
     let _ = map.evaluate("default_tool", "desc").await;
     assert_eq!(observer.count.load(Ordering::SeqCst), 2);
     assert_eq!(*observer.last_variant.lock().unwrap(), "AllowAll");
-}
-
-#[test]
-fn logging_observer_does_not_panic() {
-    let observer = LoggingObserver;
-    let event = PermissionEvent {
-        tool_name: "test_tool".to_string(),
-        description: "test desc".to_string(),
-        result: PermissionResult::Allow,
-        policy_variant: "AllowAll",
-        timestamp: std::time::Instant::now(),
-    };
-    observer.on_evaluation(&event);
 }

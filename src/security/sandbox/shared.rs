@@ -124,9 +124,8 @@ impl SharedSandbox {
     ///   resolves paths using [`Self::resolve_path_unchecked`]; the sandbox
     ///   validation is *not* run. The gate is the sole authority for
     ///   out-of-sandbox access.
-    /// - [`PermissionResult::Deny`] / [`PermissionResult::DeferToUser`]:
-    ///   returns [`DocumentError::PermissionDenied`] immediately. Matches how
-    ///   MCP tools short-circuit on a gate denial.
+    /// - [`PermissionResult::Deny`]: returns [`DocumentError::PermissionDenied`]
+    ///   immediately. Matches how MCP tools short-circuit on a gate denial.
     ///
     /// # Arguments
     ///
@@ -136,8 +135,7 @@ impl SharedSandbox {
     ///
     /// # Errors
     ///
-    /// Returns [`DocumentError::PermissionDenied`] when the gate returns `Deny`
-    /// or `DeferToUser`.
+    /// Returns [`DocumentError::PermissionDenied`] when the gate returns `Deny`.
     pub async fn check_permission(
         &self,
         policy: &PermissionPolicy,
@@ -148,9 +146,6 @@ impl SharedSandbox {
             PermissionResult::Allow => Ok(()),
             PermissionResult::Deny { reason } => Err(DocumentError::PermissionDenied(format!(
                 "{description}: {reason}"
-            ))),
-            PermissionResult::DeferToUser => Err(DocumentError::PermissionDenied(format!(
-                "{description}: defer-to-user not yet supported"
             ))),
         }
     }
@@ -201,8 +196,7 @@ impl SharedSandbox {
     ///   This keeps routine sandboxed reads/writes prompt-free.
     /// - **Out-of-sandbox paths** consult the gate via [`Self::check_permission`].
     ///   On `Allow` the path is resolved with [`Self::resolve_path_unchecked`];
-    ///   on `Deny`/`DeferToUser` a [`DocumentError::PermissionDenied`] is
-    ///   returned.
+    ///   on `Deny` a [`DocumentError::PermissionDenied`] is returned.
     ///
     /// Used by tools whose call-site is a linear "resolve a single path"
     /// sequence — `ReadDocumentTool`, `WriteDocumentTool`,
@@ -213,7 +207,7 @@ impl SharedSandbox {
     /// # Errors
     ///
     /// Returns [`DocumentError::PermissionDenied`] when the gate returns `Deny`
-    /// or `DeferToUser` for an out-of-sandbox path.
+    /// for an out-of-sandbox path.
     pub async fn resolve_path_with_permission(
         &self,
         policy: &PermissionPolicy,

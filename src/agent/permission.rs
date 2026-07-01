@@ -10,8 +10,6 @@ pub enum PermissionResult {
     Allow,
     /// The operation is denied with a reason.
     Deny { reason: String },
-    /// The operation should be deferred to the user (not yet supported).
-    DeferToUser,
 }
 
 impl PermissionResult {
@@ -255,27 +253,5 @@ impl PolicyMap {
         }
 
         result
-    }
-}
-
-/// A standard observer implementation that logs evaluations to the `tracing` framework.
-///
-/// Logs are emitted at `info` level under the target `"permission"`.
-pub struct LoggingObserver;
-
-impl PermissionObserver for LoggingObserver {
-    /// Logs the evaluation event details via `tracing::info`.
-    ///
-    /// # Arguments
-    ///
-    /// * `event` - The details of the evaluation event.
-    fn on_evaluation(&self, event: &PermissionEvent) {
-        tracing::info!(
-            target: "permission",
-            tool_name = %event.tool_name,
-            allowed = event.result.is_allow(),
-            policy_variant = event.policy_variant,
-            "permission evaluation"
-        );
     }
 }
