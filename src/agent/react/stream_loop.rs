@@ -10,9 +10,11 @@ use rig_core::streaming::StreamingChat;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::react::Compact;
+use crate::agent::retry::retry_with_backoff;
 use crate::domain::agent::{FinalAnswer, ReActStep, ReActStreamItem, ReActTrace};
 use crate::domain::errors::ReActError;
 
+use super::built_methods::effective_prompt;
 use super::callbacks::{ActionCb, ErrorCb, FinalCb, ObservationCb, ThoughtCb};
 use super::emitter::ReActSpanEmitter;
 use super::streaming::extract_prompt_text;
@@ -82,10 +84,7 @@ where
         _compaction: _,
     } = ctx;
 
-    let effective_prompt = match &react_preamble {
-        Some(preamble) => format!("{preamble}\n\n{prompt_text}"),
-        None => prompt_text.clone(),
-    };
+    let effective_prompt = effective_prompt(&react_preamble, &prompt_text);
 
     let mut trace = ReActTrace {
         prompt: prompt_text.clone(),
@@ -115,11 +114,7 @@ where
         if let Some(cm) = context_manager.as_deref() {
             let prompt_str = extract_prompt_text(&current_prompt, &effective_prompt);
             if let Err(e) = cm.compact(&mut working_history, prompt_str).await {
-                let re_err = ReActError::Model(e.to_string());
-                if let Some(cb) = &on_error_cb {
-                    cb(&re_err);
-                }
-                span_emitter.emit_error(&re_err);
+                emit_stream_error(&e, &on_error_cb, &span_emitter);
                 let _ = tx
                     .send(ReActStreamItem::Error {
                         error: e.to_string(),
@@ -131,48 +126,40 @@ where
         }
 
         let stream_result = {
-            let mut stream_opt = None;
-            let mut init_attempt = 0u32;
-            loop {
-                init_attempt += 1;
-                let prompt_str = extract_prompt_text(&current_prompt, &effective_prompt);
-                let result = tokio::time::timeout(
-                    stream_timeout,
-                    agent
-                        .stream_chat(prompt_str, working_history.clone())
-                        .multi_turn(20),
-                )
-                .await;
-
-                match result {
-                    Ok(s) => {
-                        stream_opt = Some(s);
-                        break;
-                    }
-                    Err(_elapsed) => {
-                        if init_attempt < max_retries {
-                            let delay = Duration::from_millis(500 * 2u64.pow(init_attempt - 1));
-                            tokio::time::sleep(delay).await;
-                            continue;
-                        }
-                        let _ = tx
-                            .send(ReActStreamItem::Error {
-                                error: format!(
-                                    "stream initialization timed out after {}s",
-                                    stream_timeout.as_secs()
-                                ),
-                            })
-                            .await;
-                        error_emitted = true;
-                        loop_continue = false;
-                        break;
-                    }
+            let prompt_str = extract_prompt_text(&current_prompt, &effective_prompt);
+            retry_with_backoff(max_retries, || {
+                let prompt_str = prompt_str.to_owned();
+                let working = working_history.clone();
+                let agent = agent.clone();
+                async move {
+                    tokio::time::timeout(
+                        stream_timeout,
+                        agent.stream_chat(prompt_str, working).multi_turn(20),
+                    )
+                    .await
+                    .map_err(|e| {
+                        rig_core::completion::PromptError::CompletionError(
+                            rig_core::completion::request::CompletionError::RequestError(Box::new(
+                                e,
+                            )),
+                        )
+                    })
                 }
-            }
-            stream_opt
+            })
+            .await
+            .ok()
         };
 
         let Some(mut stream) = stream_result else {
+            let _ = tx
+                .send(ReActStreamItem::Error {
+                    error: format!(
+                        "stream initialization timed out after {}s",
+                        stream_timeout.as_secs()
+                    ),
+                })
+                .await;
+            error_emitted = true;
             break;
         };
 
@@ -191,11 +178,7 @@ where
                                 rig_core::completion::PromptError::MaxTurnsError { .. }
                             )
                         {
-                            let re_err = ReActError::Model(e.to_string());
-                            if let Some(cb) = &on_error_cb {
-                                cb(&re_err);
-                            }
-                            span_emitter.emit_error(&re_err);
+                            emit_stream_error(&e, &on_error_cb, &span_emitter);
                             span_emitter.emit_cycle_end(current_cycle, &trace);
 
                             if let Some(mut recovered) =
@@ -218,11 +201,7 @@ where
                             }
                         }
 
-                        let re_err = ReActError::Model(e.to_string());
-                        if let Some(cb) = &on_error_cb {
-                            cb(&re_err);
-                        }
-                        span_emitter.emit_error(&re_err);
+                        emit_stream_error(&e, &on_error_cb, &span_emitter);
                         let _ = tx
                             .send(ReActStreamItem::Error {
                                 error: e.to_string(),
@@ -358,4 +337,17 @@ where
             })
             .await;
     }
+}
+
+fn emit_stream_error(
+    e: &impl std::fmt::Display,
+    on_error_cb: &Option<ErrorCb>,
+    span_emitter: &Arc<dyn ReActSpanEmitter>,
+) -> ReActError {
+    let re_err = ReActError::Model(e.to_string());
+    if let Some(cb) = on_error_cb {
+        cb(&re_err);
+    }
+    span_emitter.emit_error(&re_err);
+    re_err
 }

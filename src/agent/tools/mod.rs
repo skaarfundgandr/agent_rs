@@ -6,6 +6,7 @@ pub mod glob;
 pub mod rag;
 pub mod registry;
 pub mod search;
+pub(crate) mod util;
 
 pub use context::CompactTool;
 pub use directory::ListDirectoryTool;

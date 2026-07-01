@@ -144,15 +144,7 @@ impl Tool for GrepSearchTool {
         if results.is_empty() {
             Ok(format!("No matches found for query: '{}'", args.query))
         } else {
-            let count = results.len();
-            let mut output = results.join("\n");
-            if count >= max_results {
-                output.push_str(&format!(
-                    "\n... [Truncated: reached limit of {} matches]",
-                    max_results
-                ));
-            }
-            Ok(output)
+            Ok(super::util::truncated_output(&results, max_results))
         }
     }
 }

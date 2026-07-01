@@ -1,19 +1,17 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use crate::agent::permission::PermissionPolicy;
+use crate::domain::mcp::{
+    McpStdioTransportSpec, McpStreamableHttpTransportSpec, McpTransportSpec, RegisteredMcpServer,
+    ResolvedMcpServer,
+};
 use anyhow::{Context, Result, bail};
 use reqwest::header::{HeaderName, HeaderValue};
 use rmcp::service::{RoleClient, RunningService, ServiceExt};
 use rmcp::transport::child_process::TokioChildProcess;
 use rmcp::transport::streamable_http_client::{
     StreamableHttpClientTransport, StreamableHttpClientTransportConfig,
-};
-use tokio::process::Command;
-
-use crate::agent::permission::PermissionPolicy;
-use crate::domain::mcp::{
-    McpStdioTransportSpec, McpStreamableHttpTransportSpec, McpTransportSpec, RegisteredMcpServer,
-    ResolvedMcpServer,
 };
 
 use super::tool::RegisteredMcpTool;
@@ -44,7 +42,7 @@ async fn connect_stdio_server(
         bail!("MCP server names cannot be empty");
     }
 
-    let command = build_stdio_command(&spec)?;
+    let command: tokio::process::Command = super::stdio_cmd::build_stdio_command(&spec)?.into();
     let transport = TokioChildProcess::new(command).context("failed to spawn MCP stdio server")?;
     let service = Arc::new(
         ().serve(transport)
@@ -126,25 +124,6 @@ async fn collect_registered_tools(
         },
         tools: registered_tools,
     })
-}
-
-fn build_stdio_command(spec: &McpStdioTransportSpec) -> Result<Command> {
-    let mut process = Command::new(&spec.command);
-    process
-        .args(&spec.args)
-        .envs(&spec.env)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
-
-    if let Some(cwd) = &spec.cwd {
-        process.current_dir(cwd);
-    }
-
-    #[cfg(windows)]
-    process.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-
-    Ok(process)
 }
 
 fn build_http_headers(

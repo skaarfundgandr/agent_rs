@@ -97,9 +97,7 @@ impl RagSourceRegistry {
         if canonical.is_file() {
             let ext = canonical.extension().and_then(|e| e.to_str()).unwrap_or("");
 
-            if !self.supported_extensions.contains(ext) {
-                return Err(DocumentError::UnsupportedExtension(ext.to_string()));
-            }
+            super::util::check_extension(ext, &self.supported_extensions)?;
 
             self.sources.push(RagSource {
                 path: canonical,

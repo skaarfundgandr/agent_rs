@@ -206,15 +206,7 @@ impl Tool for GlobSearchTool {
         if matches.is_empty() {
             Ok(format!("No files matched pattern: '{}'", pattern))
         } else {
-            let count = matches.len();
-            let mut output = matches.join("\n");
-            if count >= max_results {
-                output.push_str(&format!(
-                    "\n... [Truncated: reached limit of {} matches]",
-                    max_results
-                ));
-            }
-            Ok(output)
+            Ok(super::util::truncated_output(&matches, max_results))
         }
     }
 }

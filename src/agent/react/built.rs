@@ -12,6 +12,7 @@ use crate::domain::errors::ReActError;
 use super::callbacks::{ErrorCb, FinalCb, ThoughtCb};
 use super::emitter::ReActSpanEmitter;
 
+use super::built_methods::effective_prompt;
 pub use super::built_methods::emit_internal_tool_callbacks;
 
 /// Emit a `NoToolCallsAndNoFinalAnswer` error via callbacks and span emitter,
@@ -84,10 +85,7 @@ where
         final_answer: None,
     };
 
-    let effective_prompt = match react_preamble {
-        Some(preamble) => format!("{preamble}\n\n{prompt}"),
-        None => prompt.to_string(),
-    };
+    let effective_prompt = effective_prompt(react_preamble, prompt);
 
     let mut working_history: Vec<Message> = history_snapshot.to_vec();
     let mut current_prompt = Message::User {

@@ -240,26 +240,7 @@ impl McpServerDef {
                 bail!("remote MCP servers do not have a stdio command")
             }
         };
-
-        let mut command = std::process::Command::new(&transport.command);
-        command
-            .args(&transport.args)
-            .envs(&transport.env)
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
-
-        if let Some(cwd) = transport.cwd {
-            command.current_dir(cwd);
-        }
-
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-        }
-
-        Ok(command)
+        crate::mcp::registry::stdio_cmd::build_stdio_command(&transport)
     }
 }
 

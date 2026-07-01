@@ -103,9 +103,7 @@ impl Tool for ReadDocumentTool {
             .await?;
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
-        if !self.allowed_extensions.contains(extension) {
-            return Err(DocumentError::UnsupportedExtension(extension.to_string()));
-        }
+        super::util::check_extension(extension, &self.allowed_extensions)?;
 
         match extension {
             "pdf" => extract_pdf_text(&path).map_err(|e| DocumentError::Pdf(e.to_string())),
@@ -205,9 +203,7 @@ impl Tool for WriteDocumentTool {
             .await?;
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
-        if !self.allowed_extensions.contains(extension) {
-            return Err(DocumentError::UnsupportedExtension(extension.to_string()));
-        }
+        super::util::check_extension(extension, &self.allowed_extensions)?;
 
         if let Some(true) = args.append {
             let mut file = tokio::fs::OpenOptions::new()

@@ -1,18 +1,28 @@
+use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
 use rig_core::completion::{Prompt, PromptError};
 use rig_core::message::{AssistantContent, Message, ToolResultContent, UserContent};
+use rig_core::streaming::StreamingChat;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::memory::ContextManager;
 use crate::agent::react::Compact;
 use crate::domain::agent::{Action, Observation, ReActStep, ReActTrace};
+use crate::domain::errors::ReActError;
 
-use super::built::BuiltReAct;
+use super::built::{BuiltReAct, run_loop};
 use super::callbacks::{ActionCb, ObservationCb};
 use super::emitter::ReActSpanEmitter;
+
+pub(crate) fn effective_prompt(preamble: &Option<String>, prompt: &str) -> String {
+    match preamble {
+        Some(p) => format!("{p}\n\n{prompt}"),
+        None => prompt.to_string(),
+    }
+}
 
 impl<C> Compact for ContextManager<C>
 where
@@ -127,5 +137,100 @@ pub fn emit_internal_tool_callbacks(
             }
             _ => {}
         }
+    }
+}
+
+impl<M, P, C> BuiltReAct<M, P, C>
+where
+    M: rig_core::completion::CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
+{
+    pub(crate) async fn run_prompt_impl(&self, msg: String) -> Result<ReActTrace, ReActError> {
+        let (trace, _) = run_loop(
+            &self.agent,
+            &msg,
+            &[],
+            self.max_cycles,
+            self.max_retries,
+            self.tool_timeout_secs,
+            &self.react_preamble,
+            &self.span_emitter,
+            &self.on_thought,
+            &self.on_action,
+            &self.on_observation,
+            &self.on_final,
+            &self.on_error,
+            self.context_manager.as_deref(),
+        )
+        .await?;
+        Ok(trace)
+    }
+
+    pub(crate) async fn run_chat_impl(
+        &self,
+        msg: String,
+        history: &mut Vec<Message>,
+    ) -> Result<String, ReActError> {
+        let (trace, working) = run_loop(
+            &self.agent,
+            &msg,
+            history,
+            self.max_cycles,
+            self.max_retries,
+            self.tool_timeout_secs,
+            &self.react_preamble,
+            &self.span_emitter,
+            &self.on_thought,
+            &self.on_action,
+            &self.on_observation,
+            &self.on_final,
+            &self.on_error,
+            self.context_manager.as_deref(),
+        )
+        .await?;
+        *history = working;
+        Ok(trace.final_answer.map(|fa| fa.text).unwrap_or_default())
+    }
+}
+
+impl<M, P, C> BuiltReAct<M, P, C>
+where
+    M: rig_core::completion::CompletionModel
+        + StreamingChat<M, M::StreamingResponse>
+        + WasmCompatSend
+        + WasmCompatSync
+        + 'static,
+    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
+    M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
+    C: Send + Sync + 'static,
+{
+    pub(crate) fn make_stream_shared(&self) -> Arc<super::streaming::StreamShared<M, P, C>> {
+        Arc::new(super::streaming::StreamShared {
+            agent: self.agent.clone(),
+            tool_timeout_secs: self.tool_timeout_secs,
+            on_thought: self.on_thought.as_ref().map(Arc::clone),
+            on_action: self.on_action.as_ref().map(Arc::clone),
+            on_observation: self.on_observation.as_ref().map(Arc::clone),
+            on_final: self.on_final.as_ref().map(Arc::clone),
+            on_error: self.on_error.as_ref().map(Arc::clone),
+            context_manager: self.context_manager.clone(),
+            _compaction: PhantomData,
+        })
+    }
+
+    pub(crate) fn run_stream_impl<'h>(
+        &self,
+        msg: String,
+    ) -> Result<super::streaming::ReActStream<'h, M, P, C>, ReActError> {
+        Ok(super::streaming::ReActStream::new(
+            self.make_stream_shared(),
+            Vec::new(),
+            self.max_cycles,
+            self.max_retries,
+            self.react_preamble.clone(),
+            Arc::clone(&self.span_emitter),
+            msg,
+            None,
+        ))
     }
 }
