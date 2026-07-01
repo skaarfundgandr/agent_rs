@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use rig_core::agent::{Agent, PromptHook, PromptResponse};
-use rig_core::completion::{CompletionError, CompletionModel, Prompt, PromptError};
+use rig_core::completion::{CompletionModel, Prompt, PromptError};
 use rig_core::message::Message;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
@@ -57,12 +57,7 @@ where
         {
             Ok(resp) => return ModelCallResult::Ok(resp),
             Err(e) => {
-                let is_transient = matches!(
-                    &e,
-                    PromptError::CompletionError(
-                        CompletionError::HttpError(_) | CompletionError::ProviderError(_)
-                    )
-                );
+                let is_transient = crate::agent::retry::is_retryable(&e);
                 let is_turn_limit = matches!(&e, PromptError::MaxTurnsError { .. });
                 if is_transient && attempt < max_retries {
                     let delay = std::time::Duration::from_millis(500 * 2u64.pow(attempt - 1));

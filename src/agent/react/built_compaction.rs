@@ -1,6 +1,3 @@
-use std::marker::PhantomData;
-use std::sync::Arc;
-
 use rig_core::completion::{CompletionModel, Prompt};
 use rig_core::message::Message;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
@@ -21,25 +18,7 @@ where
         &self,
         msg: impl Into<String>,
     ) -> Result<crate::domain::agent::ReActTrace, ReActError> {
-        let msg = msg.into();
-        let (trace, _) = run_loop(
-            &self.agent,
-            &msg,
-            &[],
-            self.max_cycles,
-            self.max_retries,
-            self.tool_timeout_secs,
-            &self.react_preamble,
-            &self.span_emitter,
-            &self.on_thought,
-            &self.on_action,
-            &self.on_observation,
-            &self.on_final,
-            &self.on_error,
-            self.context_manager.as_deref(),
-        )
-        .await?;
-        Ok(trace)
+        self.run_prompt_impl(msg.into()).await
     }
 
     /// Execute a ReAct chat with automatic compaction, **with** caller-owned
@@ -89,36 +68,12 @@ where
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
 {
-    fn make_stream_shared(&self) -> Arc<super::streaming::StreamShared<M, P, C>> {
-        Arc::new(super::streaming::StreamShared {
-            agent: self.agent.clone(),
-            tool_timeout_secs: self.tool_timeout_secs,
-            on_thought: self.on_thought.as_ref().map(Arc::clone),
-            on_action: self.on_action.as_ref().map(Arc::clone),
-            on_observation: self.on_observation.as_ref().map(Arc::clone),
-            on_final: self.on_final.as_ref().map(Arc::clone),
-            on_error: self.on_error.as_ref().map(Arc::clone),
-            context_manager: self.context_manager.clone(),
-            _compaction: PhantomData,
-        })
-    }
-
     /// Stream a ReAct prompt with automatic compaction. Does **not** mutate shared history.
     pub async fn stream_prompt_compact<'h>(
         &self,
         msg: impl Into<String>,
     ) -> Result<super::streaming::ReActStream<'h, M, P, C>, ReActError> {
-        let msg = msg.into();
-        Ok(super::streaming::ReActStream::new(
-            self.make_stream_shared(),
-            Vec::new(),
-            self.max_cycles,
-            self.max_retries,
-            self.react_preamble.clone(),
-            Arc::clone(&self.span_emitter),
-            msg,
-            None,
-        ))
+        self.run_stream_impl(msg.into())
     }
 
     /// Stream a ReAct chat with automatic compaction. Caller-owned history is written back on completion.
@@ -143,7 +98,7 @@ where
             self.max_cycles,
             self.max_retries,
             self.react_preamble.clone(),
-            Arc::clone(&self.span_emitter),
+            std::sync::Arc::clone(&self.span_emitter),
             msg,
             Some(history),
         ))

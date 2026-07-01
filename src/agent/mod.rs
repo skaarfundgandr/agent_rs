@@ -6,6 +6,7 @@ pub mod memory;
 pub mod model;
 pub mod permission;
 pub mod react;
+pub(crate) mod retry;
 pub mod state;
 pub mod tools;
 

@@ -1,7 +1,6 @@
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use std::time::Duration;
 
 use rig_core::agent::{Agent, MultiTurnStreamItem, StreamingError};
 use rig_core::completion::{CompletionModel, Prompt, PromptError};
@@ -11,6 +10,7 @@ use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::memory::ContextManager;
 use crate::agent::model::chat::{execute_chat, execute_stream_chat};
+use crate::agent::retry::is_retryable;
 
 use super::react::{CompactionConfig, NoCompaction};
 
@@ -38,23 +38,6 @@ where
     }
 }
 
-/// Returns `true` for transient completion errors that are safe to retry.
-fn is_retryable_prompt_error(e: &PromptError) -> bool {
-    matches!(
-        e,
-        rig_core::completion::request::PromptError::CompletionError(
-            rig_core::completion::request::CompletionError::HttpError(_)
-                | rig_core::completion::request::CompletionError::ProviderError(_)
-        )
-    )
-}
-
-/// Retry `execute_chat` with exponential backoff on transient errors.
-///
-/// Restores the working history from a snapshot before each attempt to avoid
-/// partial mutation on failure. On success, `working` contains the final
-/// history; on failure, `working` is left in a clean state (last successful
-/// snapshot).
 async fn retry_chat<M, P>(
     agent: &Agent<M, P>,
     msg: &str,
@@ -72,9 +55,11 @@ where
         *working = snapshot.clone();
         match execute_chat(agent, msg, working).await {
             Ok(s) => return Ok(s),
-            Err(e) if is_retryable_prompt_error(&e) && attempt < max_retries => {
-                let delay = Duration::from_millis(500 * 2u64.pow(attempt - 1));
-                tokio::time::sleep(delay).await;
+            Err(e) if is_retryable(&e) && attempt < max_retries => {
+                tokio::time::sleep(std::time::Duration::from_millis(
+                    500 * 2u64.pow(attempt - 1),
+                ))
+                .await;
             }
             Err(e) => return Err(e),
         }
@@ -275,6 +260,34 @@ where
     }
 }
 
+async fn build_stream<'a, M, P>(
+    agent: &Agent<M, P>,
+    msg: &str,
+    working: Vec<Message>,
+    working_for_restore: Option<Vec<Message>>,
+    history_out: Option<&'a mut Vec<Message>>,
+) -> Result<ManagedStream<'a, M::StreamingResponse>, PromptError>
+where
+    M: CompletionModel
+        + StreamingChat<M, M::StreamingResponse>
+        + WasmCompatSend
+        + WasmCompatSync
+        + 'static,
+    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
+    M::StreamingResponse: rig_core::completion::GetTokenUsage + Send + 'static,
+    Agent<M, P>: StreamingChat<M, M::StreamingResponse, Hook = P>,
+{
+    let rig_stream = execute_stream_chat(agent, msg, working)
+        .multi_turn(agent.default_max_turns.unwrap_or(20))
+        .await;
+    Ok(ManagedStream::new(
+        rig_stream,
+        history_out,
+        msg.to_owned(),
+        working_for_restore,
+    ))
+}
+
 // ── No-compaction methods ────────────────────────────────────────────────
 
 impl<M, P> BuiltManagedAgent<M, P, ()>
@@ -319,11 +332,7 @@ where
         Agent<M, P>: StreamingChat<M, M::StreamingResponse, Hook = P>,
     {
         let msg = msg.into();
-        let working = Vec::new();
-        let rig_stream = execute_stream_chat(&self.agent, &msg, working)
-            .multi_turn(self.agent.default_max_turns.unwrap_or(20))
-            .await;
-        Ok(ManagedStream::new(rig_stream, None, msg, None))
+        build_stream(&self.agent, &msg, Vec::new(), None, None).await
     }
 
     /// Stream a chat prompt **with** history mutation on completion.
@@ -339,10 +348,7 @@ where
     {
         let msg = msg.into();
         let working = history.clone();
-        let rig_stream = execute_stream_chat(&self.agent, &msg, working)
-            .multi_turn(self.agent.default_max_turns.unwrap_or(20))
-            .await;
-        Ok(ManagedStream::new(rig_stream, Some(history), msg, None))
+        build_stream(&self.agent, &msg, working, None, Some(history)).await
     }
 }
 
@@ -406,10 +412,7 @@ where
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
-        let rig_stream = execute_stream_chat(&self.agent, &msg, working)
-            .multi_turn(self.agent.default_max_turns.unwrap_or(20))
-            .await;
-        Ok(ManagedStream::new(rig_stream, None, msg, None))
+        build_stream(&self.agent, &msg, working, None, None).await
     }
 
     /// Stream a chat prompt **with** history mutation on completion, with compaction.
@@ -428,15 +431,14 @@ where
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
-        let rig_stream = execute_stream_chat(&self.agent, &msg, working.clone())
-            .multi_turn(self.agent.default_max_turns.unwrap_or(20))
-            .await;
-        Ok(ManagedStream::new(
-            rig_stream,
-            Some(history),
-            msg,
+        build_stream(
+            &self.agent,
+            &msg,
+            working.clone(),
             Some(working),
-        ))
+            Some(history),
+        )
+        .await
     }
 }
 
