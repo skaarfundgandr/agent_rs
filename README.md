@@ -1,6 +1,6 @@
 # AgentRS
 
-**A high-performance Rust-based AI agent framework extending [Rig](https://github.com/0xPlayground/rig) with native RAG support, MCP integration, and advanced memory management.**
+**A high-performance Rust-based AI agent framework extending [Rig](https://github.com/0xPlaygrounds/rig) with native RAG support, MCP integration, and advanced memory management.**
 
 > [!WARNING]
 > **Active Development:** This project is under active development. Breaking changes are to be expected as we stabilize the APIs toward v1.0.
@@ -9,9 +9,9 @@
 
 ## 📖 About
 
-**AgentRS** is an extension library built on top of the **[Rig](https://github.com/0xPlayground/rig)** agent framework (`rig-core`). It adds enterprise-grade capabilities for context control, execution security, and vector store operations in Rust.
+**AgentRS** is an extension library built on top of the **[Rig](https://github.com/0xPlaygrounds/rig)** agent framework (`rig-core`). It adds enterprise-grade capabilities for context control, execution security, and vector store operations in Rust.
 
-It integrates local semantic search via **[fastembed](https://github.com/AnushShetty/fastembed-rs)** and persistent on-disk vector databases using **[turbovec](https://github.com/RyanCodrai/turbovec)**, enabling highly efficient Retrieval-Augmented Generation (RAG) workflows out-of-the-box.
+It integrates local semantic search via **[fastembed-rs](https://github.com/Anush008/fastembed-rs)** and persistent on-disk vector databases using **[turbovec](https://github.com/RyanCodrai/turbovec)**, enabling highly efficient Retrieval-Augmented Generation (RAG) workflows out-of-the-box.
 
 ---
 
@@ -191,4 +191,4 @@ This project is licensed under the **MIT License**.
 **Project Link:** [https://github.com/skaarfundgandr/agent_rs](https://github.com/skaarfundgandr/agent_rs)
 
 ---
-*Built with ❤️ using [Rig](https://github.com/0xPlayground/rig) and [Rust](https://www.rust-lang.org/).*
+*Built with ❤️ using [Rig](https://github.com/0xPlaygrounds/rig) and [Rust](https://www.rust-lang.org/).*
