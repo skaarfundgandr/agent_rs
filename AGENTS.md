@@ -2,10 +2,11 @@
 
 ## Project Snapshot
 
-Rust AI agent framework (edition 2024, v0.7.0). Library crate with examples.
+Rust AI agent framework (edition 2024, v0.8.0). Library crate with examples.
 Library consumers import as `agent_rs`.
 
-Core deps: `rig-core` 0.38.2 (with `rmcp` feature), `rmcp` 1.7, `tokio` (full), `reqwest`, `pdf-extract`, `tracing` 0.1.
+Core deps: `rig-core` 0.39.0 (with `rmcp` feature), `rmcp` 1.7, `tokio` (full), `reqwest`, `pdf-extract`, `tracing` 0.1.
+rig 0.39 adds a `Clone` supertrait bound on `PromptHook<M>`. All agent_rs hook types (`LangSmithAgentHook`, `()`) already derive/implement `Clone`, so no explicit `+ Clone` annotations were needed on generic constraints.
 Optional deps (feature-gated): `opentelemetry` 0.32, `opentelemetry_sdk` 0.32, `opentelemetry-otlp` 0.32, `tracing-opentelemetry` 0.33, `tracing-subscriber` 0.3 (the `opentelemetry` feature).
 
 ## Commands
@@ -175,4 +176,5 @@ Tests in `tests/` (17+ files): `agents_tests.rs`, `document_store.rs`, `embeddin
 - `docs/api/` — API reference docs (split by section). See [API Reference Overview](docs/api/README.md)
 - `docs/migration-0.2.0.md` — migration guide (v0.1.0 → v0.2.0)
 - `.opencode/migration-0.7.0.md` — migration guide (v0.6.0 → v0.7.0): caller-owned history, removed `with_history()`/`history()`, removed `utils.rs`
+- `.opencode/migration-0.8.0.md` — migration guide (v0.7.1 → v0.8.0): rig 0.39 upgrade, observability simplification, `gen_ai.operation.name` overwrite bug fix
 - `docs/diagrams/` — architecture diagrams (C4, class, sequence, state, module dependency)

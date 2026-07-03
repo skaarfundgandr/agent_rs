@@ -31,7 +31,10 @@ use agent_rs::domain::observability::LangSmithConfig;
   LangSmith run-typing on the current `tracing` span.
 - **`LangSmithAgentHook<M>`** — `rig_core::agent::PromptHook<M>` impl that
   tags rig's `chat` / `execute_tool` spans with `langsmith.span.kind` and
-  records token-usage counters.
+  fills `gen_ai.input.messages` / `gen_ai.output.messages` (which rig
+  declares but does not populate). rig 0.39 natively emits
+  `gen_ai.operation.name`, `gen_ai.usage.*`, and `gen_ai.tool.name` — the
+  hook no longer records these to avoid duplication.
 
 ## Environment Variables
 
@@ -58,15 +61,20 @@ via `WithHttpConfig::with_headers` — no env-var pollution or unsafe.
 
 Defined in `src/observability/conventions.rs`:
 
-- **GenAI (OTel)**: `gen_ai.system`, `gen_ai.operation.name`, `gen_ai.tool.name`,
-  `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`.
+- **GenAI (OTel, emitted natively by rig 0.39)**: `gen_ai.operation.name`,
+  `gen_ai.tool.name`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`.
+  These are recorded by rig on its `invoke_agent`, `chat`, and `execute_tool`
+  spans — the hook does NOT record them.
+- **GenAI (filled by the hook)**: `gen_ai.input.messages`,
+  `gen_ai.output.messages` — rig declares these on the `chat` span but never
+  populates them; the hook fills them on the `invoke_agent` span.
 - **LangSmith run-typing**: `langsmith.span.kind ∈ { llm, chain, tool, agent, retriever, embedding }`.
 - **OpenInference (also recognised by LangSmith)**: `openinference.span.kind`,
   `input.value`, `output.value`.
 
 The ReAct bridge layers `chain` / `agent` / `tool` runs on top of rig's
-`chat` / `execute_tool` spans, and the `PromptHook` layer records token
-usage onto the same spans.
+`chat` / `execute_tool` spans, and the `PromptHook` layer adds LangSmith
+run-typing and input/output messages to the same spans.
 
 ## Usage Example
 
