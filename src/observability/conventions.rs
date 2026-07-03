@@ -1,10 +1,9 @@
 //! OpenTelemetry GenAI + LangSmith semantic-convention attribute names.
+//!
+//! rig 0.39 natively emits `gen_ai.operation.name`, `gen_ai.usage.*`, and
+//! `gen_ai.tool.name` — those constants are no longer needed here. Only
+//! LangSmith/OpenInference-specific constants remain.
 
-pub const GEN_AI_SYSTEM: &str = "gen_ai.system";
-pub const GEN_AI_OPERATION_NAME: &str = "gen_ai.operation.name";
-pub const GEN_AI_TOOL_NAME: &str = "gen_ai.tool.name";
-pub const GEN_AI_USAGE_INPUT_TOKENS: &str = "gen_ai.usage.input_tokens";
-pub const GEN_AI_USAGE_OUTPUT_TOKENS: &str = "gen_ai.usage.output_tokens";
 pub const LANGSMITH_SPAN_KIND: &str = "langsmith.span.kind";
 pub const OPENINFERENCE_SPAN_KIND: &str = "openinference.span.kind";
 pub const INPUT_VALUE: &str = "input.value";
