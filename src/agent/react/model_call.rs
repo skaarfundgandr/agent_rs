@@ -27,7 +27,24 @@ pub(crate) enum ModelCallResult {
     Err(ReActError),
 }
 
+/// Append `suffix` to the agent's system preamble for one call only.
+fn agent_with_system_suffix<M, P>(agent: &Agent<M, P>, suffix: &str) -> Agent<M, P>
+where
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
+{
+    let mut agent = agent.clone();
+    agent.preamble = Some(match agent.preamble.take() {
+        Some(p) => format!("{p}\n\n<system-reminder>{suffix}\n</system-reminder>"),
+        None => suffix.to_string(),
+    });
+    agent
+}
+
 /// Execute the model call with retry logic and turn-limit recovery.
+///
+/// When `system_suffix` is `Some`, it is appended to the agent's system
+/// preamble for this call only (history and prompt are left unchanged).
 ///
 /// Returns a [`ModelCallResult`] indicating success, turn-limit recovery, or
 /// a fatal error.
@@ -41,11 +58,21 @@ pub(crate) async fn execute_model_call<M, P>(
     span_emitter: &Arc<dyn ReActSpanEmitter>,
     on_error: &Option<ErrorCb>,
     trace: &ReActTrace,
+    system_suffix: Option<&str>,
 ) -> ModelCallResult
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
+    let agent_for_call;
+    let agent = match system_suffix {
+        Some(suffix) => {
+            agent_for_call = agent_with_system_suffix(agent, suffix);
+            &agent_for_call
+        }
+        None => agent,
+    };
+
     let mut attempt = 0u32;
     loop {
         attempt += 1;

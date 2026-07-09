@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use rig_core::agent::Agent;
@@ -37,7 +36,7 @@ where
             on_error: None,
             tool_timeout_secs: 60,
             compaction: NoCompaction,
-            _phantom: PhantomData,
+            cycle_limit_reminder_msg: None,
         }
     }
 }

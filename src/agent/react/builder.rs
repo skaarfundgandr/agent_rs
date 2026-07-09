@@ -44,7 +44,7 @@ where
     pub on_error: Option<ErrorCb>,
     pub tool_timeout_secs: u64,
     pub compaction: CompState,
-    pub(crate) _phantom: PhantomData<()>,
+    pub cycle_limit_reminder_msg: Option<String>,
 }
 
 // ── Blanket config methods (work for any CompState) ──────────────────────
@@ -164,6 +164,13 @@ where
             ..self
         }
     }
+    /// Set a custom message to be included in the context when the cycle limit is exceeded.
+    pub fn set_cycle_limit_reminder_msg(self, msg: Option<String>) -> Self {
+        Self {
+            cycle_limit_reminder_msg: msg,
+            ..self
+        }
+    }
 }
 
 // ── NoCompaction: .with_compaction() and .build() ────────────────────────
@@ -194,13 +201,13 @@ where
             on_final: self.on_final,
             on_error: self.on_error,
             tool_timeout_secs: self.tool_timeout_secs,
+            cycle_limit_reminder_msg: self.cycle_limit_reminder_msg,
             compaction: CompactionConfig {
                 model: self.agent.clone(),
                 threshold: 0,
                 tokenizer: None,
                 compaction_prompt: None,
             },
-            _phantom: PhantomData,
         }
     }
 
@@ -219,6 +226,7 @@ where
             on_error: self.on_error,
             context_manager: None,
             tool_timeout_secs: self.tool_timeout_secs,
+            cycle_limit_reminder_msg: self.cycle_limit_reminder_msg,
             _compaction: PhantomData,
         }
     }
@@ -263,13 +271,13 @@ where
             on_final: self.on_final,
             on_error: self.on_error,
             tool_timeout_secs: self.tool_timeout_secs,
+            cycle_limit_reminder_msg: self.cycle_limit_reminder_msg,
             compaction: CompactionConfig {
                 model,
                 threshold: self.compaction.threshold,
                 tokenizer: self.compaction.tokenizer,
                 compaction_prompt: self.compaction.compaction_prompt,
             },
-            _phantom: PhantomData,
         }
     }
 
@@ -328,6 +336,7 @@ where
             on_observation: self.on_observation,
             on_final: self.on_final,
             on_error: self.on_error,
+            cycle_limit_reminder_msg: self.cycle_limit_reminder_msg,
             context_manager: Some(
                 Arc::new(ctx) as Arc<dyn crate::agent::react::Compact + Send + Sync>
             ),

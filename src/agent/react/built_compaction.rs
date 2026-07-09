@@ -50,6 +50,7 @@ where
             &self.on_final,
             &self.on_error,
             self.context_manager.as_deref(),
+            &self.cycle_limit_reminder_msg,
         )
         .await?;
         *history = final_working;

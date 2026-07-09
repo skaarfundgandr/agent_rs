@@ -231,10 +231,11 @@ mod researcher_main {
                 5. Once indexed, answer the user's research question in detail based on the dynamic RAG context."
             )
             .dynamic_context(2, rag.vector_index)
-            .default_max_turns(20)
+            .default_max_turns(3)
             .build()
             .react()
-            .max_cycles(50)
+            .set_cycle_limit_reminder_msg(Some("You are aproaching the cycle limit. Finalize your answer now".to_string()))
+            .max_cycles(4)
             .build();
 
         let args: Vec<String> = env::args().collect();

@@ -53,6 +53,7 @@ where
     pub(crate) on_error: Option<ErrorCb>,
     pub(crate) context_manager: Option<Arc<dyn Compact + Send + Sync>>,
     pub(crate) tool_timeout_secs: u64,
+    pub(crate) cycle_limit_reminder_msg: Option<String>,
     pub(crate) _compaction: std::marker::PhantomData<C>,
 }
 
@@ -74,6 +75,7 @@ pub(crate) async fn run_loop<M, P>(
     on_final: &Option<FinalCb>,
     on_error: &Option<ErrorCb>,
     context_manager: Option<&(dyn Compact + Send + Sync)>,
+    cycle_limit_reminder_msg: &Option<String>,
 ) -> Result<(ReActTrace, Vec<Message>), ReActError>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
@@ -105,6 +107,12 @@ where
         )
         .await?;
 
+        let system_suffix = if cycle >= max_cycles - 2 {
+            cycle_limit_reminder_msg.as_deref()
+        } else {
+            None
+        };
+
         let response = match super::model_call::execute_model_call(
             agent,
             &current_prompt,
@@ -114,6 +122,7 @@ where
             span_emitter,
             on_error,
             &trace,
+            system_suffix,
         )
         .await
         {
