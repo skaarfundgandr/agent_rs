@@ -35,7 +35,7 @@ where
 {
     let mut agent = agent.clone();
     agent.preamble = Some(match agent.preamble.take() {
-        Some(p) => format!("{p}\n\n<system-reminder>{suffix}\n</system-reminder>"),
+        Some(p) => format!("{p}\n\n{suffix}\n"),
         None => suffix.to_string(),
     });
     agent
