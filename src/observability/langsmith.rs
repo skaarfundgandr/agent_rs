@@ -1,7 +1,23 @@
 //! Build the OTLP/HTTP exporter and install the global `tracing` subscriber.
+//!
+//! # Batch exporter policy
+//!
+//! Spans are exported via a `BatchSpanProcessor` with a **1-second scheduled
+//! delay** (down from the OTel SDK default of 5 s). This ensures shallow
+//! research runs show spans within ~1 s of completion while still batching
+//! efficiently for deep runs.
+//!
+//! Override the delay (in milliseconds) with `LANGSMITH_OTEL_BATCH_DELAY_MS`:
+//! - `0` – uses a synchronous (simple) exporter, no batching — useful for
+//!   local development and debugging.
+//! - Any positive value – used as the batch scheduled delay (default: 1000 ms).
+//!
+//! Programmatic `BatchConfig` construction overrides any `OTEL_BSP_*`
+//! environment variables the SDK would otherwise read.
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use opentelemetry::global;
@@ -10,7 +26,7 @@ use opentelemetry_otlp::{WithExportConfig, WithHttpConfig};
 use opentelemetry_sdk::{
     Resource,
     propagation::TraceContextPropagator,
-    trace::{Sampler, SdkTracerProvider},
+    trace::{BatchConfigBuilder, BatchSpanProcessor, Sampler, SdkTracerProvider},
 };
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 
@@ -39,6 +55,10 @@ impl Drop for TracerHandle {
 
 /// Build the OTLP/HTTP exporter, install the global `tracing` subscriber,
 /// and return a [`TracerHandle`] that owns the tracer provider.
+///
+/// Spans are batch-exported with a 1-second scheduled delay by default
+/// (`LANGSMITH_OTEL_BATCH_DELAY_MS` overrides this; set to `0` for a
+/// synchronous exporter).
 ///
 /// Once installed, **rig's existing GenAI spans** (e.g. `invoke_agent`,
 /// `chat`, `execute_tool`) export to LangSmith automatically — no call-site
@@ -70,11 +90,32 @@ pub fn init_tracing(cfg: &LangSmithConfig) -> Result<TracerHandle> {
         .with_service_name(cfg.service_name.clone())
         .build();
 
-    let provider = SdkTracerProvider::builder()
-        .with_resource(resource)
-        .with_sampler(Sampler::AlwaysOn)
-        .with_batch_exporter(exporter)
-        .build();
+    let batch_delay_ms: u64 = std::env::var("LANGSMITH_OTEL_BATCH_DELAY_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1000);
+
+    let provider = if batch_delay_ms == 0 {
+        SdkTracerProvider::builder()
+            .with_resource(resource)
+            .with_sampler(Sampler::AlwaysOn)
+            .with_simple_exporter(exporter)
+            .build()
+    } else {
+        let batch_config = BatchConfigBuilder::default()
+            .with_scheduled_delay(Duration::from_millis(batch_delay_ms))
+            .build();
+
+        let processor = BatchSpanProcessor::builder(exporter)
+            .with_batch_config(batch_config)
+            .build();
+
+        SdkTracerProvider::builder()
+            .with_resource(resource)
+            .with_sampler(Sampler::AlwaysOn)
+            .with_span_processor(processor)
+            .build()
+    };
 
     global::set_tracer_provider(provider.clone());
 
