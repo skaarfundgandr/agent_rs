@@ -89,11 +89,7 @@ pub fn init_tracing(cfg: &LangSmithConfig) -> Result<TracerHandle> {
     let resource = Resource::builder()
         .with_service_name(cfg.service_name.clone())
         .build();
-
-    let batch_delay_ms: u64 = std::env::var("LANGSMITH_OTEL_BATCH_DELAY_MS")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(1000);
+    let batch_delay_ms = cfg.batch_delay_ms;
 
     let provider = if batch_delay_ms == 0 {
         SdkTracerProvider::builder()

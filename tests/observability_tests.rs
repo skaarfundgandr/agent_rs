@@ -17,6 +17,7 @@ fn init_once() {
             service_name: "test".to_string(),
             console: false,
             batch: true,
+            batch_delay_ms: 1000,
         };
         // A global tracing subscriber can only be set once per process.
         // If another test module (e.g. `react_otel_tests`) installed it first,

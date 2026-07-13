@@ -35,6 +35,10 @@ pub struct LangSmithConfig {
     pub console: bool,
     /// Use batch processor (true) vs simple (false). Batch for prod, simple for tests.
     pub batch: bool,
+    /// Batch span processor scheduled delay in milliseconds. `0` selects a
+    /// synchronous simple exporter. Default: `1000`. Overridden by
+    /// `LANGSMITH_OTEL_BATCH_DELAY_MS` when that env var is set.
+    pub batch_delay_ms: u64,
 }
 
 impl Default for LangSmithConfig {
@@ -46,6 +50,7 @@ impl Default for LangSmithConfig {
             service_name: "agent_rs".to_string(),
             console: false,
             batch: true,
+            batch_delay_ms: 1000,
         }
     }
 }
@@ -61,6 +66,7 @@ impl LangSmithConfig {
     /// | `OTEL_SERVICE_NAME` | `service_name` | `"agent_rs"` |
     /// | `LANGSMITH_OTEL_CONSOLE` | `console` | `false` |
     /// | `LANGSMITH_OTEL_BATCH` | `batch` | `true` |
+    /// | `LANGSMITH_OTEL_BATCH_DELAY_MS` | `batch_delay_ms` | `1000` |
     pub fn from_env() -> Self {
         let mut cfg = Self::default();
 
@@ -81,6 +87,11 @@ impl LangSmithConfig {
         }
         if let Ok(val) = std::env::var("LANGSMITH_OTEL_BATCH") {
             cfg.batch = !matches!(val.as_str(), "0" | "false" | "no");
+        }
+        if let Ok(val) = std::env::var("LANGSMITH_OTEL_BATCH_DELAY_MS") {
+            if let Ok(ms) = val.parse::<u64>() {
+                cfg.batch_delay_ms = ms;
+            }
         }
 
         cfg

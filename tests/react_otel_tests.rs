@@ -29,6 +29,7 @@ fn init_once() {
             service_name: "test".to_string(),
             console: false,
             batch: true,
+            batch_delay_ms: 1000,
         };
         // Ignore "already set" errors — another test module may have
         // installed the subscriber first.
