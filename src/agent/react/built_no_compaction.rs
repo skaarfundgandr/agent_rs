@@ -6,12 +6,10 @@ use crate::domain::errors::ReActError;
 
 use super::built::BuiltReAct;
 
-impl<M, P> BuiltReAct<M, P, ()>
+impl<M> BuiltReAct<M, ()>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
-    /// Execute a ReAct prompt **without** mutating shared history.
     pub async fn prompt(
         &self,
         msg: impl Into<String>,
@@ -19,7 +17,6 @@ where
         self.run_prompt_impl(msg.into()).await
     }
 
-    /// Execute a ReAct chat **with** caller-owned history mutation on success.
     pub async fn chat(
         &self,
         msg: impl Into<String>,
@@ -29,30 +26,26 @@ where
     }
 }
 
-impl<M, P> BuiltReAct<M, P, ()>
+impl<M> BuiltReAct<M, ()>
 where
     M: CompletionModel
-        + rig_core::streaming::StreamingChat<M, M::StreamingResponse>
         + WasmCompatSend
         + WasmCompatSync
         + 'static,
-    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
 {
-    /// Stream a ReAct prompt. Does **not** mutate shared history.
     pub fn stream_prompt<'h>(
         &self,
         msg: impl Into<String>,
-    ) -> Result<super::streaming::ReActStream<'h, M, P, ()>, ReActError> {
+    ) -> Result<super::streaming::ReActStream<'h, M, ()>, ReActError> {
         self.run_stream_impl(msg.into())
     }
 
-    /// Stream a ReAct chat. Caller-owned history is written back on completion.
     pub fn stream_chat<'h>(
         &self,
         msg: impl Into<String>,
         history: &'h mut Vec<Message>,
-    ) -> Result<super::streaming::ReActStream<'h, M, P, ()>, ReActError> {
+    ) -> Result<super::streaming::ReActStream<'h, M, ()>, ReActError> {
         let msg = msg.into();
         let snapshot = history.clone();
         Ok(super::streaming::ReActStream::new(

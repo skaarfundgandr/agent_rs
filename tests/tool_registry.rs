@@ -2,7 +2,6 @@
 
 use agent_rs::agent::tools::ToolRegistryBuilder;
 use agent_rs::mcp::registry::McpRegistryRuntime;
-use rig_core::completion::ToolDefinition;
 use rig_core::tool::{Tool, ToolDyn};
 
 // ---------------------------------------------------------------------------
@@ -18,12 +17,12 @@ impl Tool for MockToolA {
     type Args = serde_json::Value;
     type Output = String;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "mock tool a".to_string(),
-            parameters: serde_json::json!({"type": "object", "properties": {}}),
-        }
+    fn description(&self) -> String {
+        "mock tool a".to_string()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({"type": "object", "properties": {}})
     }
 
     async fn call(&self, _args: Self::Args) -> Result<Self::Output, Self::Error> {
@@ -40,12 +39,12 @@ impl Tool for MockToolB {
     type Args = serde_json::Value;
     type Output = String;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "mock tool b".to_string(),
-            parameters: serde_json::json!({"type": "object", "properties": {}}),
-        }
+    fn description(&self) -> String {
+        "mock tool b".to_string()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({"type": "object", "properties": {}})
     }
 
     async fn call(&self, _args: Self::Args) -> Result<Self::Output, Self::Error> {
@@ -62,12 +61,12 @@ impl Tool for MockToolC {
     type Args = serde_json::Value;
     type Output = String;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "mock tool c".to_string(),
-            parameters: serde_json::json!({"type": "object", "properties": {}}),
-        }
+    fn description(&self) -> String {
+        "mock tool c".to_string()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({"type": "object", "properties": {}})
     }
 
     async fn call(&self, _args: Self::Args) -> Result<Self::Output, Self::Error> {

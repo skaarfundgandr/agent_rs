@@ -12,7 +12,7 @@
 use agent_rs::agent::permission::{PermissionPolicy, PolicyMap};
 use anyhow::{Result, bail};
 use dotenvy::dotenv;
-use rig_core::completion::{Prompt, ToolDefinition};
+use rig_core::completion::Prompt;
 use rig_core::prelude::*;
 use rig_core::providers::openai;
 use rig_core::tool::Tool;
@@ -47,21 +47,21 @@ impl Tool for DbQueryTool {
     type Args = QueryArgs;
     type Output = String;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Query user balance from the database.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "username": {
-                        "type": "string",
-                        "description": "The username to query"
-                    }
-                },
-                "required": ["username"]
-            }),
-        }
+    fn description(&self) -> String {
+        "Query user balance from the database.".to_string()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string",
+                    "description": "The username to query"
+                }
+            },
+            "required": ["username"]
+        })
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
@@ -98,25 +98,25 @@ impl Tool for DbWriteTool {
     type Args = WriteArgs;
     type Output = String;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Deduct money or write transactions to user accounts.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "username": {
-                        "type": "string",
-                        "description": "The user to modify"
-                    },
-                    "amount": {
-                        "type": "integer",
-                        "description": "The amount to add or deduct (can be negative)"
-                    }
+    fn description(&self) -> String {
+        "Deduct money or write transactions to user accounts.".to_string()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string",
+                    "description": "The user to modify"
                 },
-                "required": ["username", "amount"]
-            }),
-        }
+                "amount": {
+                    "type": "integer",
+                    "description": "The amount to add or deduct (can be negative)"
+                }
+            },
+            "required": ["username", "amount"]
+        })
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {

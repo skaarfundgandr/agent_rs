@@ -6,14 +6,11 @@ use crate::domain::errors::ReActError;
 
 use super::built::{BuiltReAct, run_loop};
 
-impl<M, P, C> BuiltReAct<M, P, C>
+impl<M, C> BuiltReAct<M, C>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
     C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
 {
-    /// Execute a ReAct prompt with automatic compaction, **without** mutating
-    /// shared history.
     pub async fn prompt_compact(
         &self,
         msg: impl Into<String>,
@@ -21,8 +18,6 @@ where
         self.run_prompt_impl(msg.into()).await
     }
 
-    /// Execute a ReAct chat with automatic compaction, **with** caller-owned
-    /// history mutation on success.
     pub async fn chat_compact(
         &self,
         msg: impl Into<String>,
@@ -58,31 +53,27 @@ where
     }
 }
 
-impl<M, P, C> BuiltReAct<M, P, C>
+impl<M, C> BuiltReAct<M, C>
 where
     M: CompletionModel
-        + rig_core::streaming::StreamingChat<M, M::StreamingResponse>
         + WasmCompatSend
         + WasmCompatSync
         + 'static,
-    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
 {
-    /// Stream a ReAct prompt with automatic compaction. Does **not** mutate shared history.
     pub async fn stream_prompt_compact<'h>(
         &self,
         msg: impl Into<String>,
-    ) -> Result<super::streaming::ReActStream<'h, M, P, C>, ReActError> {
+    ) -> Result<super::streaming::ReActStream<'h, M, C>, ReActError> {
         self.run_stream_impl(msg.into())
     }
 
-    /// Stream a ReAct chat with automatic compaction. Caller-owned history is written back on completion.
     pub async fn stream_chat_compact<'h>(
         &self,
         msg: impl Into<String>,
         history: &'h mut Vec<Message>,
-    ) -> Result<super::streaming::ReActStream<'h, M, P, C>, ReActError> {
+    ) -> Result<super::streaming::ReActStream<'h, M, C>, ReActError> {
         let msg = msg.into();
         let snapshot = {
             let mut working = history.clone();

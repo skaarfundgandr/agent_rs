@@ -6,7 +6,6 @@ use crate::domain::rag::{RagSource, RagSourceType};
 use crate::rag::RagPipeline;
 use crate::security::SharedSandbox;
 use anyhow::Result;
-use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
 use std::collections::HashSet;
@@ -237,26 +236,26 @@ impl Tool for ManageRagTool {
     type Args = ManageRagArgs;
     type Output = String;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Manage RAG sources: add a file or directory, remove a source, or list all indexed sources. Changes are persisted directly.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["add", "remove", "list"],
-                        "description": "Action to perform: 'add' registers a new source, 'remove' unregisters an existing source, 'list' shows all registered sources"
-                    },
-                    "path": {
-                        "type": "string",
-                        "description": "Path to the file or directory (relative to sandbox root). Required for 'add' and 'remove' actions."
-                    }
+    fn description(&self) -> String {
+        "Manage RAG sources: add a file or directory, remove a source, or list all indexed sources. Changes are persisted directly.".to_string()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["add", "remove", "list"],
+                    "description": "Action to perform: 'add' registers a new source, 'remove' unregisters an existing source, 'list' shows all registered sources"
                 },
-                "required": ["action"]
-            }),
-        }
+                "path": {
+                    "type": "string",
+                    "description": "Path to the file or directory (relative to sandbox root). Required for 'add' and 'remove' actions."
+                }
+            },
+            "required": ["action"]
+        })
     }
 
     /// Dispatches the requested action, delegating to [`crate::rag::RagIndexer`].

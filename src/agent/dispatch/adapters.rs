@@ -1,7 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use rig_core::agent::PromptHook;
 use rig_core::completion::CompletionModel;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
@@ -10,27 +9,25 @@ use crate::agent::react::BuiltReAct;
 
 use super::definition::{AgentDefinition, AgentInput, AgentKind, AgentOutput};
 
-pub struct ReActAgentDefinition<M, P>
+pub struct ReActAgentDefinition<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     name: String,
     tool_groups: Vec<String>,
     description: String,
-    agent: BuiltReAct<M, P, ()>,
+    agent: BuiltReAct<M, ()>,
 }
 
-impl<M, P> ReActAgentDefinition<M, P>
+impl<M> ReActAgentDefinition<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     pub fn new(
         name: String,
         tool_groups: Vec<String>,
         description: String,
-        agent: BuiltReAct<M, P, ()>,
+        agent: BuiltReAct<M, ()>,
     ) -> Self {
         Self {
             name,
@@ -41,10 +38,9 @@ where
     }
 }
 
-impl<M, P> AgentDefinition for ReActAgentDefinition<M, P>
+impl<M> AgentDefinition for ReActAgentDefinition<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     fn name(&self) -> &str {
         &self.name
@@ -90,27 +86,25 @@ where
     }
 }
 
-pub struct ManagedAgentDefinition<M, P>
+pub struct ManagedAgentDefinition<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     name: String,
     tool_groups: Vec<String>,
     description: String,
-    agent: BuiltManagedAgent<M, P>,
+    agent: BuiltManagedAgent<M>,
 }
 
-impl<M, P> ManagedAgentDefinition<M, P>
+impl<M> ManagedAgentDefinition<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     pub fn new(
         name: String,
         tool_groups: Vec<String>,
         description: String,
-        agent: BuiltManagedAgent<M, P>,
+        agent: BuiltManagedAgent<M>,
     ) -> Self {
         Self {
             name,
@@ -121,10 +115,9 @@ where
     }
 }
 
-impl<M, P> AgentDefinition for ManagedAgentDefinition<M, P>
+impl<M> AgentDefinition for ManagedAgentDefinition<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     fn name(&self) -> &str {
         &self.name

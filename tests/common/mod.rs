@@ -32,8 +32,6 @@ pub enum MockResponse {
     /// Return a successful `CompletionResponse` with the given assistant content.
     Ok(OneOrMany<AssistantContent>),
     /// Return a non-transient error (not retried by the ReAct loop).
-    /// Note: CompletionError is not Clone, so we wrap the error kind as a string
-    /// and reconstruct the error on demand.
     Err(String),
 }
 
@@ -101,7 +99,7 @@ impl CompletionModel for MockCompletionModel {
                 Some(MockResponse::Err(msg)) => {
                     let json_err: serde_json::Error =
                         serde_json::from_str::<serde_json::Value>("invalid").unwrap_err();
-                    let _ = msg; // informational only
+                    let _ = msg;
                     Err(CompletionError::JsonError(json_err))
                 }
                 None => Err(CompletionError::ProviderError(
@@ -141,23 +139,18 @@ pub fn mock_streaming_response(text: &str) -> StreamingCompletionResponse<()> {
 }
 
 impl StreamingChat<MockCompletionModel, ()> for MockCompletionModel {
-    type Hook = ();
-
     fn stream_chat<I, T>(
         &self,
         prompt: impl Into<rig_core::message::Message> + rig_core::wasm_compat::WasmCompatSend,
         chat_history: I,
-    ) -> StreamingPromptRequest<MockCompletionModel, ()>
+    ) -> StreamingPromptRequest<MockCompletionModel>
     where
         I: IntoIterator<Item = T> + rig_core::wasm_compat::WasmCompatSend,
         T: Into<rig_core::message::Message>,
     {
-        // Build a minimal Agent via AgentBuilder, wrap in Arc, and pass to
-        // StreamingPromptRequest::new(). Agent is non-exhaustive, so we
-        // must go through the builder.
         let agent = AgentBuilder::new(self.clone()).default_max_turns(1).build();
-        StreamingPromptRequest::<MockCompletionModel, ()>::new(Arc::new(agent), prompt)
-            .with_history(chat_history)
+        StreamingPromptRequest::<MockCompletionModel>::new(Arc::new(agent), prompt)
+            .history(chat_history)
     }
 }
 
@@ -188,21 +181,21 @@ impl Tool for EchoTool {
     type Output = EchoOutput;
     type Error = std::io::Error;
 
-    async fn definition(&self, _prompt: String) -> rig_core::completion::ToolDefinition {
-        rig_core::completion::ToolDefinition {
-            name: "echo".to_string(),
-            description: "Echo back the input text".to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "text": {
-                        "type": "string",
-                        "description": "Text to echo back"
-                    }
-                },
-                "required": ["text"]
-            }),
-        }
+    fn description(&self) -> String {
+        "Echo back the input text".to_string()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Text to echo back"
+                }
+            },
+            "required": ["text"]
+        })
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
@@ -210,11 +203,11 @@ impl Tool for EchoTool {
     }
 }
 
-/// Build an `Agent<MockCompletionModel, ()>` with the given response queue
+/// Build an `Agent<MockCompletionModel>` with the given response queue
 /// and an `echo` tool registered. Sets `default_max_turns(1)` so rig-core's
 /// internal multi-turn loop runs exactly once per `agent.prompt()` call,
 /// preventing it from consuming multiple mock responses.
-pub fn mock_agent(responses: Vec<MockResponse>) -> rig_core::agent::Agent<MockCompletionModel, ()> {
+pub fn mock_agent(responses: Vec<MockResponse>) -> rig_core::agent::Agent<MockCompletionModel> {
     let model = MockCompletionModel::new(responses);
     AgentBuilder::new(model)
         .tool(EchoTool)
@@ -224,7 +217,7 @@ pub fn mock_agent(responses: Vec<MockResponse>) -> rig_core::agent::Agent<MockCo
 
 pub fn react_with_responses(
     responses: Vec<MockResponse>,
-) -> BuiltReAct<MockCompletionModel, (), ()> {
+) -> BuiltReAct<MockCompletionModel> {
     let agent = mock_agent(responses);
     agent.react().build()
 }
@@ -232,7 +225,7 @@ pub fn react_with_responses(
 pub fn react_with_responses_compact(
     responses: Vec<MockResponse>,
     threshold: usize,
-) -> BuiltReAct<MockCompletionModel, (), rig_core::agent::Agent<MockCompletionModel, ()>> {
+) -> BuiltReAct<MockCompletionModel, rig_core::agent::Agent<MockCompletionModel>> {
     let agent = mock_agent(responses);
     agent.react().with_compaction().threshold(threshold).build()
 }

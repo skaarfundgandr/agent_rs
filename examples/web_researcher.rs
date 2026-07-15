@@ -22,7 +22,6 @@ mod researcher_main {
     use agent_rs::security::{SandboxConfig, SharedSandbox};
     use anyhow::Result;
     use dotenvy::dotenv;
-    use rig_core::completion::ToolDefinition;
     use rig_core::prelude::*;
     use rig_core::providers::openai;
     use rig_core::tool::Tool;
@@ -52,21 +51,21 @@ mod researcher_main {
         type Args = SearchArgs;
         type Output = String;
 
-        async fn definition(&self, _prompt: String) -> ToolDefinition {
-            ToolDefinition {
-                name: Self::NAME.to_string(),
-                description: "Search the web for resources and documentation. Returns list of page titles and URLs.".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "The search query"
-                        }
-                    },
-                    "required": ["query"]
-                }),
-            }
+        fn description(&self) -> String {
+            "Search the web for resources and documentation. Returns list of page titles and URLs.".to_string()
+        }
+
+        fn parameters(&self) -> serde_json::Value {
+            json!({
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query"
+                    }
+                },
+                "required": ["query"]
+            })
         }
 
         async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
@@ -112,21 +111,21 @@ mod researcher_main {
         type Args = FetchArgs;
         type Output = String;
 
-        async fn definition(&self, _prompt: String) -> ToolDefinition {
-            ToolDefinition {
-                name: Self::NAME.to_string(),
-                description: "Fetch full text content of a web page by its URL.".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "URL to fetch"
-                        }
-                    },
-                    "required": ["url"]
-                }),
-            }
+        fn description(&self) -> String {
+            "Fetch full text content of a web page by its URL.".to_string()
+        }
+
+        fn parameters(&self) -> serde_json::Value {
+            json!({
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "URL to fetch"
+                    }
+                },
+                "required": ["url"]
+            })
         }
 
         async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {

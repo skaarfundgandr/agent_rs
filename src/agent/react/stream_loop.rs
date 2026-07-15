@@ -19,20 +19,16 @@ use super::callbacks::{ActionCb, ErrorCb, FinalCb, ObservationCb, ThoughtCb};
 use super::emitter::ReActSpanEmitter;
 use super::streaming::extract_prompt_text;
 
-/// All state needed by the streaming ReAct loop, bundled to avoid
-/// 17+ function parameters.
-pub(crate) struct StreamingLoopContext<M, P, C>
+pub(crate) struct StreamingLoopContext<M, C>
 where
     M: CompletionModel
-        + StreamingChat<M, M::StreamingResponse>
         + WasmCompatSend
         + WasmCompatSync
         + 'static,
-    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Send + Sync + 'static,
 {
-    pub agent: Agent<M, P>,
+    pub agent: Agent<M>,
     pub on_thought_cb: Option<ThoughtCb>,
     pub on_action_cb: Option<ActionCb>,
     pub on_observation_cb: Option<ObservationCb>,
@@ -50,18 +46,12 @@ where
     pub _compaction: PhantomData<C>,
 }
 
-/// Run the streaming ReAct loop inside a spawned task.
-///
-/// This is the core loop that drives streaming completion, tool execution,
-/// and callback emission.
-pub(crate) async fn run_streaming_loop<M, P, C>(ctx: StreamingLoopContext<M, P, C>)
+pub(crate) async fn run_streaming_loop<M, C>(ctx: StreamingLoopContext<M, C>)
 where
     M: CompletionModel
-        + StreamingChat<M, M::StreamingResponse>
         + WasmCompatSend
         + WasmCompatSync
         + 'static,
-    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Send + Sync + 'static,
 {
@@ -134,7 +124,11 @@ where
                 async move {
                     tokio::time::timeout(
                         stream_timeout,
-                        agent.stream_chat(prompt_str, working).multi_turn(20),
+                        async {
+                            agent.stream_chat(prompt_str, working)
+                                .max_turns(20)
+                                .await
+                        },
                     )
                     .await
                     .map_err(|e| {
@@ -276,7 +270,7 @@ where
                     }
                 }
                 MultiTurnStreamItem::FinalResponse(final_resp) => {
-                    let last_text = final_resp.response().to_string();
+                    let last_text = final_resp.output().to_string();
                     let final_text = if last_text.is_empty() {
                         std::mem::take(&mut final_answer_buffer)
                     } else {

@@ -22,14 +22,9 @@ pub(crate) struct ToolDispatchResult {
     pub history_extensions: Vec<Message>,
 }
 
-/// Execute all tool calls for a single ReAct cycle, emitting callbacks and
-/// building the next prompt.
-///
-/// Returns a [`ToolDispatchResult`] with the next prompt and any intermediate
-/// history messages.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn dispatch_tool_calls<M, P>(
-    agent: &Agent<M, P>,
+pub(crate) async fn dispatch_tool_calls<M>(
+    agent: &Agent<M>,
     tool_calls: &[&ToolCall],
     cycle: usize,
     tool_timeout_secs: u64,
@@ -40,7 +35,6 @@ pub(crate) async fn dispatch_tool_calls<M, P>(
 ) -> Result<ToolDispatchResult, ReActError>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     let mut next_prompt = None;
     let mut history_extensions = Vec::new();

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rig_core::agent::{Agent, PromptHook, PromptResponse};
+use rig_core::agent::{Agent, PromptResponse};
 use rig_core::completion::{CompletionModel, Prompt, PromptError};
 use rig_core::message::Message;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
@@ -12,26 +12,18 @@ use super::callbacks::ErrorCb;
 use super::emitter::ReActSpanEmitter;
 use super::helpers::recover_turn_limit_history;
 
-/// Result of a single model call attempt within a ReAct cycle.
 pub(crate) enum ModelCallResult {
-    /// The model responded successfully.
     Ok(PromptResponse),
-    /// A turn-limit error was recovered — the caller should update
-    /// `working_history`/`current_prompt` from the returned values and
-    /// `continue` the outer cycle loop.
     TurnLimitRecovery {
         recovered_history: Vec<Message>,
         recovered_prompt: Message,
     },
-    /// A non-recoverable error occurred.
     Err(ReActError),
 }
 
-/// Append `suffix` to the agent's system preamble for one call only.
-fn agent_with_system_suffix<M, P>(agent: &Agent<M, P>, suffix: &str) -> Agent<M, P>
+fn agent_with_system_suffix<M>(agent: &Agent<M>, suffix: &str) -> Agent<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     let mut agent = agent.clone();
     agent.preamble = Some(match agent.preamble.take() {
@@ -41,16 +33,9 @@ where
     agent
 }
 
-/// Execute the model call with retry logic and turn-limit recovery.
-///
-/// When `system_suffix` is `Some`, it is appended to the agent's system
-/// preamble for this call only (history and prompt are left unchanged).
-///
-/// Returns a [`ModelCallResult`] indicating success, turn-limit recovery, or
-/// a fatal error.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn execute_model_call<M, P>(
-    agent: &Agent<M, P>,
+pub(crate) async fn execute_model_call<M>(
+    agent: &Agent<M>,
     current_prompt: &Message,
     working_history: &[Message],
     max_retries: u32,
@@ -62,7 +47,6 @@ pub(crate) async fn execute_model_call<M, P>(
 ) -> ModelCallResult
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     let agent_for_call;
     let agent = match system_suffix {
@@ -78,7 +62,7 @@ where
         attempt += 1;
         match agent
             .prompt(current_prompt.clone())
-            .with_history(working_history.iter().cloned())
+            .history(working_history.iter().cloned())
             .extended_details()
             .await
         {

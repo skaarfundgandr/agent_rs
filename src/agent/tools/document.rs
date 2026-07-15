@@ -86,8 +86,12 @@ impl Tool for ReadDocumentTool {
     type Args = ReadDocumentArgs;
     type Output = String;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        self.cached_def.clone()
+    fn description(&self) -> String {
+        self.cached_def.description.clone()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        self.cached_def.parameters.clone()
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
@@ -186,8 +190,12 @@ impl Tool for WriteDocumentTool {
     type Args = WriteDocumentArgs;
     type Output = String;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        self.cached_def.clone()
+    fn description(&self) -> String {
+        self.cached_def.description.clone()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        self.cached_def.parameters.clone()
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {

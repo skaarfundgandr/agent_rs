@@ -3,7 +3,6 @@ use crate::domain::errors::DocumentError;
 use crate::security::{
     SandboxConfig, SharedSandbox, relative_display_path, validate_sandboxed_path,
 };
-use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
 use std::collections::HashSet;
@@ -32,6 +31,8 @@ pub struct GrepSearchTool {
     sandbox: Arc<SharedSandbox>,
     allowed_extensions: HashSet<String>,
     policy: PermissionPolicy,
+    description: String,
+    parameters: serde_json::Value,
 }
 
 impl GrepSearchTool {
@@ -51,31 +52,15 @@ impl GrepSearchTool {
         allowed_extensions: HashSet<String>,
         policy: PermissionPolicy,
     ) -> Self {
-        Self {
-            sandbox,
-            allowed_extensions,
-            policy,
-        }
-    }
-}
-
-impl Tool for GrepSearchTool {
-    const NAME: &'static str = "grep_search";
-
-    type Error = DocumentError;
-    type Args = GrepSearchArgs;
-    type Output = String;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        let supported = self
-            .allowed_extensions
+        let supported = allowed_extensions
             .iter()
             .map(|e| format!(".{e}"))
             .collect::<Vec<_>>()
             .join(", ");
-
-        ToolDefinition {
-            name: Self::NAME.to_string(),
+        Self {
+            sandbox,
+            allowed_extensions,
+            policy,
             description: format!(
                 "Search for a pattern/substring in workspace text files. Supports extensions: {supported}. Paths are relative to sandbox root(s)."
             ),
@@ -98,6 +83,23 @@ impl Tool for GrepSearchTool {
                 "required": ["query"]
             }),
         }
+    }
+
+}
+
+impl Tool for GrepSearchTool {
+    const NAME: &'static str = "grep_search";
+
+    type Error = DocumentError;
+    type Args = GrepSearchArgs;
+    type Output = String;
+
+    fn description(&self) -> String {
+        self.description.clone()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        self.parameters.clone()
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {

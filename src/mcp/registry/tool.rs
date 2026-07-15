@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use rig_core::completion::ToolDefinition;
 use rig_core::tool::{ToolDyn, ToolError, rmcp::McpTool as RigMcpTool};
 use rig_core::wasm_compat::WasmBoxedFuture;
 use rmcp::service::{RoleClient, RunningService};
@@ -71,8 +70,12 @@ impl ToolDyn for RegisteredMcpTool {
         self.inner.name()
     }
 
-    fn definition(&'_ self, prompt: String) -> WasmBoxedFuture<'_, ToolDefinition> {
-        self.inner.definition(prompt)
+    fn description(&self) -> String {
+        self.inner.description()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        self.inner.parameters()
     }
 
     fn call(&'_ self, args: String) -> WasmBoxedFuture<'_, Result<String, ToolError>> {

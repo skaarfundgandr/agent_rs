@@ -4,21 +4,19 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures::Stream;
-use rig_core::agent::{Agent, PromptHook};
+use rig_core::agent::Agent;
 use rig_core::completion::CompletionModel;
 use rig_core::message::Message;
-use rig_core::streaming::StreamingChat;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::react::Compact;
 use crate::domain::agent::ReActStreamItem;
 
-pub(crate) struct StreamShared<M, P, C>
+pub(crate) struct StreamShared<M, C>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
-    pub(crate) agent: Agent<M, P>,
+    pub(crate) agent: Agent<M>,
     pub(crate) tool_timeout_secs: u64,
     pub(crate) on_thought: Option<super::callbacks::ThoughtCb>,
     pub(crate) on_action: Option<super::callbacks::ActionCb>,
@@ -26,23 +24,21 @@ where
     pub(crate) on_final: Option<super::callbacks::FinalCb>,
     pub(crate) on_error: Option<super::callbacks::ErrorCb>,
     pub(crate) context_manager: Option<Arc<dyn Compact + Send + Sync>>,
-    pub(crate) _compaction: PhantomData<fn(M, P, C)>,
+    pub(crate) _compaction: PhantomData<fn(M, C)>,
 }
 
-pub struct ReActStream<'h, M, P, C = ()>
+pub struct ReActStream<'h, M, C = ()>
 where
     M: CompletionModel
-        + StreamingChat<M, M::StreamingResponse>
         + WasmCompatSend
         + WasmCompatSync
         + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
 {
     rx: tokio::sync::mpsc::Receiver<ReActStreamItem>,
     is_finished: bool,
     history_out: Option<&'h mut Vec<Message>>,
-    _phantom: PhantomData<fn(M, P, C)>,
+    _phantom: PhantomData<fn(M, C)>,
 }
 
 pub(crate) fn prompt_error_from_streaming(
@@ -54,20 +50,18 @@ pub(crate) fn prompt_error_from_streaming(
     }
 }
 
-impl<'h, M, P, C> ReActStream<'h, M, P, C>
+impl<'h, M, C> ReActStream<'h, M, C>
 where
     M: CompletionModel
-        + StreamingChat<M, M::StreamingResponse>
         + WasmCompatSend
         + WasmCompatSync
         + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Send + Sync + 'static,
 {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        shared: Arc<StreamShared<M, P, C>>,
+        shared: Arc<StreamShared<M, C>>,
         history_snapshot: Vec<Message>,
         max_cycles: usize,
         max_retries: u32,
@@ -126,14 +120,12 @@ pub(crate) async fn send_or_break(
     tx.send(item).await.is_err()
 }
 
-impl<'h, M, P, C> Stream for ReActStream<'h, M, P, C>
+impl<'h, M, C> Stream for ReActStream<'h, M, C>
 where
     M: CompletionModel
-        + StreamingChat<M, M::StreamingResponse>
         + WasmCompatSend
         + WasmCompatSync
         + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Send + Sync + 'static,
 {

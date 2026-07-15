@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rig_core::agent::{Agent, PromptHook};
+use rig_core::agent::Agent;
 use rig_core::completion::CompletionModel;
 use rig_core::message::{Message, UserContent};
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
@@ -15,8 +15,6 @@ use super::emitter::ReActSpanEmitter;
 use super::built_methods::effective_prompt;
 pub use super::built_methods::emit_internal_tool_callbacks;
 
-/// Emit a `NoToolCallsAndNoFinalAnswer` error via callbacks and span emitter,
-/// then return the error. Extracted to deduplicate the two call sites in `run_loop`.
 fn emit_no_tool_calls_error(
     cycle: usize,
     on_error: &Option<ErrorCb>,
@@ -33,15 +31,11 @@ fn emit_no_tool_calls_error(
 }
 
 /// A fully configured ReAct agent, ready to run prompts and chats.
-///
-/// Constructed by calling [`.build()`](super::ReActBuilder::build) on a
-/// [`ReActBuilder`](super::ReActBuilder).
-pub struct BuiltReAct<M, P, C = ()>
+pub struct BuiltReAct<M, C = ()>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
-    pub(crate) agent: Agent<M, P>,
+    pub(crate) agent: Agent<M>,
     pub(crate) max_cycles: usize,
     pub(crate) max_retries: u32,
     pub(crate) react_preamble: Option<String>,
@@ -57,11 +51,9 @@ where
     pub(crate) _compaction: std::marker::PhantomData<C>,
 }
 
-/// Standalone ReAct loop that works on a local `Vec<Message>` clone.
-/// Returns the trace and the final working history on success.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn run_loop<M, P>(
-    agent: &Agent<M, P>,
+pub(crate) async fn run_loop<M>(
+    agent: &Agent<M>,
     prompt: &str,
     history_snapshot: &[Message],
     max_cycles: usize,
@@ -79,7 +71,6 @@ pub(crate) async fn run_loop<M, P>(
 ) -> Result<(ReActTrace, Vec<Message>), ReActError>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     let mut trace = ReActTrace {
         prompt: prompt.to_string(),

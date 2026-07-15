@@ -8,21 +8,19 @@ use super::builder::{NoCompaction, ReActBuilder};
 use super::emitter::NoopSpanEmitter;
 
 /// Extension trait that adds a `.react()` method to rig [`Agent`]s.
-pub trait ReActExt<M, P>
+pub trait ReActExt<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     /// Start building a ReAct loop for this agent.
-    fn react(&self) -> ReActBuilder<'_, M, P, NoCompaction>;
+    fn react(&self) -> ReActBuilder<'_, M, NoCompaction>;
 }
 
-impl<M, P> ReActExt<M, P> for Agent<M, P>
+impl<M> ReActExt<M> for Agent<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
-    fn react(&self) -> ReActBuilder<'_, M, P, NoCompaction> {
+    fn react(&self) -> ReActBuilder<'_, M, NoCompaction> {
         ReActBuilder {
             agent: self,
             max_cycles: 20,

@@ -141,11 +141,10 @@ async fn test_managed_stream_appends_history_only_once() {
     let prompt_text = "hello".to_string();
 
     let final_response =
-        MultiTurnStreamItem::<()>::FinalResponse(rig_core::agent::FinalResponse::new(
-            OneOrMany::one(AssistantContent::text("world")),
-            Usage::new(),
-            None,
-        ));
+        MultiTurnStreamItem::<()>::FinalResponse(
+            rig_core::agent::PromptResponse::new("world", Usage::new())
+                .with_content(OneOrMany::one(AssistantContent::text("world"))),
+        );
 
     // Emit two FinalResponse items; the wrapper should only append to shared
     // history once, even if the underlying stream produces duplicates.

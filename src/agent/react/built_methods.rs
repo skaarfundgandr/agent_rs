@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use rig_core::completion::{Prompt, PromptError};
 use rig_core::message::{AssistantContent, Message, ToolResultContent, UserContent};
-use rig_core::streaming::StreamingChat;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::memory::ContextManager;
@@ -37,22 +36,18 @@ where
     }
 }
 
-impl<M, P, C> BuiltReAct<M, P, C>
+impl<M, C> BuiltReAct<M, C>
 where
     M: rig_core::completion::CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
-    /// Return the configured `max_cycles` limit.
     pub fn max_cycles(&self) -> usize {
         self.max_cycles
     }
 
-    /// Return the configured `max_retries` limit.
     pub fn max_retries(&self) -> u32 {
         self.max_retries
     }
 
-    /// Return the optional ReAct preamble string.
     pub fn react_preamble(&self) -> Option<&str> {
         self.react_preamble.as_deref()
     }
@@ -140,10 +135,9 @@ pub fn emit_internal_tool_callbacks(
     }
 }
 
-impl<M, P, C> BuiltReAct<M, P, C>
+impl<M, C> BuiltReAct<M, C>
 where
     M: rig_core::completion::CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
-    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
 {
     pub(crate) async fn run_prompt_impl(&self, msg: String) -> Result<ReActTrace, ReActError> {
         let (trace, _) = run_loop(
@@ -195,18 +189,16 @@ where
     }
 }
 
-impl<M, P, C> BuiltReAct<M, P, C>
+impl<M, C> BuiltReAct<M, C>
 where
     M: rig_core::completion::CompletionModel
-        + StreamingChat<M, M::StreamingResponse>
         + WasmCompatSend
         + WasmCompatSync
         + 'static,
-    P: rig_core::agent::PromptHook<M> + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Send + Sync + 'static,
 {
-    pub(crate) fn make_stream_shared(&self) -> Arc<super::streaming::StreamShared<M, P, C>> {
+    pub(crate) fn make_stream_shared(&self) -> Arc<super::streaming::StreamShared<M, C>> {
         Arc::new(super::streaming::StreamShared {
             agent: self.agent.clone(),
             tool_timeout_secs: self.tool_timeout_secs,
@@ -223,7 +215,7 @@ where
     pub(crate) fn run_stream_impl<'h>(
         &self,
         msg: String,
-    ) -> Result<super::streaming::ReActStream<'h, M, P, C>, ReActError> {
+    ) -> Result<super::streaming::ReActStream<'h, M, C>, ReActError> {
         Ok(super::streaming::ReActStream::new(
             self.make_stream_shared(),
             Vec::new(),

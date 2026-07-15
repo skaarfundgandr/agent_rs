@@ -169,7 +169,7 @@ mod otel_main {
             // tool-call history are not carried forward.
             .default_max_turns(1)
             .temperature(0.6)
-            .hook(LangSmithAgentHook)
+            .add_hook(LangSmithAgentHook)
             .build();
 
         // ---------- interactive prompt loop ----------

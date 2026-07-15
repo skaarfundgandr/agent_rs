@@ -1,5 +1,5 @@
 use crate::domain::errors::CompactError;
-use rig_core::completion::{Prompt, ToolDefinition};
+use rig_core::completion::Prompt;
 use rig_core::tool::Tool;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 use serde::{Deserialize, Serialize};
@@ -43,21 +43,21 @@ impl<M: Prompt + WasmCompatSend + WasmCompatSync + 'static> Tool for CompactTool
     type Args = CompactArgs;
     type Output = String;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Summarize the current conversation history to save tokens while preserving key information.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "text": {
-                        "type": "string",
-                        "description": "The conversation history or text to summarize"
-                    }
-                },
-                "required": ["text"]
-            }),
-        }
+    fn description(&self) -> String {
+        "Summarize the current conversation history to save tokens while preserving key information.".to_string()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The conversation history or text to summarize"
+                }
+            },
+            "required": ["text"]
+        })
     }
 
     async fn call(&self, args: CompactArgs) -> Result<Self::Output, Self::Error> {

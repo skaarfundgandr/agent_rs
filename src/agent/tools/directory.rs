@@ -1,7 +1,6 @@
 use crate::agent::permission::PermissionPolicy;
 use crate::domain::errors::DocumentError;
 use crate::security::SharedSandbox;
-use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde_json::json;
 use std::path::Path;
@@ -48,21 +47,20 @@ impl Tool for ListDirectoryTool {
     type Args = ListDirectoryArgs;
     type Output = String;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "List the contents of a directory relative to the sandbox root."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "The path to list (relative to the sandbox root, defaults to '.' if not provided)"
-                    }
+    fn description(&self) -> String {
+        "List the contents of a directory relative to the sandbox root.".to_string()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The path to list (relative to the sandbox root, defaults to '.' if not provided)"
                 }
-            }),
-        }
+            }
+        })
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {

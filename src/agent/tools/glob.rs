@@ -105,8 +105,12 @@ impl Tool for GlobSearchTool {
     type Args = GlobSearchArgs;
     type Output = String;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        GLOB_DEF.clone()
+    fn description(&self) -> String {
+        GLOB_DEF.description.clone()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        GLOB_DEF.parameters.clone()
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
