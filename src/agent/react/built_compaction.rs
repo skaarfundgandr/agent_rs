@@ -56,10 +56,7 @@ where
 
 impl<M, C> BuiltReAct<M, C>
 where
-    M: CompletionModel
-        + WasmCompatSend
-        + WasmCompatSync
-        + 'static,
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
 {

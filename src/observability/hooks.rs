@@ -32,7 +32,9 @@ where
 {
     async fn on_event(&self, _ctx: &HookContext, event: StepEvent<'_, M>) -> Flow {
         match event {
-            StepEvent::CompletionCall { prompt, history, .. } => {
+            StepEvent::CompletionCall {
+                prompt, history, ..
+            } => {
                 let span = tracing::Span::current();
                 span.record(LANGSMITH_SPAN_KIND, KIND_LLM);
                 span.record(OPENINFERENCE_SPAN_KIND, "LLM");
@@ -55,7 +57,9 @@ where
                 }
                 Flow::cont()
             }
-            StepEvent::ToolCall { tool_name: _, args, .. } => {
+            StepEvent::ToolCall {
+                tool_name: _, args, ..
+            } => {
                 let span = tracing::Span::current();
                 span.record(LANGSMITH_SPAN_KIND, KIND_TOOL);
                 span.record(OPENINFERENCE_SPAN_KIND, "TOOL");

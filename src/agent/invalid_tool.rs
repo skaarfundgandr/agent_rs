@@ -40,13 +40,9 @@ impl<M: CompletionModel> AgentHook<M> for InvalidToolRecoveryHook {
             &ctx.available_tools
         };
         match self.policy {
-            InvalidToolPolicy::Skip => {
-                Flow::skip(invalid_tool_feedback(&ctx.tool_name, allowed))
-            }
+            InvalidToolPolicy::Skip => Flow::skip(invalid_tool_feedback(&ctx.tool_name, allowed)),
             InvalidToolPolicy::Fail => Flow::fail(),
-            InvalidToolPolicy::Retry => {
-                Flow::retry(invalid_tool_feedback(&ctx.tool_name, allowed))
-            }
+            InvalidToolPolicy::Retry => Flow::retry(invalid_tool_feedback(&ctx.tool_name, allowed)),
         }
     }
 }

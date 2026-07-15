@@ -68,8 +68,7 @@ where
         if max_invalid_tool_call_retries > 0 {
             req = req.max_invalid_tool_call_retries(max_invalid_tool_call_retries as usize);
         }
-        match req.await
-        {
+        match req.await {
             Ok(resp) => return ModelCallResult::Ok(resp),
             Err(e) => {
                 let is_transient = crate::agent::retry::is_retryable(&e);

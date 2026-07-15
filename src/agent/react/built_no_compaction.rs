@@ -28,10 +28,7 @@ where
 
 impl<M> BuiltReAct<M, ()>
 where
-    M: CompletionModel
-        + WasmCompatSend
-        + WasmCompatSync
-        + 'static,
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
 {
     pub fn stream_prompt<'h>(

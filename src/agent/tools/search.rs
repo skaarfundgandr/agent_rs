@@ -84,7 +84,6 @@ impl GrepSearchTool {
             }),
         }
     }
-
 }
 
 impl Tool for GrepSearchTool {

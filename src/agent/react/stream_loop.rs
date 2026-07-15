@@ -21,10 +21,7 @@ use super::streaming::extract_prompt_text;
 
 pub(crate) struct StreamingLoopContext<M, C>
 where
-    M: CompletionModel
-        + WasmCompatSend
-        + WasmCompatSync
-        + 'static,
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Send + Sync + 'static,
 {
@@ -49,10 +46,7 @@ where
 
 pub(crate) async fn run_streaming_loop<M, C>(ctx: StreamingLoopContext<M, C>)
 where
-    M: CompletionModel
-        + WasmCompatSend
-        + WasmCompatSync
-        + 'static,
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Send + Sync + 'static,
 {
@@ -124,25 +118,20 @@ where
                 let working = working_history.clone();
                 let agent = agent.clone();
                 async move {
-                    let mut stream_req =
-                        agent.stream_chat(prompt_str, working).max_turns(20);
+                    let mut stream_req = agent.stream_chat(prompt_str, working).max_turns(20);
                     if max_invalid_tool_call_retries > 0 {
-                        stream_req = stream_req.max_invalid_tool_call_retries(
-                            max_invalid_tool_call_retries as usize,
-                        );
+                        stream_req = stream_req
+                            .max_invalid_tool_call_retries(max_invalid_tool_call_retries as usize);
                     }
-                    tokio::time::timeout(
-                        stream_timeout,
-                        stream_req,
-                    )
-                    .await
-                    .map_err(|e| {
-                        rig_core::completion::PromptError::CompletionError(
-                            rig_core::completion::request::CompletionError::RequestError(Box::new(
-                                e,
-                            )),
-                        )
-                    })
+                    tokio::time::timeout(stream_timeout, stream_req)
+                        .await
+                        .map_err(|e| {
+                            rig_core::completion::PromptError::CompletionError(
+                                rig_core::completion::request::CompletionError::RequestError(
+                                    Box::new(e),
+                                ),
+                            )
+                        })
                 }
             })
             .await

@@ -54,7 +54,10 @@ where
     }
 
     pub fn max_retries(self, max_retries: u32) -> Self {
-        Self { max_retries, ..self }
+        Self {
+            max_retries,
+            ..self
+        }
     }
 
     pub fn invalid_tool_policy(mut self, policy: InvalidToolPolicy) -> Self {
@@ -72,54 +75,81 @@ where
     }
 
     pub fn tool_timeout_secs(self, secs: u64) -> Self {
-        Self { tool_timeout_secs: secs, ..self }
+        Self {
+            tool_timeout_secs: secs,
+            ..self
+        }
     }
 
     pub fn react_preamble(self, preamble: Option<String>) -> Self {
-        Self { react_preamble: preamble, ..self }
+        Self {
+            react_preamble: preamble,
+            ..self
+        }
     }
 
     pub fn with_span_emitter(self, emitter: Arc<dyn ReActSpanEmitter>) -> Self {
-        Self { span_emitter: emitter, ..self }
+        Self {
+            span_emitter: emitter,
+            ..self
+        }
     }
 
     pub fn on_thought(
         self,
         cb: impl Fn(&crate::domain::agent::Thought) + Send + Sync + 'static,
     ) -> Self {
-        Self { on_thought: Some(Arc::new(cb)), ..self }
+        Self {
+            on_thought: Some(Arc::new(cb)),
+            ..self
+        }
     }
 
     pub fn on_action(
         self,
         cb: impl Fn(&crate::domain::agent::Action) + Send + Sync + 'static,
     ) -> Self {
-        Self { on_action: Some(Arc::new(cb)), ..self }
+        Self {
+            on_action: Some(Arc::new(cb)),
+            ..self
+        }
     }
 
     pub fn on_observation(
         self,
         cb: impl Fn(&crate::domain::agent::Observation) + Send + Sync + 'static,
     ) -> Self {
-        Self { on_observation: Some(Arc::new(cb)), ..self }
+        Self {
+            on_observation: Some(Arc::new(cb)),
+            ..self
+        }
     }
 
     pub fn on_final(
         self,
         cb: impl Fn(&crate::domain::agent::FinalAnswer) + Send + Sync + 'static,
     ) -> Self {
-        Self { on_final: Some(Arc::new(cb)), ..self }
+        Self {
+            on_final: Some(Arc::new(cb)),
+            ..self
+        }
     }
 
     pub fn on_error(
         self,
         cb: impl Fn(&crate::domain::errors::ReActError) + Send + Sync + 'static,
     ) -> Self {
-        Self { on_error: Some(Arc::new(cb)), ..self }
+        Self {
+            on_error: Some(Arc::new(cb)),
+            ..self
+        }
     }
 
     pub fn set_cycle_limit_reminder_msg(self, msg: Option<String>) -> Self {
-        Self { cycle_limit_reminder_msg: msg, ..self }
+        Self {
+            cycle_limit_reminder_msg: msg,
+            ..self
+        }
     }
 }
 
@@ -158,7 +188,9 @@ where
 
     pub fn build(self) -> BuiltReAct<M, ()> {
         let mut agent = self.agent.clone();
-        agent.hooks.push(InvalidToolRecoveryHook::new(self.invalid_tool_policy));
+        agent
+            .hooks
+            .push(InvalidToolRecoveryHook::new(self.invalid_tool_policy));
         BuiltReAct {
             agent,
             max_cycles: self.max_cycles,
@@ -187,7 +219,10 @@ where
     pub fn threshold(self, n: usize) -> Self {
         assert!(n > 0, "threshold must be greater than 0");
         Self {
-            compaction: CompactionConfig { threshold: n, ..self.compaction },
+            compaction: CompactionConfig {
+                threshold: n,
+                ..self.compaction
+            },
             ..self
         }
     }
@@ -223,14 +258,20 @@ where
 
     pub fn compaction_prompt(self, formatter: fn(&str) -> String) -> Self {
         Self {
-            compaction: CompactionConfig { compaction_prompt: Some(formatter), ..self.compaction },
+            compaction: CompactionConfig {
+                compaction_prompt: Some(formatter),
+                ..self.compaction
+            },
             ..self
         }
     }
 
     pub fn tokenizer(self, estimator: fn(&[Message]) -> usize) -> Self {
         Self {
-            compaction: CompactionConfig { tokenizer: Some(estimator), ..self.compaction },
+            compaction: CompactionConfig {
+                tokenizer: Some(estimator),
+                ..self.compaction
+            },
             ..self
         }
     }
@@ -239,7 +280,10 @@ where
     where
         C: WasmCompatSend + WasmCompatSync + 'static,
     {
-        assert!(self.compaction.threshold > 0, "threshold must be configured before build()");
+        assert!(
+            self.compaction.threshold > 0,
+            "threshold must be configured before build()"
+        );
 
         let mut ctx = ContextManager::new(self.compaction.threshold, self.compaction.model);
         if let Some(estimator) = self.compaction.tokenizer {
@@ -250,7 +294,9 @@ where
         }
 
         let mut agent = self.agent.clone();
-        agent.hooks.push(InvalidToolRecoveryHook::new(self.invalid_tool_policy));
+        agent
+            .hooks
+            .push(InvalidToolRecoveryHook::new(self.invalid_tool_policy));
         BuiltReAct {
             agent,
             max_cycles: self.max_cycles,

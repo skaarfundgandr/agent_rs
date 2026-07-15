@@ -30,10 +30,7 @@ where
 
 pub struct ReActStream<'h, M, C = ()>
 where
-    M: CompletionModel
-        + WasmCompatSend
-        + WasmCompatSync
-        + 'static,
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
 {
     rx: tokio::sync::mpsc::Receiver<ReActStreamItem>,
@@ -53,10 +50,7 @@ pub(crate) fn prompt_error_from_streaming(
 
 impl<'h, M, C> ReActStream<'h, M, C>
 where
-    M: CompletionModel
-        + WasmCompatSend
-        + WasmCompatSync
-        + 'static,
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Send + Sync + 'static,
 {
@@ -124,10 +118,7 @@ pub(crate) async fn send_or_break(
 
 impl<'h, M, C> Stream for ReActStream<'h, M, C>
 where
-    M: CompletionModel
-        + WasmCompatSend
-        + WasmCompatSync
-        + 'static,
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Send + Sync + 'static,
 {

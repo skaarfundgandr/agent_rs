@@ -4,9 +4,7 @@ use rig_core::message::Message;
 use rig_core::streaming::StreamingChat;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
-pub async fn execute_chat<
-    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
->(
+pub async fn execute_chat<M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static>(
     agent: &Agent<M>,
     prompt: &str,
     history: &mut Vec<Message>,

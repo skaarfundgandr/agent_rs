@@ -89,7 +89,10 @@ where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
 {
     pub fn max_retries(self, max_retries: u32) -> Self {
-        Self { max_retries, ..self }
+        Self {
+            max_retries,
+            ..self
+        }
     }
 
     pub fn invalid_tool_policy(mut self, policy: InvalidToolPolicy) -> Self {
@@ -157,7 +160,10 @@ where
     pub fn threshold(self, n: usize) -> Self {
         assert!(n > 0, "threshold must be greater than 0");
         Self {
-            compaction: CompactionConfig { threshold: n, ..self.compaction },
+            compaction: CompactionConfig {
+                threshold: n,
+                ..self.compaction
+            },
             ..self
         }
     }
@@ -183,14 +189,20 @@ where
 
     pub fn compaction_prompt(self, formatter: fn(&str) -> String) -> Self {
         Self {
-            compaction: CompactionConfig { compaction_prompt: Some(formatter), ..self.compaction },
+            compaction: CompactionConfig {
+                compaction_prompt: Some(formatter),
+                ..self.compaction
+            },
             ..self
         }
     }
 
     pub fn tokenizer(self, estimator: fn(&[Message]) -> usize) -> Self {
         Self {
-            compaction: CompactionConfig { tokenizer: Some(estimator), ..self.compaction },
+            compaction: CompactionConfig {
+                tokenizer: Some(estimator),
+                ..self.compaction
+            },
             ..self
         }
     }
@@ -199,7 +211,10 @@ where
     where
         C: WasmCompatSend + WasmCompatSync + 'static,
     {
-        assert!(self.compaction.threshold > 0, "threshold must be configured before build()");
+        assert!(
+            self.compaction.threshold > 0,
+            "threshold must be configured before build()"
+        );
 
         let mut ctx = ContextManager::new(self.compaction.threshold, self.compaction.model);
         if let Some(estimator) = self.compaction.tokenizer {
@@ -270,16 +285,14 @@ async fn build_stream<'a, M>(
     max_invalid_tool_call_retries: u32,
 ) -> Result<ManagedStream<'a, M::StreamingResponse>, PromptError>
 where
-    M: CompletionModel
-        + WasmCompatSend
-        + WasmCompatSync
-        + 'static,
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send + 'static,
 {
-    let mut rig_stream = execute_stream_chat(agent, msg, working)
-        .max_turns(agent.default_max_turns.unwrap_or(20));
+    let mut rig_stream =
+        execute_stream_chat(agent, msg, working).max_turns(agent.default_max_turns.unwrap_or(20));
     if max_invalid_tool_call_retries > 0 {
-        rig_stream = rig_stream.max_invalid_tool_call_retries(max_invalid_tool_call_retries as usize);
+        rig_stream =
+            rig_stream.max_invalid_tool_call_retries(max_invalid_tool_call_retries as usize);
     }
     let rig_stream = rig_stream.await;
     Ok(ManagedStream::new(
@@ -299,7 +312,14 @@ where
     pub async fn prompt(&self, msg: impl Into<String>) -> Result<String, PromptError> {
         let msg = msg.into();
         let mut working = Vec::new();
-        retry_chat(&self.agent, &msg, &mut working, self.max_retries, self.max_invalid_tool_call_retries).await
+        retry_chat(
+            &self.agent,
+            &msg,
+            &mut working,
+            self.max_retries,
+            self.max_invalid_tool_call_retries,
+        )
+        .await
     }
 
     pub async fn chat(
@@ -309,7 +329,14 @@ where
     ) -> Result<String, PromptError> {
         let msg = msg.into();
         let mut working = history.clone();
-        let result = retry_chat(&self.agent, &msg, &mut working, self.max_retries, self.max_invalid_tool_call_retries).await;
+        let result = retry_chat(
+            &self.agent,
+            &msg,
+            &mut working,
+            self.max_retries,
+            self.max_invalid_tool_call_retries,
+        )
+        .await;
         if let Ok(final_text) = &result {
             history.push(Message::user(msg.as_str()));
             history.push(Message::assistant(final_text));
@@ -325,7 +352,15 @@ where
         M::StreamingResponse: rig_core::completion::GetTokenUsage + Send + 'static,
     {
         let msg = msg.into();
-        build_stream(&self.agent, &msg, Vec::new(), None, None, self.max_invalid_tool_call_retries).await
+        build_stream(
+            &self.agent,
+            &msg,
+            Vec::new(),
+            None,
+            None,
+            self.max_invalid_tool_call_retries,
+        )
+        .await
     }
 
     pub async fn stream_chat<'a>(
@@ -338,7 +373,15 @@ where
     {
         let msg = msg.into();
         let working = history.clone();
-        build_stream(&self.agent, &msg, working, None, Some(history), self.max_invalid_tool_call_retries).await
+        build_stream(
+            &self.agent,
+            &msg,
+            working,
+            None,
+            Some(history),
+            self.max_invalid_tool_call_retries,
+        )
+        .await
     }
 }
 
@@ -361,7 +404,14 @@ where
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
-        retry_chat(&self.agent, &msg, &mut working, self.max_retries, self.max_invalid_tool_call_retries).await
+        retry_chat(
+            &self.agent,
+            &msg,
+            &mut working,
+            self.max_retries,
+            self.max_invalid_tool_call_retries,
+        )
+        .await
     }
 
     pub async fn chat_compact(
@@ -374,7 +424,14 @@ where
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
-        let result = retry_chat(&self.agent, &msg, &mut working, self.max_retries, self.max_invalid_tool_call_retries).await;
+        let result = retry_chat(
+            &self.agent,
+            &msg,
+            &mut working,
+            self.max_retries,
+            self.max_invalid_tool_call_retries,
+        )
+        .await;
         if let Ok(final_text) = &result {
             *history = working;
             history.push(Message::user(msg.as_str()));
@@ -395,7 +452,15 @@ where
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
-        build_stream(&self.agent, &msg, working, None, None, self.max_invalid_tool_call_retries).await
+        build_stream(
+            &self.agent,
+            &msg,
+            working,
+            None,
+            None,
+            self.max_invalid_tool_call_retries,
+        )
+        .await
     }
 
     pub async fn stream_chat_compact<'a>(

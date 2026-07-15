@@ -52,7 +52,8 @@ mod researcher_main {
         type Output = String;
 
         fn description(&self) -> String {
-            "Search the web for resources and documentation. Returns list of page titles and URLs.".to_string()
+            "Search the web for resources and documentation. Returns list of page titles and URLs."
+                .to_string()
         }
 
         fn parameters(&self) -> serde_json::Value {

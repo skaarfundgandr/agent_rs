@@ -222,10 +222,7 @@ async fn test_react_skip_invalid_tool() {
         .await
         .expect("skip should recover from invalid tool");
 
-    let fa = trace
-        .final_answer
-        .as_ref()
-        .expect("should have final answer");
+    let fa = trace.final_answer.as_ref().expect("should have final answer");
     assert!(
         fa.text.contains("recovered"),
         "expected final answer mentioning recovery, got: {}",
@@ -238,11 +235,9 @@ async fn test_react_fail_invalid_tool() {
     use agent_rs::agent::InvalidToolPolicy;
     use common::{MockCompletionModel, mock_agent};
 
-    let responses = vec![MockCompletionModel::tool_call(
-        "tc-1",
-        "bogus_tool",
-        serde_json::json!({}),
-    )];
+    let responses = vec![
+        MockCompletionModel::tool_call("tc-1", "bogus_tool", serde_json::json!({})),
+    ];
 
     let agent = mock_agent(responses);
     let built = agent
@@ -291,10 +286,7 @@ async fn test_react_retry_invalid_tool() {
         .prompt("test")
         .await
         .expect("retry should recover from invalid tool");
-    let fa = trace
-        .final_answer
-        .as_ref()
-        .expect("should have final answer");
+    let fa = trace.final_answer.as_ref().expect("should have final answer");
     assert!(
         fa.text.contains("done"),
         "expected final answer 'done', got: {}",
@@ -307,11 +299,9 @@ async fn test_react_dead_retry_fails() {
     use agent_rs::agent::InvalidToolPolicy;
     use common::{MockCompletionModel, mock_agent};
 
-    let responses = vec![MockCompletionModel::tool_call(
-        "tc-1",
-        "bogus_tool",
-        serde_json::json!({}),
-    )];
+    let responses = vec![
+        MockCompletionModel::tool_call("tc-1", "bogus_tool", serde_json::json!({})),
+    ];
 
     let agent = mock_agent(responses);
     let built = agent
@@ -353,8 +343,7 @@ fn test_react_builder_retry_auto_budget() {
     use agent_rs::agent::InvalidToolPolicy;
 
     let agent = make_test_agent();
-    let built = agent
-        .react()
+    let built = agent.react()
         .invalid_tool_policy(InvalidToolPolicy::Retry)
         .build();
     assert_eq!(built.max_invalid_tool_call_retries(), 2);
@@ -365,8 +354,7 @@ fn test_react_builder_explicit_budget_wins() {
     use agent_rs::agent::InvalidToolPolicy;
 
     let agent = make_test_agent();
-    let built = agent
-        .react()
+    let built = agent.react()
         .max_invalid_tool_call_retries(5)
         .invalid_tool_policy(InvalidToolPolicy::Retry)
         .build();
@@ -378,8 +366,7 @@ fn test_react_builder_explicit_zero_after_retry() {
     use agent_rs::agent::InvalidToolPolicy;
 
     let agent = make_test_agent();
-    let built = agent
-        .react()
+    let built = agent.react()
         .invalid_tool_policy(InvalidToolPolicy::Retry)
         .max_invalid_tool_call_retries(0)
         .build();

@@ -12,7 +12,7 @@ pub mod state;
 pub mod tools;
 
 pub use agents::strip_reasoning_from_history;
-pub use invalid_tool::{invalid_tool_feedback, InvalidToolPolicy, InvalidToolRecoveryHook};
+pub use invalid_tool::{InvalidToolPolicy, InvalidToolRecoveryHook, invalid_tool_feedback};
 
 mod managed;
 #[cfg(feature = "rag")]

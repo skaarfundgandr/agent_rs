@@ -204,20 +204,32 @@ impl Tool for EchoTool {
 }
 
 /// Build an `Agent<MockCompletionModel>` with the given response queue
-/// and an `echo` tool registered. Sets `default_max_turns(1)` so rig-core's
-/// internal multi-turn loop runs exactly once per `agent.prompt()` call,
-/// preventing it from consuming multiple mock responses.
+/// and an `echo` tool registered. Sets `default_max_turns(20)` so rig-core's
+/// internal multi-turn loop can handle tool execution (tool call → result →
+/// model reply) without hitting MaxTurnsError.
 pub fn mock_agent(responses: Vec<MockResponse>) -> rig_core::agent::Agent<MockCompletionModel> {
     let model = MockCompletionModel::new(responses);
     AgentBuilder::new(model)
         .tool(EchoTool)
-        .default_max_turns(1)
+        .default_max_turns(20)
         .build()
 }
 
-pub fn react_with_responses(
+/// Like `mock_agent` but with a custom `default_max_turns` value.
+/// Use when you need to control how many internal turns each `agent.prompt()`
+/// call can consume.
+pub fn mock_agent_with_max_turns(
     responses: Vec<MockResponse>,
-) -> BuiltReAct<MockCompletionModel> {
+    max_turns: usize,
+) -> rig_core::agent::Agent<MockCompletionModel> {
+    let model = MockCompletionModel::new(responses);
+    AgentBuilder::new(model)
+        .tool(EchoTool)
+        .default_max_turns(max_turns)
+        .build()
+}
+
+pub fn react_with_responses(responses: Vec<MockResponse>) -> BuiltReAct<MockCompletionModel> {
     let agent = mock_agent(responses);
     agent.react().build()
 }
