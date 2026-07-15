@@ -225,4 +225,23 @@ impl DocumentStore {
             .await
             .context("failed to list registered RAG sources")
     }
+
+    /// Rewrite the `source` label on every chunk matching `from` to `to`.
+    ///
+    /// Used when the loader stored a temp filename as `source` but the caller
+    /// wants the real document URL (or other stable id) for retrieval/display.
+    pub async fn rewrite_source(&self, from: &str, to: &str) -> Result<usize> {
+        let from = from.to_string();
+        let to = to.to_string();
+        self.conn
+            .call(move |conn| {
+                let n = conn.execute(
+                    "UPDATE rag_chunks SET source = ?1 WHERE source = ?2",
+                    [&to, &from],
+                )?;
+                Ok(n)
+            })
+            .await
+            .context("failed to rewrite RAG chunk source")
+    }
 }
