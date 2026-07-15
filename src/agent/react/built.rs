@@ -166,6 +166,20 @@ where
         let parsed = super::assistant_parse::classify_assistant_content(&assistant_content);
 
         if parsed.tool_calls.is_empty() {
+            let thought_text = parsed.reasoning_texts.join("\n").trim().to_string();
+            if !thought_text.is_empty() {
+                let thought = crate::domain::agent::Thought {
+                    reasoning: thought_text,
+                    cycle,
+                };
+                if let Some(cb) = on_thought {
+                    cb(&thought);
+                }
+                span_emitter.emit_thought(&thought);
+                trace
+                    .steps
+                    .push(crate::domain::agent::ReActStep::Thought(thought));
+            }
             let text = response.output.clone();
             if text.is_empty() {
                 if !empty_output_retried {
