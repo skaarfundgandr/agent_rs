@@ -37,6 +37,7 @@ where
     pub react_preamble: Option<String>,
     pub max_cycles: usize,
     pub max_retries: u32,
+    pub max_invalid_tool_call_retries: u32,
     pub span_emitter: Arc<dyn ReActSpanEmitter>,
     pub prompt_text: String,
     pub history_snapshot: Vec<Message>,
@@ -65,6 +66,7 @@ where
         react_preamble,
         max_cycles,
         max_retries,
+        max_invalid_tool_call_retries,
         span_emitter,
         prompt_text,
         history_snapshot,
@@ -122,13 +124,16 @@ where
                 let working = working_history.clone();
                 let agent = agent.clone();
                 async move {
+                    let mut stream_req =
+                        agent.stream_chat(prompt_str, working).max_turns(20);
+                    if max_invalid_tool_call_retries > 0 {
+                        stream_req = stream_req.max_invalid_tool_call_retries(
+                            max_invalid_tool_call_retries as usize,
+                        );
+                    }
                     tokio::time::timeout(
                         stream_timeout,
-                        async {
-                            agent.stream_chat(prompt_str, working)
-                                .max_turns(20)
-                                .await
-                        },
+                        stream_req,
                     )
                     .await
                     .map_err(|e| {

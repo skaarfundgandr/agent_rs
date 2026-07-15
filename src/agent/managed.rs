@@ -7,6 +7,7 @@ use rig_core::completion::{CompletionModel, Prompt, PromptError};
 use rig_core::message::Message;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
+use crate::agent::invalid_tool::{InvalidToolPolicy, InvalidToolRecoveryHook};
 use crate::agent::memory::ContextManager;
 use crate::agent::model::chat::{execute_chat, execute_stream_chat};
 use crate::agent::retry::is_retryable;
@@ -30,6 +31,9 @@ where
         ManagedBuilder {
             agent: self,
             max_retries: 3,
+            invalid_tool_policy: InvalidToolPolicy::Skip,
+            max_invalid_tool_call_retries: 0,
+            invalid_tool_retries_explicit: false,
             compaction: NoCompaction,
         }
     }
@@ -40,6 +44,7 @@ async fn retry_chat<M>(
     msg: &str,
     working: &mut Vec<Message>,
     max_retries: u32,
+    max_invalid_tool_call_retries: u32,
 ) -> Result<String, PromptError>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
@@ -49,7 +54,7 @@ where
     loop {
         attempt += 1;
         *working = snapshot.clone();
-        match execute_chat(agent, msg, working).await {
+        match execute_chat(agent, msg, working, max_invalid_tool_call_retries).await {
             Ok(s) => return Ok(s),
             Err(e) if is_retryable(&e) && attempt < max_retries => {
                 tokio::time::sleep(std::time::Duration::from_millis(
@@ -71,6 +76,9 @@ where
 {
     agent: &'a Agent<M>,
     max_retries: u32,
+    invalid_tool_policy: InvalidToolPolicy,
+    max_invalid_tool_call_retries: u32,
+    invalid_tool_retries_explicit: bool,
     compaction: CompState,
 }
 
@@ -82,6 +90,20 @@ where
 {
     pub fn max_retries(self, max_retries: u32) -> Self {
         Self { max_retries, ..self }
+    }
+
+    pub fn invalid_tool_policy(mut self, policy: InvalidToolPolicy) -> Self {
+        self.invalid_tool_policy = policy;
+        if matches!(policy, InvalidToolPolicy::Retry) && !self.invalid_tool_retries_explicit {
+            self.max_invalid_tool_call_retries = 2;
+        }
+        self
+    }
+
+    pub fn max_invalid_tool_call_retries(mut self, n: u32) -> Self {
+        self.max_invalid_tool_call_retries = n;
+        self.invalid_tool_retries_explicit = true;
+        self
     }
 }
 
@@ -98,6 +120,9 @@ where
         ManagedBuilder {
             agent: self.agent,
             max_retries: self.max_retries,
+            invalid_tool_policy: self.invalid_tool_policy,
+            max_invalid_tool_call_retries: self.max_invalid_tool_call_retries,
+            invalid_tool_retries_explicit: self.invalid_tool_retries_explicit,
             compaction: CompactionConfig {
                 model: self.agent.clone(),
                 threshold: 0,
@@ -108,9 +133,15 @@ where
     }
 
     pub fn build(self) -> BuiltManagedAgent<M, ()> {
+        let mut agent = self.agent.clone();
+        agent
+            .hooks
+            .push(InvalidToolRecoveryHook::new(self.invalid_tool_policy));
         BuiltManagedAgent {
-            agent: self.agent.clone(),
+            agent,
             max_retries: self.max_retries,
+            invalid_tool_policy: self.invalid_tool_policy,
+            max_invalid_tool_call_retries: self.max_invalid_tool_call_retries,
             context_manager: None,
             _compaction: PhantomData,
         }
@@ -138,6 +169,9 @@ where
         ManagedBuilder {
             agent: self.agent,
             max_retries: self.max_retries,
+            invalid_tool_policy: self.invalid_tool_policy,
+            max_invalid_tool_call_retries: self.max_invalid_tool_call_retries,
+            invalid_tool_retries_explicit: self.invalid_tool_retries_explicit,
             compaction: CompactionConfig {
                 model,
                 threshold: self.compaction.threshold,
@@ -175,9 +209,15 @@ where
             ctx = ctx.with_compaction_prompt_formatter(formatter);
         }
 
+        let mut agent = self.agent.clone();
+        agent
+            .hooks
+            .push(InvalidToolRecoveryHook::new(self.invalid_tool_policy));
         BuiltManagedAgent {
-            agent: self.agent.clone(),
+            agent,
             max_retries: self.max_retries,
+            invalid_tool_policy: self.invalid_tool_policy,
+            max_invalid_tool_call_retries: self.max_invalid_tool_call_retries,
             context_manager: Some(Arc::new(ctx)),
             _compaction: PhantomData,
         }
@@ -193,6 +233,8 @@ where
 {
     agent: Agent<M>,
     max_retries: u32,
+    invalid_tool_policy: InvalidToolPolicy,
+    max_invalid_tool_call_retries: u32,
     context_manager: Option<Arc<dyn Any + Send + Sync>>,
     _compaction: PhantomData<C>,
 }
@@ -207,6 +249,16 @@ where
     pub fn max_retries(&self) -> u32 {
         self.max_retries
     }
+
+    /// Return the configured invalid tool policy.
+    pub fn invalid_tool_policy(&self) -> InvalidToolPolicy {
+        self.invalid_tool_policy
+    }
+
+    /// Return the configured max invalid tool call retries budget.
+    pub fn max_invalid_tool_call_retries(&self) -> u32 {
+        self.max_invalid_tool_call_retries
+    }
 }
 
 async fn build_stream<'a, M>(
@@ -215,6 +267,7 @@ async fn build_stream<'a, M>(
     working: Vec<Message>,
     working_for_restore: Option<Vec<Message>>,
     history_out: Option<&'a mut Vec<Message>>,
+    max_invalid_tool_call_retries: u32,
 ) -> Result<ManagedStream<'a, M::StreamingResponse>, PromptError>
 where
     M: CompletionModel
@@ -223,9 +276,12 @@ where
         + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send + 'static,
 {
-    let rig_stream = execute_stream_chat(agent, msg, working)
-        .max_turns(agent.default_max_turns.unwrap_or(20))
-        .await;
+    let mut rig_stream = execute_stream_chat(agent, msg, working)
+        .max_turns(agent.default_max_turns.unwrap_or(20));
+    if max_invalid_tool_call_retries > 0 {
+        rig_stream = rig_stream.max_invalid_tool_call_retries(max_invalid_tool_call_retries as usize);
+    }
+    let rig_stream = rig_stream.await;
     Ok(ManagedStream::new(
         rig_stream,
         history_out,
@@ -243,7 +299,7 @@ where
     pub async fn prompt(&self, msg: impl Into<String>) -> Result<String, PromptError> {
         let msg = msg.into();
         let mut working = Vec::new();
-        retry_chat(&self.agent, &msg, &mut working, self.max_retries).await
+        retry_chat(&self.agent, &msg, &mut working, self.max_retries, self.max_invalid_tool_call_retries).await
     }
 
     pub async fn chat(
@@ -253,7 +309,7 @@ where
     ) -> Result<String, PromptError> {
         let msg = msg.into();
         let mut working = history.clone();
-        let result = retry_chat(&self.agent, &msg, &mut working, self.max_retries).await;
+        let result = retry_chat(&self.agent, &msg, &mut working, self.max_retries, self.max_invalid_tool_call_retries).await;
         if let Ok(final_text) = &result {
             history.push(Message::user(msg.as_str()));
             history.push(Message::assistant(final_text));
@@ -269,7 +325,7 @@ where
         M::StreamingResponse: rig_core::completion::GetTokenUsage + Send + 'static,
     {
         let msg = msg.into();
-        build_stream(&self.agent, &msg, Vec::new(), None, None).await
+        build_stream(&self.agent, &msg, Vec::new(), None, None, self.max_invalid_tool_call_retries).await
     }
 
     pub async fn stream_chat<'a>(
@@ -282,7 +338,7 @@ where
     {
         let msg = msg.into();
         let working = history.clone();
-        build_stream(&self.agent, &msg, working, None, Some(history)).await
+        build_stream(&self.agent, &msg, working, None, Some(history), self.max_invalid_tool_call_retries).await
     }
 }
 
@@ -305,7 +361,7 @@ where
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
-        retry_chat(&self.agent, &msg, &mut working, self.max_retries).await
+        retry_chat(&self.agent, &msg, &mut working, self.max_retries, self.max_invalid_tool_call_retries).await
     }
 
     pub async fn chat_compact(
@@ -318,7 +374,7 @@ where
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
-        let result = retry_chat(&self.agent, &msg, &mut working, self.max_retries).await;
+        let result = retry_chat(&self.agent, &msg, &mut working, self.max_retries, self.max_invalid_tool_call_retries).await;
         if let Ok(final_text) = &result {
             *history = working;
             history.push(Message::user(msg.as_str()));
@@ -339,7 +395,7 @@ where
         if let Some(cm) = self.context_manager() {
             cm.compact_history_if_needed(&mut working, &msg).await?;
         }
-        build_stream(&self.agent, &msg, working, None, None).await
+        build_stream(&self.agent, &msg, working, None, None, self.max_invalid_tool_call_retries).await
     }
 
     pub async fn stream_chat_compact<'a>(
@@ -361,6 +417,7 @@ where
             working.clone(),
             Some(working),
             Some(history),
+            self.max_invalid_tool_call_retries,
         )
         .await
     }

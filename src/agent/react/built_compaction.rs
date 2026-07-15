@@ -36,6 +36,7 @@ where
             &working,
             self.max_cycles,
             self.max_retries,
+            self.max_invalid_tool_call_retries,
             self.tool_timeout_secs,
             &self.react_preamble,
             &self.span_emitter,

@@ -17,6 +17,7 @@ where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
 {
     pub(crate) agent: Agent<M>,
+    pub(crate) max_invalid_tool_call_retries: u32,
     pub(crate) tool_timeout_secs: u64,
     pub(crate) on_thought: Option<super::callbacks::ThoughtCb>,
     pub(crate) on_action: Option<super::callbacks::ActionCb>,
@@ -82,6 +83,7 @@ where
             react_preamble,
             max_cycles,
             max_retries,
+            max_invalid_tool_call_retries: shared.max_invalid_tool_call_retries,
             span_emitter,
             prompt_text,
             history_snapshot,

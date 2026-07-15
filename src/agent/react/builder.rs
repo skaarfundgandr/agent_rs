@@ -6,6 +6,7 @@ use rig_core::completion::{CompletionModel, Prompt};
 use rig_core::message::Message;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
+use crate::agent::invalid_tool::{InvalidToolPolicy, InvalidToolRecoveryHook};
 use crate::agent::memory::ContextManager;
 
 use super::built::BuiltReAct;
@@ -28,6 +29,9 @@ where
     pub agent: &'a Agent<M>,
     pub max_cycles: usize,
     pub max_retries: u32,
+    pub invalid_tool_policy: InvalidToolPolicy,
+    pub max_invalid_tool_call_retries: u32,
+    pub invalid_tool_retries_explicit: bool,
     pub react_preamble: Option<String>,
     pub span_emitter: Arc<dyn ReActSpanEmitter>,
     pub on_thought: Option<ThoughtCb>,
@@ -51,6 +55,20 @@ where
 
     pub fn max_retries(self, max_retries: u32) -> Self {
         Self { max_retries, ..self }
+    }
+
+    pub fn invalid_tool_policy(mut self, policy: InvalidToolPolicy) -> Self {
+        self.invalid_tool_policy = policy;
+        if matches!(policy, InvalidToolPolicy::Retry) && !self.invalid_tool_retries_explicit {
+            self.max_invalid_tool_call_retries = 2;
+        }
+        self
+    }
+
+    pub fn max_invalid_tool_call_retries(mut self, n: u32) -> Self {
+        self.max_invalid_tool_call_retries = n;
+        self.invalid_tool_retries_explicit = true;
+        self
     }
 
     pub fn tool_timeout_secs(self, secs: u64) -> Self {
@@ -117,6 +135,9 @@ where
             agent: self.agent,
             max_cycles: self.max_cycles,
             max_retries: self.max_retries,
+            invalid_tool_policy: self.invalid_tool_policy,
+            max_invalid_tool_call_retries: self.max_invalid_tool_call_retries,
+            invalid_tool_retries_explicit: self.invalid_tool_retries_explicit,
             react_preamble: self.react_preamble,
             span_emitter: self.span_emitter,
             on_thought: self.on_thought,
@@ -136,10 +157,14 @@ where
     }
 
     pub fn build(self) -> BuiltReAct<M, ()> {
+        let mut agent = self.agent.clone();
+        agent.hooks.push(InvalidToolRecoveryHook::new(self.invalid_tool_policy));
         BuiltReAct {
-            agent: self.agent.clone(),
+            agent,
             max_cycles: self.max_cycles,
             max_retries: self.max_retries,
+            invalid_tool_policy: self.invalid_tool_policy,
+            max_invalid_tool_call_retries: self.max_invalid_tool_call_retries,
             react_preamble: self.react_preamble,
             span_emitter: self.span_emitter,
             on_thought: self.on_thought,
@@ -175,6 +200,9 @@ where
             agent: self.agent,
             max_cycles: self.max_cycles,
             max_retries: self.max_retries,
+            invalid_tool_policy: self.invalid_tool_policy,
+            max_invalid_tool_call_retries: self.max_invalid_tool_call_retries,
+            invalid_tool_retries_explicit: self.invalid_tool_retries_explicit,
             react_preamble: self.react_preamble,
             span_emitter: self.span_emitter,
             on_thought: self.on_thought,
@@ -221,10 +249,14 @@ where
             ctx = ctx.with_compaction_prompt_formatter(formatter);
         }
 
+        let mut agent = self.agent.clone();
+        agent.hooks.push(InvalidToolRecoveryHook::new(self.invalid_tool_policy));
         BuiltReAct {
-            agent: self.agent.clone(),
+            agent,
             max_cycles: self.max_cycles,
             max_retries: self.max_retries,
+            invalid_tool_policy: self.invalid_tool_policy,
+            max_invalid_tool_call_retries: self.max_invalid_tool_call_retries,
             react_preamble: self.react_preamble,
             span_emitter: self.span_emitter,
             on_thought: self.on_thought,

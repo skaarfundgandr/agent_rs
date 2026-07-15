@@ -7,6 +7,7 @@ use rig_core::completion::{Prompt, PromptError};
 use rig_core::message::{AssistantContent, Message, ToolResultContent, UserContent};
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
+use crate::agent::invalid_tool::InvalidToolPolicy;
 use crate::agent::memory::ContextManager;
 use crate::agent::react::Compact;
 use crate::domain::agent::{Action, Observation, ReActStep, ReActTrace};
@@ -50,6 +51,14 @@ where
 
     pub fn react_preamble(&self) -> Option<&str> {
         self.react_preamble.as_deref()
+    }
+
+    pub fn invalid_tool_policy(&self) -> InvalidToolPolicy {
+        self.invalid_tool_policy
+    }
+
+    pub fn max_invalid_tool_call_retries(&self) -> u32 {
+        self.max_invalid_tool_call_retries
     }
 }
 
@@ -146,6 +155,7 @@ where
             &[],
             self.max_cycles,
             self.max_retries,
+            self.max_invalid_tool_call_retries,
             self.tool_timeout_secs,
             &self.react_preamble,
             &self.span_emitter,
@@ -172,6 +182,7 @@ where
             history,
             self.max_cycles,
             self.max_retries,
+            self.max_invalid_tool_call_retries,
             self.tool_timeout_secs,
             &self.react_preamble,
             &self.span_emitter,
@@ -201,6 +212,7 @@ where
     pub(crate) fn make_stream_shared(&self) -> Arc<super::streaming::StreamShared<M, C>> {
         Arc::new(super::streaming::StreamShared {
             agent: self.agent.clone(),
+            max_invalid_tool_call_retries: self.max_invalid_tool_call_retries,
             tool_timeout_secs: self.tool_timeout_secs,
             on_thought: self.on_thought.as_ref().map(Arc::clone),
             on_action: self.on_action.as_ref().map(Arc::clone),

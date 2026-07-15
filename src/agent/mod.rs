@@ -2,6 +2,7 @@ pub mod agents;
 pub mod dispatch;
 #[cfg(feature = "rag")]
 pub mod embeddings;
+pub mod invalid_tool;
 pub mod memory;
 pub mod model;
 pub mod permission;
@@ -11,6 +12,7 @@ pub mod state;
 pub mod tools;
 
 pub use agents::strip_reasoning_from_history;
+pub use invalid_tool::{invalid_tool_feedback, InvalidToolPolicy, InvalidToolRecoveryHook};
 
 mod managed;
 #[cfg(feature = "rag")]

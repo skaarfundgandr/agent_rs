@@ -5,6 +5,7 @@ use rig_core::completion::CompletionModel;
 use rig_core::message::{Message, UserContent};
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
+use crate::agent::invalid_tool::InvalidToolPolicy;
 use crate::agent::react::Compact;
 use crate::domain::agent::ReActTrace;
 use crate::domain::errors::ReActError;
@@ -38,6 +39,8 @@ where
     pub(crate) agent: Agent<M>,
     pub(crate) max_cycles: usize,
     pub(crate) max_retries: u32,
+    pub(crate) invalid_tool_policy: InvalidToolPolicy,
+    pub(crate) max_invalid_tool_call_retries: u32,
     pub(crate) react_preamble: Option<String>,
     pub(crate) span_emitter: Arc<dyn ReActSpanEmitter>,
     pub(crate) on_thought: Option<ThoughtCb>,
@@ -58,6 +61,7 @@ pub(crate) async fn run_loop<M>(
     history_snapshot: &[Message],
     max_cycles: usize,
     max_retries: u32,
+    max_invalid_tool_call_retries: u32,
     tool_timeout_secs: u64,
     react_preamble: &Option<String>,
     span_emitter: &Arc<dyn ReActSpanEmitter>,
@@ -109,6 +113,7 @@ where
             &current_prompt,
             &working_history,
             max_retries,
+            max_invalid_tool_call_retries,
             cycle,
             span_emitter,
             on_error,

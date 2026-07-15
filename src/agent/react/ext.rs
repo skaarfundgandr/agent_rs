@@ -4,6 +4,8 @@ use rig_core::agent::Agent;
 use rig_core::completion::CompletionModel;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
+use crate::agent::invalid_tool::InvalidToolPolicy;
+
 use super::builder::{NoCompaction, ReActBuilder};
 use super::emitter::NoopSpanEmitter;
 
@@ -25,6 +27,9 @@ where
             agent: self,
             max_cycles: 20,
             max_retries: 3,
+            invalid_tool_policy: InvalidToolPolicy::Skip,
+            max_invalid_tool_call_retries: 0,
+            invalid_tool_retries_explicit: false,
             react_preamble: None,
             span_emitter: Arc::new(NoopSpanEmitter),
             on_thought: None,

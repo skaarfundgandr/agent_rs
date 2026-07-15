@@ -39,6 +39,7 @@ pub(crate) async fn execute_model_call<M>(
     current_prompt: &Message,
     working_history: &[Message],
     max_retries: u32,
+    max_invalid_tool_call_retries: u32,
     cycle: usize,
     span_emitter: &Arc<dyn ReActSpanEmitter>,
     on_error: &Option<ErrorCb>,
@@ -60,11 +61,14 @@ where
     let mut attempt = 0u32;
     loop {
         attempt += 1;
-        match agent
+        let mut req = agent
             .prompt(current_prompt.clone())
             .history(working_history.iter().cloned())
-            .extended_details()
-            .await
+            .extended_details();
+        if max_invalid_tool_call_retries > 0 {
+            req = req.max_invalid_tool_call_retries(max_invalid_tool_call_retries as usize);
+        }
+        match req.await
         {
             Ok(resp) => return ModelCallResult::Ok(resp),
             Err(e) => {
