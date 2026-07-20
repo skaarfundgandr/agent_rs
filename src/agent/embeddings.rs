@@ -1,6 +1,7 @@
 #![cfg(feature = "rag")]
 
 use std::cmp::max;
+use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use rig_core::embeddings::{Embedding, EmbeddingModel, embed::to_texts};
@@ -259,6 +260,39 @@ impl EmbeddingService<rig_fastembed::EmbeddingModel> {
     pub fn from_fastembed(
         model: rig_fastembed::FastembedModel,
     ) -> Result<Self, rig_fastembed::FastembedError> {
+        let client = rig_fastembed::Client::new();
+        let model = client.embedding_model(&model)?;
+        Ok(Self::new(model))
+    }
+
+    /// Convenience constructor for a local `fastembed` model with an explicit
+    /// cache directory.
+    ///
+    /// Unlike [`from_fastembed`](Self::from_fastembed), which relies on the
+    /// `FASTEMBED_CACHE_DIR` environment variable (defaulting to a
+    /// CWD-relative `.fastembed_cache`), this method pins the model cache to
+    /// `cache_dir` so the model is not re-downloaded when the working
+    /// directory changes.
+    ///
+    /// # Safety contract
+    ///
+    /// Internally sets the `FASTEMBED_CACHE_DIR` process environment variable
+    /// before initializing the model. Call this once during setup, before
+    /// spawning threads that may read the environment.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `FastembedError` if loading or downloading the model fails.
+    pub fn from_fastembed_with_cache_dir(
+        model: rig_fastembed::FastembedModel,
+        cache_dir: impl AsRef<Path>,
+    ) -> Result<Self, rig_fastembed::FastembedError> {
+        // SAFETY: called during single-threaded init before any concurrent
+        // env access. The fastembed crate reads this var at InitOptions
+        // construction time (inside `embedding_model` below).
+        unsafe {
+            std::env::set_var("FASTEMBED_CACHE_DIR", cache_dir.as_ref());
+        }
         let client = rig_fastembed::Client::new();
         let model = client.embedding_model(&model)?;
         Ok(Self::new(model))
