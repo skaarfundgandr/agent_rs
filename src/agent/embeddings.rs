@@ -351,7 +351,8 @@ impl EmbeddingService<FastembedEmbeddingModel> {
     ///
     /// Returns an error if loading or downloading the model fails.
     pub fn from_fastembed(model: fastembed::EmbeddingModel) -> Result<Self> {
-        let options = fastembed::TextInitOptions::new(model.clone()).with_show_download_progress(true);
+        let options =
+            fastembed::TextInitOptions::new(model.clone()).with_show_download_progress(true);
         Ok(Self::new(FastembedEmbeddingModel::build(model, options)?))
     }
 

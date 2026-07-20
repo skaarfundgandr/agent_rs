@@ -152,7 +152,8 @@ Internal tools (filesystem, RAG, compact) register into `ToolRegistry` alongside
 
 All tests must reside in the `tests/` directory rather than inside `src/`. No unit tests should be placed inline within `src/` to keep production code clean.
 
-Tests in `tests/` (17+ files): `agents_tests.rs`, `document_store.rs`, `embeddings.rs`, `manage_rag.rs`, `mcp_registry.rs`, `observability_tests.rs` (feature-gated on `opentelemetry`), `permission.rs`, `rag.rs`, `react_otel_tests.rs` (feature-gated on `opentelemetry`), `react_recovery_tests.rs`, `react_tests.rs`, `sandbox_tests.rs`, `shared_sandbox.rs`, `tool_tests.rs`, `turbo_index.rs`, `tool_registry.rs`, `dispatch.rs`, `state.rs`, `react_e2e.rs` (plus `common/mod.rs`, `mod.rs`).
+Tests in `tests/` (18+ files): `agents_tests.rs`, `document_store.rs`, `embeddings.rs`, `fastembed_wrapper.rs`, `manage_rag.rs`, `mcp_registry.rs`, `observability_tests.rs` (feature-gated on `opentelemetry`), `permission.rs`, `rag.rs`, `react_otel_tests.rs` (feature-gated on `opentelemetry`), `react_recovery_tests.rs`, `react_tests.rs`, `sandbox_tests.rs`, `shared_sandbox.rs`, `tool_tests.rs`, `turbo_index.rs`, `tool_registry.rs`, `dispatch.rs`, `state.rs`, `react_e2e.rs` (plus `common/mod.rs`, `mod.rs`).
+- `fastembed_wrapper.rs` — `#[ignore]`d; downloads a fastembed model, needs network or `FASTEMBED_CACHE_DIR`.
 - `test_read_pdf` in `tool_tests.rs` is `#[ignore]` — needs a local PDF file, will fail in CI.
 - Tool tests use `tempfile` for sandbox isolation.
 - MCP tests need live MCP servers or will fail — not safe to run blindly.
