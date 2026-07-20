@@ -240,7 +240,100 @@ where
     }
 }
 
-impl EmbeddingService<rig_fastembed::EmbeddingModel> {
+pub use fastembed::EmbeddingModel as FastembedModel;
+pub use ort;
+
+use std::sync::{Arc, Mutex};
+
+#[derive(Clone)]
+pub struct FastembedEmbeddingModel {
+    model: fastembed::EmbeddingModel,
+    ndims: usize,
+    embedder: Option<Arc<Mutex<fastembed::TextEmbedding>>>,
+    init_error: Option<String>,
+}
+
+// fastembed::TextEmbedding has no Debug impl; print model + ndims only.
+impl std::fmt::Debug for FastembedEmbeddingModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FastembedEmbeddingModel")
+            .field("model", &self.model)
+            .field("ndims", &self.ndims)
+            .finish()
+    }
+}
+
+impl FastembedEmbeddingModel {
+    fn build(
+        model: fastembed::EmbeddingModel,
+        options: fastembed::TextInitOptions,
+    ) -> Result<Self> {
+        let ndims = fastembed::TextEmbedding::get_model_info(&model)
+            .context("failed to resolve fastembed model info")?
+            .dim;
+        let embedder = fastembed::TextEmbedding::try_new(options)
+            .context("failed to initialize fastembed model")?;
+        Ok(Self {
+            model,
+            ndims,
+            embedder: Some(Arc::new(Mutex::new(embedder))),
+            init_error: None,
+        })
+    }
+}
+
+impl EmbeddingModel for FastembedEmbeddingModel {
+    const MAX_DOCUMENTS: usize = 1024;
+    type Client = ();
+
+    fn make(_: &(), _: impl Into<String>, _: Option<usize>) -> Self {
+        Self {
+            model: fastembed::EmbeddingModel::default(),
+            ndims: 0,
+            embedder: None,
+            init_error: Some(
+                "`make` is not supported for fastembed models; construct via EmbeddingService::from_fastembed*"
+                    .to_string(),
+            ),
+        }
+    }
+
+    fn ndims(&self) -> usize {
+        self.ndims
+    }
+
+    async fn embed_texts(
+        &self,
+        documents: impl IntoIterator<Item = String>,
+    ) -> Result<Vec<Embedding>, rig_core::embeddings::EmbeddingError> {
+        let Some(embedder) = &self.embedder else {
+            return Err(rig_core::embeddings::EmbeddingError::ProviderError(
+                self.init_error
+                    .clone()
+                    .unwrap_or_else(|| "fastembed model initialization failed".to_string()),
+            ));
+        };
+        let documents: Vec<String> = documents.into_iter().collect();
+        let mut guard = embedder.lock().map_err(|e| {
+            rig_core::embeddings::EmbeddingError::ProviderError(format!(
+                "embedding model lock poisoned: {e}"
+            ))
+        })?;
+        let vectors = guard
+            .embed(documents.clone(), None)
+            .map_err(|e| rig_core::embeddings::EmbeddingError::ProviderError(e.to_string()))?;
+        Ok(documents
+            .into_iter()
+            .zip(vectors)
+            .map(|(document, vec)| Embedding {
+                document,
+                vec: vec.into_iter().map(f64::from).collect(),
+            })
+            .collect())
+    }
+}
+
+impl EmbeddingService<FastembedEmbeddingModel> {
     /// Convenience constructor for a local `fastembed` model.
     ///
     /// Downloads the model from Hugging Face on first call (requires network
@@ -256,13 +349,10 @@ impl EmbeddingService<rig_fastembed::EmbeddingModel> {
     ///
     /// # Errors
     ///
-    /// Returns a `FastembedError` if loading or downloading the model fails.
-    pub fn from_fastembed(
-        model: rig_fastembed::FastembedModel,
-    ) -> Result<Self, rig_fastembed::FastembedError> {
-        let client = rig_fastembed::Client::new();
-        let model = client.embedding_model(&model)?;
-        Ok(Self::new(model))
+    /// Returns an error if loading or downloading the model fails.
+    pub fn from_fastembed(model: fastembed::EmbeddingModel) -> Result<Self> {
+        let options = fastembed::TextInitOptions::new(model.clone()).with_show_download_progress(true);
+        Ok(Self::new(FastembedEmbeddingModel::build(model, options)?))
     }
 
     /// Convenience constructor for a local `fastembed` model with an explicit
@@ -274,27 +364,16 @@ impl EmbeddingService<rig_fastembed::EmbeddingModel> {
     /// `cache_dir` so the model is not re-downloaded when the working
     /// directory changes.
     ///
-    /// # Safety contract
-    ///
-    /// Internally sets the `FASTEMBED_CACHE_DIR` process environment variable
-    /// before initializing the model. Call this once during setup, before
-    /// spawning threads that may read the environment.
-    ///
     /// # Errors
     ///
-    /// Returns a `FastembedError` if loading or downloading the model fails.
+    /// Returns an error if loading or downloading the model fails.
     pub fn from_fastembed_with_cache_dir(
-        model: rig_fastembed::FastembedModel,
+        model: fastembed::EmbeddingModel,
         cache_dir: impl AsRef<Path>,
-    ) -> Result<Self, rig_fastembed::FastembedError> {
-        // SAFETY: called during single-threaded init before any concurrent
-        // env access. The fastembed crate reads this var at InitOptions
-        // construction time (inside `embedding_model` below).
-        unsafe {
-            std::env::set_var("FASTEMBED_CACHE_DIR", cache_dir.as_ref());
-        }
-        let client = rig_fastembed::Client::new();
-        let model = client.embedding_model(&model)?;
-        Ok(Self::new(model))
+    ) -> Result<Self> {
+        let options = fastembed::TextInitOptions::new(model.clone())
+            .with_show_download_progress(true)
+            .with_cache_dir(cache_dir.as_ref().to_path_buf());
+        Ok(Self::new(FastembedEmbeddingModel::build(model, options)?))
     }
 }
