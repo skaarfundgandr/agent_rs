@@ -376,4 +376,73 @@ impl EmbeddingService<FastembedEmbeddingModel> {
             .with_cache_dir(cache_dir.as_ref().to_path_buf());
         Ok(Self::new(FastembedEmbeddingModel::build(model, options)?))
     }
+
+    /// Convenience constructor for a local `fastembed` model with opt-in
+    /// execution providers for GPU acceleration.
+    ///
+    /// The provider list is priority-ordered; `ort` tries each in sequence.
+    /// **Callers must append `CPUExecutionProvider::default().build()` as the
+    /// final entry** for runtime fallback when no GPU is available on the
+    /// target machine.
+    ///
+    /// EP types are available at the re-exported ort path:
+    /// `agent_rs::agent::embeddings::ort::execution_providers::*`.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - The fastembed model enum variant selecting which model to load.
+    /// * `providers` - Priority-ordered list of `ExecutionProviderDispatch`.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `EmbeddingService`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if loading or downloading the model fails.
+    pub fn from_fastembed_with_providers(
+        model: fastembed::EmbeddingModel,
+        providers: Vec<fastembed::ExecutionProviderDispatch>,
+    ) -> Result<Self> {
+        let options = fastembed::TextInitOptions::new(model.clone())
+            .with_show_download_progress(true)
+            .with_execution_providers(providers);
+        Ok(Self::new(FastembedEmbeddingModel::build(model, options)?))
+    }
+
+    /// Convenience constructor for a local `fastembed` model with opt-in
+    /// execution providers and an explicit cache directory.
+    ///
+    /// The provider list is priority-ordered; `ort` tries each in sequence.
+    /// **Callers must append `CPUExecutionProvider::default().build()` as the
+    /// final entry** for runtime fallback when no GPU is available on the
+    /// target machine.
+    ///
+    /// EP types are available at the re-exported ort path:
+    /// `agent_rs::agent::embeddings::ort::execution_providers::*`.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - The fastembed model enum variant selecting which model to load.
+    /// * `providers` - Priority-ordered list of `ExecutionProviderDispatch`.
+    /// * `cache_dir` - Directory to store downloaded models.
+    ///
+    /// # Returns
+    ///
+    /// Returns the initialized `EmbeddingService`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if loading or downloading the model fails.
+    pub fn from_fastembed_with_providers_and_cache_dir(
+        model: fastembed::EmbeddingModel,
+        providers: Vec<fastembed::ExecutionProviderDispatch>,
+        cache_dir: impl AsRef<Path>,
+    ) -> Result<Self> {
+        let options = fastembed::TextInitOptions::new(model.clone())
+            .with_show_download_progress(true)
+            .with_execution_providers(providers)
+            .with_cache_dir(cache_dir.as_ref().to_path_buf());
+        Ok(Self::new(FastembedEmbeddingModel::build(model, options)?))
+    }
 }

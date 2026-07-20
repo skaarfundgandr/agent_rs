@@ -68,6 +68,10 @@ axum = "0.8"
 [features]
 default = []
 rag = ["dep:fastembed", "dep:ort", "rig-sqlite", "tokio-rusqlite", "turbovec", "walkdir"]
+rag-cuda         = ["rag", "ort/cuda"]
+rag-directml     = ["rag", "ort/directml"]
+rag-rocm         = ["rag", "ort/rocm"]
+rag-load-dynamic = ["rag", "ort/load-dynamic"]
 opentelemetry = [
     "dep:opentelemetry",
     "dep:opentelemetry_sdk",
