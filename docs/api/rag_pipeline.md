@@ -156,7 +156,7 @@ use agent_rs::rag::RagPipeline;
 async fn main() -> anyhow::Result<()> {
     // 1. Initialize local fastembed embeddings
     let service = EmbeddingService::from_fastembed(
-        fastembed::EmbeddingModel::AllMiniLML6V2,
+        agent_rs::agent::embeddings::FastembedModel::AllMiniLML6V2,
     )?;
 
     // 2. Build persistent RAG pipeline

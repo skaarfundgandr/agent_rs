@@ -253,12 +253,14 @@ pub struct FastembedEmbeddingModel {
     init_error: Option<String>,
 }
 
-// fastembed::TextEmbedding has no Debug impl; print model + ndims only.
+// fastembed::TextEmbedding has no Debug impl; print static fields only.
 impl std::fmt::Debug for FastembedEmbeddingModel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FastembedEmbeddingModel")
             .field("model", &self.model)
             .field("ndims", &self.ndims)
+            .field("has_embedder", &self.embedder.is_some())
+            .field("init_error", &self.init_error.as_deref())
             .finish()
     }
 }
@@ -320,8 +322,17 @@ impl EmbeddingModel for FastembedEmbeddingModel {
             ))
         })?;
         let vectors = guard
-            .embed(documents.clone(), None)
+            .embed(&documents, None)
             .map_err(|e| rig_core::embeddings::EmbeddingError::ProviderError(e.to_string()))?;
+        if vectors.len() != documents.len() {
+            return Err(rig_core::embeddings::EmbeddingError::ProviderError(
+                format!(
+                    "fastembed returned {} embeddings for {} documents",
+                    vectors.len(),
+                    documents.len()
+                ),
+            ));
+        }
         Ok(documents
             .into_iter()
             .zip(vectors)
