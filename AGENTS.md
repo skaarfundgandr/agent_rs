@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-Rust AI agent framework (edition 2024, v0.9.0). Library crate with examples.
+Rust AI agent framework (edition 2024, v0.9.1). Library crate with examples.
 Library consumers import as `agent_rs`.
 
 Core deps: `rig-core` 0.40.0 (with `rmcp` feature), `rmcp` 1.7, `tokio` (full), `reqwest`, `pdf-extract`, `tracing` 0.1.
@@ -84,13 +84,14 @@ src/
 │   │   ├── chat.rs           # execute_chat, execute_stream_chat functions
 │   │   └── mod.rs            # Re-exports
 │   ├── invalid_tool.rs    # InvalidToolPolicy, InvalidToolRecoveryHook, invalid_tool_feedback
-│   ├── tools/            # Read/Write/Grep/Glob/ListDir/ManageRag/Compact/ToolRegistry tools
+│   ├── tools/            # Read/Write/Grep/Glob/ListDir/ManageRag/Compact/Think/ToolRegistry tools
 │   │   ├── document.rs       # ReadDocumentTool, WriteDocumentTool
 │   │   ├── search.rs         # GrepSearchTool
 │   │   ├── glob.rs           # GlobSearchTool
 │   │   ├── directory.rs      # ListDirectoryTool
 │   │   ├── rag.rs            # ManageRagTool
 │   │   ├── context.rs        # CompactTool<M>
+│   │   ├── think.rs          # ThinkTool (no-op reasoning primitive)
 │   │   ├── registry.rs       # ToolRegistry, ToolRegistryBuilder
 │   │   └── mod.rs            # Re-exports
 │   └── react/            # ReAct loop: builder → built → streaming
@@ -186,4 +187,5 @@ Tests in `tests/` (17+ files): `agents_tests.rs`, `document_store.rs`, `embeddin
 - `.opencode/migration-0.7.0.md` — migration guide (v0.6.0 → v0.7.0): caller-owned history, removed `with_history()`/`history()`, removed `utils.rs`
 - `.opencode/migration-0.8.0.md` — migration guide (v0.7.1 → v0.8.0): rig 0.39 upgrade, observability simplification, `gen_ai.operation.name` overwrite bug fix
 - `.opencode/migration-0.9.0.md` — migration guide (v0.8.1 → v0.9.0): rig 0.40 + `AgentHook` + invalid tool recovery
+- `.opencode/migration-0.9.1.md` — additive: `ThinkTool` / `ThinkArgs` / `ThinkOutput` in `agent::tools`
 - `docs/diagrams/` — architecture diagrams (C4, class, sequence, state, module dependency)

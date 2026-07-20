@@ -6,6 +6,7 @@ pub mod glob;
 pub mod rag;
 pub mod registry;
 pub mod search;
+pub mod think;
 pub(crate) mod util;
 
 pub use context::CompactTool;
@@ -16,3 +17,4 @@ pub use glob::GlobSearchTool;
 pub use rag::{ManageRagTool, RagSourceRegistry};
 pub use registry::{RegisteredTool, ToolFactory, ToolRegistry, ToolRegistryBuilder};
 pub use search::GrepSearchTool;
+pub use think::{ThinkArgs, ThinkOutput, ThinkTool};

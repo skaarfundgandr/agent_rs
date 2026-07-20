@@ -4,7 +4,17 @@ Standard Rig `Tool` implementations available to agents.
 
 > **Architecture reference:** See the [C4 component diagram](../diagrams/c4-architecture.md) for how tools relate to the agent core, the [sandbox flowchart](../diagrams/flowchart.md) for path security enforcement, and the [class diagram](../diagrams/class-diagram.md) for tool type hierarchy.
 
-All filesystem tools accept a `PermissionPolicy` and an `Arc<SharedSandbox>` in their constructor. When the policy denies an operation, the tool returns `DocumentError::PermissionDenied` (see the [Domain Errors Reference](domain_errors.md)).
+**Filesystem tools** (`ReadDocumentTool`, `WriteDocumentTool`, `ListDirectoryTool`,
+`GlobSearchTool`, `GrepSearchTool`) accept a `PermissionPolicy` and an
+`Arc<SharedSandbox>` in their constructor. When the policy denies an operation,
+the tool returns `DocumentError::PermissionDenied` (see the
+[Domain Errors Reference](domain_errors.md)).
+
+**Reasoning tools** (`ThinkTool`) are pure and require no sandbox or permission
+policy.
+
+**Context / RAG tools** (`CompactTool`, `ManageRagTool`) are documented in their
+sections below.
 
 ---
 
@@ -18,6 +28,46 @@ Invokes a completion model to summarize conversation history.
 ```rust
 CompactTool::new(model: M) -> Self
 ```
+
+---
+
+## `ThinkTool`
+
+No-op reasoning tool for ReAct agents. Echoes the thought into the tool-result
+channel so it appears in working memory. Performs no I/O and cannot fail
+(`Tool::Error = std::convert::Infallible`).
+
+- **Name**: `think`
+- **Arguments**: `ThinkArgs { thought: String }`
+- **Output**: `ThinkOutput { thought: String, acknowledged: bool }`
+- **Import**: `agent_rs::agent::ThinkTool` or `agent_rs::agent::tools::ThinkTool`
+
+### Constructor
+
+Unit struct — use `ThinkTool` directly (no `::new`).
+
+### Example
+
+```rust
+use agent_rs::agent::tools::{ThinkArgs, ThinkTool};
+use rig_core::tool::Tool;
+
+// async context
+let out = ThinkTool
+    .call(ThinkArgs {
+        thought: "list open questions before calling web_search".into(),
+    })
+    .await
+    .expect("Infallible");
+assert!(out.acknowledged);
+```
+
+### Notes
+
+- Prefer this over `rig_core::tool::builtin::ThinkTool`, which uses a phantom
+  `ThinkError` and returns a bare `String`.
+- Inspired by Anthropic's think-tool pattern (engineering blog; citation only).
+- Not feature-gated; always available in the default build.
 
 ---
 
@@ -164,6 +214,7 @@ pub use directory::ListDirectoryTool;
 pub use document::{ReadDocumentTool, WriteDocumentTool};
 pub use glob::GlobSearchTool;
 pub use search::GrepSearchTool;
+pub use think::{ThinkArgs, ThinkOutput, ThinkTool};
 #[cfg(feature = "rag")]
 pub use rag::{ManageRagTool, RagSourceRegistry};
 ```
@@ -173,7 +224,7 @@ Crate-level re-exports (`src/agent/mod.rs`):
 ```rust
 pub use tools::{
     CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool,
-    WriteDocumentTool,
+    ThinkTool, WriteDocumentTool,
 };
 #[cfg(feature = "rag")]
 pub use tools::{ManageRagTool, RagSourceRegistry};

@@ -17,7 +17,7 @@
 4. [RAG Pipeline](rag_pipeline.md) — Persistent SQLite + turbovec document chunking and vector search pipeline.
 5. [Memory and Agent Context](memory_and_agent_context.md) — Conversation history compaction and token-tracking agent wrapper.
 6. [Permission System](permission_system.md) — Permission policy and custom execution gates for agent tools.
-7. [Agent Tools](agent_tools.md) — Filesystem, search, compact, and RAG tools for agents.
+7. [Agent Tools](agent_tools.md) — Filesystem, search, compact, think, and RAG tools for agents.
 8. [ReAct Loop](react_loop.md) — Per-cycle Reasoning + Acting agent loop with serializable trace.
 9. [Observability](observability.md) — LangSmith OpenTelemetry tracing setup and rig span enrichment.
 10. [Domain Errors](domain_errors.md) — Error enums and error handling types.

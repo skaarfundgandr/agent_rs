@@ -729,3 +729,33 @@ async fn test_sandbox_config_default() {
     assert_eq!(sandbox.len(), 1);
     assert_eq!(sandbox.primary(), std::path::Path::new("."));
 }
+
+#[tokio::test]
+async fn test_think_tool_call() {
+    use agent_rs::agent::tools::{ThinkArgs, ThinkTool};
+
+    assert_eq!(ThinkTool::NAME, "think");
+
+    let out = ThinkTool
+        .call(ThinkArgs {
+            thought: "consider alternatives before searching".to_string(),
+        })
+        .await
+        .expect("Infallible");
+
+    assert_eq!(out.thought, "consider alternatives before searching");
+    assert!(out.acknowledged);
+}
+
+#[test]
+fn test_think_tool_definition() {
+    use agent_rs::agent::tools::ThinkTool;
+
+    let tool = ThinkTool;
+    assert!(tool.description().to_lowercase().contains("think"));
+    let params = tool.parameters();
+    assert_eq!(params["type"], "object");
+    assert!(params["required"]
+        .as_array()
+        .is_some_and(|r| r.iter().any(|v| v == "thought")));
+}

@@ -88,10 +88,10 @@ impl LangSmithConfig {
         if let Ok(val) = std::env::var("LANGSMITH_OTEL_BATCH") {
             cfg.batch = !matches!(val.as_str(), "0" | "false" | "no");
         }
-        if let Ok(val) = std::env::var("LANGSMITH_OTEL_BATCH_DELAY_MS") {
-            if let Ok(ms) = val.parse::<u64>() {
-                cfg.batch_delay_ms = ms;
-            }
+        if let Ok(val) = std::env::var("LANGSMITH_OTEL_BATCH_DELAY_MS")
+            && let Ok(ms) = val.parse::<u64>()
+        {
+            cfg.batch_delay_ms = ms;
         }
 
         cfg

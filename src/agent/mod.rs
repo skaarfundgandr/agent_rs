@@ -26,7 +26,7 @@ pub use react::{
 
 pub use tools::{
     CompactTool, GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool,
-    WriteDocumentTool,
+    ThinkTool, WriteDocumentTool,
 };
 #[cfg(feature = "rag")]
 pub use tools::{ManageRagTool, RagSourceRegistry};
