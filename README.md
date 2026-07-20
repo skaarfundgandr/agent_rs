@@ -117,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = openai::CompletionsClient::from_env();
 
     // Load local fastembed embedding model
-    let embedder = EmbeddingService::from_fastembed("Xenova/bge-small-en-v1.5".parse()?)?;
+    let embedder = EmbeddingService::from_fastembed("BGESmallENV15".parse()?)?;
 
     // Build a persistent RAG pipeline with the builder API
     let rag = RagPipeline::builder()
@@ -138,7 +138,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+### 4. GPU Acceleration (opt-in)
+
+By default the `rag` feature builds with CPU-only ONNX Runtime. GPU acceleration requires one of these feature flags:
+
+| Feature | Hardware |
+|---|---|
+| `rag-cuda` | NVIDIA GPUs (CUDA) |
+| `rag-directml` | Windows GPUs (DirectML) |
+| `rag-rocm` | AMD GPUs (ROCm) |
+| `rag-load-dynamic` | System-provided ORT dylib (set `ORT_DYLIB_PATH`) |
+
+```rust,no_run
+use agent_rs::agent::embeddings::ort::execution_providers::{
+    CUDAExecutionProvider,
+    CPUExecutionProvider,
+};
+use agent_rs::agent::embeddings::EmbeddingService;
+
+let embedder = EmbeddingService::from_fastembed_with_providers(
+    "BGESmallENV15".parse()?,
+    vec![
+        CUDAExecutionProvider::default().build(),
+        CPUExecutionProvider::default().build(), // fallback
+    ],
+)?;
 ```
+
+The default `rag` build is CPU-only and behavior-identical to v0.9.x.
 
 ---
 

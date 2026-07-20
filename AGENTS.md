@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-Rust AI agent framework (edition 2024, v0.9.1). Library crate with examples.
+Rust AI agent framework (edition 2024, v0.10.0). Library crate with examples.
 Library consumers import as `agent_rs`.
 
 Core deps: `rig-core` 0.40.0 (with `rmcp` feature), `rmcp` 1.7, `tokio` (full), `reqwest`, `pdf-extract`, `tracing` 0.1.
@@ -13,7 +13,7 @@ Managed and ReAct agents ship with built-in **invalid tool-name recovery**: by d
 `InvalidToolRecoveryHook` is composed with the user's hook (e.g. `LangSmithAgentHook`) at build time,
 returning `Flow::skip(...)` instead of hard-failing. Policy is configurable via
 `InvalidToolPolicy { Skip, Fail, Retry }` on both builders.
-Optional deps (feature-gated): `opentelemetry` 0.32, `opentelemetry_sdk` 0.32, `opentelemetry-otlp` 0.32, `tracing-opentelemetry` 0.33, `tracing-subscriber` 0.3 (the `opentelemetry` feature).
+Optional deps (feature-gated): `opentelemetry` 0.32, `opentelemetry_sdk` 0.32, `opentelemetry-otlp` 0.32, `tracing-opentelemetry` 0.33, `tracing-subscriber` 0.3 (the `opentelemetry` feature). The `rag` feature brings in `fastembed` 5.17.3 + `ort =2.0.0-rc.12`.
 
 ## Commands
 
@@ -33,7 +33,7 @@ CI pipeline and release workflows live in `.github/workflows/`. No pre-commit ho
 
 Requires `.env` with `API_KEY` and `mcp.json` (copy from `mcp.json.example`).
 `CHAT_MODEL` (default `google/gemma-4-e4b`) selects the chat model via the OpenAI-compatible endpoint at `http://127.0.0.1:1234/v1` (overridable via `CHAT_BASE_URL`).
-`FASTEMBED_MODEL` (default `Xenova/bge-small-en-v1.5`) selects the local fastembed embedding model. First run downloads from Hugging Face (~50MB for BGESmall, larger for others). Set `FASTEMBED_CACHE_DIR` to use a pre-populated cache.
+`FASTEMBED_MODEL` (default `BGESmallENV15`) selects the local fastembed embedding model using a model variant name (e.g. `BGESmallENV15`, `AllMiniLML6V2`). First run downloads from Hugging Face (~50MB for BGESmall, larger for others). Set `FASTEMBED_CACHE_DIR` to use a pre-populated cache.
 `RAG_DB_PATH` / `RAG_INDEX_PATH` (defaults `./rag_data/rag.db`, `./rag_data/rag.tvim`) — the SQLite + turbovec on-disk artifacts. They must stay in sync; deleting both is the recovery procedure if `open_or_create` errors with "out of sync".
 The old `EMBEDDING_MODEL` env var (which used the OpenAI-compatible endpoint for embeddings) is removed. Only `CHAT_MODEL` still uses that endpoint.
 turbovec requires AVX2 on x86_64. Apple Silicon and ARM64 Linux work via the SSE/NEON fallback paths the crate provides.
@@ -167,7 +167,7 @@ Tests in `tests/` (17+ files): `agents_tests.rs`, `document_store.rs`, `embeddin
 - `RagStoreBuilder` was removed in v0.2.0 — use `PdfLoader` + `WordSplitter` + `RagPipeline` instead.
 - RAG construction: use `RagPipeline::builder()` → `.embedder(service).store_at(dir).build().await` → `BuiltRag { vector_index, indexer }`. The `RagIndexer` provides `add/remove/list/tool` methods. `open_or_create` and `from_parts` are `pub(crate)`.
 - RAG persistence: `RagPipeline` stores chunk metadata in SQLite and vectors in turbovec (`.tvim`). Both files must stay in sync; delete both to recover from "out of sync" errors.
-- The `rag` feature gates all RAG code. Without it, RAG types are compiled out entirely.
+- The `rag` feature gates all RAG code. Without it, RAG types are compiled out entirely. GPU acceleration is opt-in via `rag-cuda` (NVIDIA), `rag-directml` (Windows), `rag-rocm` (AMD), or `rag-load-dynamic` (system ORT dylib).
 - The `opentelemetry` feature gates the LangSmith OTel tracing path. Without it, `src/observability/` compiles to nothing and `domain/observability::LangSmithConfig` is `cfg`-out.
 - **History ownership:** `BuiltReAct::chat()` takes `&mut Vec<Message>` and replaces it with the full working trace on success; `BuiltManagedAgent::chat()` pushes user+assistant only. On error, the caller's history is left untouched. Builder methods `with_history()` and `history()` accessors are removed — caller owns the vec.
 - `domain/` holds pure data types + errors only. Behaviour lives in root-level modules (`agent/`, `observability/`). Pure config structs that mirror loader-side modules live in `domain/<topic>.rs` (e.g. `LangSmithConfig` in `domain/observability.rs` mirrors the runtime wiring in `src/observability/langsmith.rs`).
@@ -188,4 +188,5 @@ Tests in `tests/` (17+ files): `agents_tests.rs`, `document_store.rs`, `embeddin
 - `.opencode/migration-0.8.0.md` — migration guide (v0.7.1 → v0.8.0): rig 0.39 upgrade, observability simplification, `gen_ai.operation.name` overwrite bug fix
 - `.opencode/migration-0.9.0.md` — migration guide (v0.8.1 → v0.9.0): rig 0.40 + `AgentHook` + invalid tool recovery
 - `.opencode/migration-0.9.1.md` — additive: `ThinkTool` / `ThinkArgs` / `ThinkOutput` in `agent::tools`
+- `.opencode/migration-0.10.0.md` — migration guide (v0.9.x → v0.10.0): fastembed 5.17.3 swap, opt-in GPU features, `FASTEMBED_MODEL` variant-name format
 - `docs/diagrams/` — architecture diagrams (C4, class, sequence, state, module dependency)

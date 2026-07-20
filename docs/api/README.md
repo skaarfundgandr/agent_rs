@@ -5,7 +5,7 @@
 > **Feature flags**
 > This crate exposes optional `rag` and `opentelemetry` Cargo features.
 > - **Default build** (`cargo build`): RAG and OTel code are fully compiled out, no extra deps pulled in. The `manage_rag` tool, RAG pipeline types, and observability module are unavailable; the rest of the library works as before.
-> - **With RAG** (`cargo build --features rag`): adds `rig-fastembed`, `rig-sqlite`, `tokio-rusqlite`, `turbovec` as optional deps; enables `RagPipeline`, `DocumentStore`, `TurboIndex`, `TurboVectorIndex`, `EmbeddingService::from_fastembed()`, and `ManageRagTool`.
+> - **With RAG** (`cargo build --features rag`): adds `fastembed`, `rig-sqlite`, `tokio-rusqlite`, `turbovec` as optional deps; enables `RagPipeline`, `DocumentStore`, `TurboIndex`, `TurboVectorIndex`, `EmbeddingService::from_fastembed()`, and `ManageRagTool`.
 > - **With OpenTelemetry** (`cargo build --features opentelemetry`): adds `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp`, `tracing-opentelemetry`, `tracing-subscriber` as optional deps; enables `LangSmithConfig`, `TracerHandle`, `init_tracing()`, `shutdown_tracing()`, `LangSmithReActEmitter`, and `LangSmithAgentHook`.
 > - **Both** (`cargo build --features "rag,opentelemetry"`): mutually orthogonal, both subsystems coexist.
 
