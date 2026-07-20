@@ -41,7 +41,7 @@ mod rag_main {
         let chat_base_url =
             env::var("CHAT_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:1234/v1".to_string());
         let fastembed_model_name =
-            env::var("FASTEMBED_MODEL").unwrap_or_else(|_| "Xenova/bge-small-en-v1.5".to_string());
+            env::var("FASTEMBED_MODEL").unwrap_or_else(|_| "BGESmallENV15".to_string());
         let rag_top_k = env::var("RAG_TOP_K")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -82,7 +82,7 @@ mod rag_main {
             .build()?;
 
         // ---------- embeddings (local fastembed) ----------
-        let fastembed_variant: rig_fastembed::FastembedModel =
+        let fastembed_variant: agent_rs::agent::embeddings::FastembedModel =
             fastembed_model_name.parse().map_err(|e: String| {
                 anyhow::anyhow!("Unknown FASTEMBED_MODEL '{fastembed_model_name}': {e}")
             })?;

@@ -150,7 +150,7 @@ mod researcher_main {
         let chat_base_url =
             env::var("CHAT_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:1234/v1".to_string());
         let fastembed_model_name =
-            env::var("FASTEMBED_MODEL").unwrap_or_else(|_| "Xenova/bge-small-en-v1.5".to_string());
+            env::var("FASTEMBED_MODEL").unwrap_or_else(|_| "BGESmallENV15".to_string());
 
         let api_key = match env::var("API_KEY") {
             Ok(k) if !k.is_empty() => k,
