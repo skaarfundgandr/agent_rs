@@ -755,7 +755,9 @@ fn test_think_tool_definition() {
     assert!(tool.description().to_lowercase().contains("think"));
     let params = tool.parameters();
     assert_eq!(params["type"], "object");
-    assert!(params["required"]
-        .as_array()
-        .is_some_and(|r| r.iter().any(|v| v == "thought")));
+    assert!(
+        params["required"]
+            .as_array()
+            .is_some_and(|r| r.iter().any(|v| v == "thought"))
+    );
 }
