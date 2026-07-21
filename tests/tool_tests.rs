@@ -103,8 +103,7 @@ async fn test_write_document() {
 #[tokio::test]
 async fn test_sandbox_escape_read() {
     // Under the new permission-gate design, `AllowAll` + an out-of-sandbox path
-    // BYPASSES the sandbox check (gate is the sole authority — see the bug
-    // report in `.opencode/agentrs-permission-bug-report.md`). The safety
+    // BYPASSES the sandbox check (gate is the sole authority). The safety
     // primitive is therefore "a denying gate stops the escape", which we test
     // here via `DenyAll`.
     let temp_dir = tempfile::tempdir().unwrap();

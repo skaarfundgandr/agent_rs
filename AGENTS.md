@@ -185,9 +185,5 @@ Tests in `tests/` (18+ files): `agents_tests.rs`, `document_store.rs`, `embeddin
 
 - `docs/api/` — API reference docs (split by section). See [API Reference Overview](docs/api/README.md)
 - `docs/migration-0.2.0.md` — migration guide (v0.1.0 → v0.2.0)
-- `.opencode/migration-0.7.0.md` — migration guide (v0.6.0 → v0.7.0): caller-owned history, removed `with_history()`/`history()`, removed `utils.rs`
-- `.opencode/migration-0.8.0.md` — migration guide (v0.7.1 → v0.8.0): rig 0.39 upgrade, observability simplification, `gen_ai.operation.name` overwrite bug fix
-- `.opencode/migration-0.9.0.md` — migration guide (v0.8.1 → v0.9.0): rig 0.40 + `AgentHook` + invalid tool recovery
-- `.opencode/migration-0.9.1.md` — additive: `ThinkTool` / `ThinkArgs` / `ThinkOutput` in `agent::tools`
-- `.opencode/migration-0.10.0.md` — migration guide (v0.9.x → v0.10.0): fastembed 5.17.3 swap, opt-in GPU features, `FASTEMBED_MODEL` variant-name format
+- `docs/migration-0.10.0.md` — migration guide (v0.9.x → v0.10.0): fastembed 5.17.3 swap, opt-in GPU features, `FASTEMBED_MODEL` variant-name format
 - `docs/diagrams/` — architecture diagrams (C4, class, sequence, state, module dependency)

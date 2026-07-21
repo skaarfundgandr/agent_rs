@@ -134,7 +134,3 @@ let writer = WriteDocumentTool::new(sandbox, write_extensions, policy);
 - **Dynamic Tool Description**: The supported extensions list in the tool definitions is now dynamically generated from the configured `allowed_extensions` set.
 
 > **Architecture reference:** See the [sandbox path validation flowchart](diagrams/flowchart.md) for a visual walkthrough of the canonicalization logic, and the [class diagram](diagrams/class-diagram.md) for the `DocumentError` enum definition.
-
----
-
-> **See also:** [v0.6.0 → v0.7.0 migration](../.opencode/migration-0.7.0.md) — caller-owned history, removed `with_history()`/`history()`, removed `utils.rs`.
