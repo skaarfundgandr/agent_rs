@@ -398,7 +398,7 @@ impl EmbeddingService<FastembedEmbeddingModel> {
     /// target machine.
     ///
     /// EP types are available at the re-exported ort path:
-    /// `agent_rs::agent::embeddings::ort::execution_providers::*`.
+    /// `agent_rs::agent::embeddings::ort::ep::*` (e.g. `CUDA`, `ROCm`, `OpenVINO`, `CPU`).
     ///
     /// # Arguments
     ///
@@ -431,7 +431,7 @@ impl EmbeddingService<FastembedEmbeddingModel> {
     /// target machine.
     ///
     /// EP types are available at the re-exported ort path:
-    /// `agent_rs::agent::embeddings::ort::execution_providers::*`.
+    /// `agent_rs::agent::embeddings::ort::ep::*` (e.g. `CUDA`, `ROCm`, `OpenVINO`, `CPU`).
     ///
     /// # Arguments
     ///
