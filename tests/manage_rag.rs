@@ -244,3 +244,94 @@ async fn manage_rag_add_force_reindexes() {
         "chunk count should match forced reindex result"
     );
 }
+
+#[tokio::test]
+async fn manage_rag_status_reports_empty_index() {
+    use agent_rs::agent::tools::rag::ManageRagArgs;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let (tool, _pipeline) = build_tool(tmp.path()).await;
+
+    let output = tool
+        .call(ManageRagArgs {
+            action: "status".to_string(),
+            path: None,
+            force: None,
+        })
+        .await
+        .unwrap();
+    assert!(output.contains("sources: 0"), "output: {output}");
+    assert!(output.contains("chunks: 0"), "output: {output}");
+    assert!(output.contains("embedding dims: 8"), "output: {output}");
+    assert!(output.contains("no chunks indexed"), "output: {output}");
+}
+
+#[tokio::test]
+async fn manage_rag_status_after_add() {
+    use agent_rs::agent::tools::rag::ManageRagArgs;
+
+    let tmp = tempfile::tempdir().unwrap();
+
+    let file = tmp.path().join("s.txt");
+    fs::write(&file, "one two three four five six seven eight nine ten").unwrap();
+
+    let (tool, _pipeline) = build_tool(tmp.path()).await;
+
+    tool.call(ManageRagArgs {
+        action: "add".to_string(),
+        path: Some("s.txt".to_string()),
+        force: None,
+    })
+    .await
+    .unwrap();
+
+    let output = tool
+        .call(ManageRagArgs {
+            action: "status".to_string(),
+            path: None,
+            force: None,
+        })
+        .await
+        .unwrap();
+    assert!(output.contains("sources: 1"), "output: {output}");
+    assert!(output.contains("embedding dims: 8"), "output: {output}");
+    assert!(output.contains("[FILE]"), "output: {output}");
+    assert!(output.contains("s.txt"), "output: {output}");
+    assert!(!output.contains("chunks: 0"), "output: {output}");
+    assert!(output.contains("chunks: "), "output: {output}");
+}
+
+#[tokio::test]
+async fn manage_rag_status_shows_source_chunk_divergence() {
+    use agent_rs::agent::tools::rag::ManageRagArgs;
+
+    let tmp = tempfile::tempdir().unwrap();
+
+    let file = tmp.path().join("d.txt");
+    fs::write(&file, "one two three four five six seven eight nine ten").unwrap();
+
+    let (tool, pipeline) = build_tool(tmp.path()).await;
+
+    tool.call(ManageRagArgs {
+        action: "add".to_string(),
+        path: Some("d.txt".to_string()),
+        force: None,
+    })
+    .await
+    .unwrap();
+
+    let canonical_key = file.canonicalize().unwrap().display().to_string();
+    pipeline.remove_source(&canonical_key).await.unwrap();
+
+    let output = tool
+        .call(ManageRagArgs {
+            action: "status".to_string(),
+            path: None,
+            force: None,
+        })
+        .await
+        .unwrap();
+    assert!(output.contains("sources: 1"), "output: {output}");
+    assert!(output.contains("chunks: 0"), "output: {output}");
+    assert!(output.contains("no chunks indexed"), "output: {output}");
+}

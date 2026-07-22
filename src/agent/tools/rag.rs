@@ -212,13 +212,15 @@ pub struct ManageRagArgs {
 
 /// A thin permission shell over [`crate::rag::RagIndexer`].
 ///
-/// Supports three actions via a string enum argument:
+/// Supports four actions via a string enum argument:
 /// - **add** — Register a file or directory as a RAG source. The path is
 ///   validated against the sandbox root and the file extension is checked
 ///   against the supported set. Duplicate adds are ignored.
 /// - **remove** — Unregister a previously added source by path and delete
 ///   its chunks from the persisted store/index.
 /// - **list** — Display all currently registered sources with their type.
+/// - **status** — Show registered source count, persisted chunk count, and
+///   embedding dimensionality.
 ///
 /// Changes are persisted directly; the consumer does not need to rebuild the
 /// index manually.
@@ -243,7 +245,7 @@ impl Tool for ManageRagTool {
     type Output = String;
 
     fn description(&self) -> String {
-        "Manage RAG sources: add a file or directory, remove a source, or list all indexed sources. Re-adding an already-registered source is a no-op (0 chunks); use force: true to re-index and refresh modified files. Changes are persisted directly.".to_string()
+        "Manage RAG sources: add a file or directory, remove a source, list all indexed sources, or show status. 'status' reports source count, chunk count, and embedding dimensions. Re-adding an already-registered source is a no-op (0 chunks); use force: true to re-index and refresh modified files. Changes are persisted directly.".to_string()
     }
 
     fn parameters(&self) -> serde_json::Value {
@@ -252,8 +254,8 @@ impl Tool for ManageRagTool {
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["add", "remove", "list"],
-                    "description": "Action to perform: 'add' registers a new source, 'remove' unregisters an existing source, 'list' shows all registered sources"
+                    "enum": ["add", "remove", "list", "status"],
+                    "description": "Action to perform: 'add' registers a new source, 'remove' unregisters an existing source, 'list' shows all registered sources, 'status' reports source/chunk counts and embedding dims"
                 },
                 "path": {
                     "type": "string",
@@ -287,17 +289,18 @@ impl Tool for ManageRagTool {
                 args.path.as_deref().unwrap_or("")
             ),
             "list" => "Wants to list all RAG sources".to_string(),
+            "status" => "Wants to show RAG index status".to_string(),
             other => {
                 return Err(DocumentError::Rag(format!(
-                    "Unknown action '{other}'. Valid actions: add, remove, list"
+                    "Unknown action '{other}'. Valid actions: add, remove, list, status"
                 )));
             }
         };
 
-        // In-sandbox paths are auto-allowed; the `list` action needs no gate
-        // (it only reads the in-memory registry). Consult the gate only for
-        // out-of-sandbox add/remove paths.
-        let needs_gate = if args.action.as_str() == "list" {
+        // In-sandbox paths are auto-allowed; `list`/`status` actions need no gate
+        // (they only read in-memory/persisted counts). Consult the gate only
+        // for out-of-sandbox add/remove paths.
+        let needs_gate = if matches!(args.action.as_str(), "list" | "status") {
             false
         } else {
             let p = args.path.as_deref().unwrap_or("");
@@ -365,8 +368,36 @@ impl Tool for ManageRagTool {
                 };
                 Ok(output)
             }
+            "status" => {
+                let sources = self.indexer.list();
+                let chunks = self
+                    .indexer
+                    .chunk_count()
+                    .await
+                    .map_err(|e| DocumentError::Rag(e.to_string()))?;
+                let mut out = format!(
+                    "sources: {}\nchunks: {}\nembedding dims: {}",
+                    sources.len(),
+                    chunks,
+                    self.indexer.embedder.ndims()
+                );
+                for s in &sources {
+                    let kind = match s.source_type {
+                        crate::domain::rag::RagSourceType::File => "FILE",
+                        crate::domain::rag::RagSourceType::Directory => "DIR",
+                    };
+                    out.push_str(&format!("\n[{}] {}", kind, s.path.display()));
+                }
+                if chunks == 0 {
+                    out.push_str(
+                        "\nno chunks indexed — searches will return nothing; \
+                         add sources with action='add'",
+                    );
+                }
+                Ok(out)
+            }
             _ => Err(DocumentError::Rag(format!(
-                "Unknown action '{}'. Valid actions: add, remove, list",
+                "Unknown action '{}'. Valid actions: add, remove, list, status",
                 args.action
             ))),
         }
