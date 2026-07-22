@@ -151,11 +151,13 @@ GrepSearchTool::new(
 
 ## `ManageRagTool` (requires `rag` feature)
 
-Unified tool for managing RAG sources. Supports three actions via a string enum: add a file or directory, remove a source, or list all indexed sources. After add/remove, the pipeline is updated automatically via `RagPipeline`.
+Unified tool for managing RAG sources. Supports four actions via a string enum: add a file or directory (optionally force-reindex), remove a source, list all indexed sources, or display status with per-source details and chunk counts.
 - **Name**: `manage_rag`
-- **Arguments**: `ManageRagArgs { action: String, path: Option<String> }`
-  - `action`: One of `"add"`, `"remove"`, or `"list"`.
+- **Arguments**: `ManageRagArgs { action: String, path: Option<String>, force: Option<bool> }`
+  - `action`: One of `"add"`, `"remove"`, `"list"`, or `"status"`.
   - `path`: Path to the file or directory (relative to sandbox root). Required for `"add"` and `"remove"`.
+  - `force`: When `true` on `"add"`, re-indexes an already-registered source (refreshes modified files). Plain re-add stays a no-op returning `"indexed 0 chunks"`.
+- **Output** (`status` action): Reports registered source count, per-source list (`[FILE]`/`[DIR]` + path), persisted chunk count, embedding dimensionality, and a hint when zero chunks are indexed.
 
 ### Constructor
 ```rust
@@ -166,6 +168,28 @@ ManageRagTool::new(
     sandbox: Arc<SharedSandbox>,
     policy: PermissionPolicy,
 ) -> Self
+```
+
+---
+
+## `SearchRagTool` (requires `rag` feature)
+
+Read-only semantic search over the indexed RAG corpus. Performs a vector similarity search against embedding indexes. Ungated (no permission check required).
+- **Name**: `rag_search`
+- **Arguments**: `SearchRagArgs { query: String, samples: Option<u64>, threshold: Option<f64> }`
+  - `query`: The search text (required).
+  - `samples`: Maximum number of results (optional, default `4`).
+  - `threshold`: Minimum similarity score — results below this are dropped (optional; scores are quantized inner-product estimates, approximately cosine similarity for normalized embeddings).
+- **Output**: A formatted string of matching text excerpts with scores.
+- **Created via**: `RagIndexer::search_tool()` which shares the pipeline's live store and index.
+
+### Constructor
+Not constructed manually — obtained from `RagIndexer::search_tool()`.
+
+### Example
+```rust
+use agent_rs::agent::tools::SearchRagTool;
+// Obtained via RagIndexer::search_tool() — see RAG Pipeline docs.
 ```
 
 ---
@@ -216,7 +240,7 @@ pub use glob::GlobSearchTool;
 pub use search::GrepSearchTool;
 pub use think::{ThinkArgs, ThinkOutput, ThinkTool};
 #[cfg(feature = "rag")]
-pub use rag::{ManageRagTool, RagSourceRegistry};
+pub use rag::{ManageRagTool, RagSourceRegistry, SearchRagTool};
 ```
 
 Crate-level re-exports (`src/agent/mod.rs`):
@@ -227,5 +251,5 @@ pub use tools::{
     ThinkTool, WriteDocumentTool,
 };
 #[cfg(feature = "rag")]
-pub use tools::{ManageRagTool, RagSourceRegistry};
+pub use tools::{ManageRagTool, RagSourceRegistry, SearchRagTool};
 ```

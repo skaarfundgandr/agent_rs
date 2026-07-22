@@ -89,7 +89,7 @@ src/
 │   │   ├── search.rs         # GrepSearchTool
 │   │   ├── glob.rs           # GlobSearchTool
 │   │   ├── directory.rs      # ListDirectoryTool
-│   │   ├── rag.rs            # ManageRagTool
+│   │   ├── rag.rs            # ManageRagTool, SearchRagTool
 │   │   ├── context.rs        # CompactTool<M>
 │   │   ├── think.rs          # ThinkTool (no-op reasoning primitive)
 │   │   ├── registry.rs       # ToolRegistry, ToolRegistryBuilder
@@ -152,7 +152,7 @@ Internal tools (filesystem, RAG, compact) register into `ToolRegistry` alongside
 
 All tests must reside in the `tests/` directory rather than inside `src/`. No unit tests should be placed inline within `src/` to keep production code clean.
 
-Tests in `tests/` (18+ files): `agents_tests.rs`, `document_store.rs`, `embeddings.rs`, `fastembed_wrapper.rs`, `manage_rag.rs`, `mcp_registry.rs`, `observability_tests.rs` (feature-gated on `opentelemetry`), `permission.rs`, `rag.rs`, `react_otel_tests.rs` (feature-gated on `opentelemetry`), `react_recovery_tests.rs`, `react_tests.rs`, `sandbox_tests.rs`, `shared_sandbox.rs`, `tool_tests.rs`, `turbo_index.rs`, `tool_registry.rs`, `dispatch.rs`, `state.rs`, `react_e2e.rs` (plus `common/mod.rs`, `mod.rs`).
+Tests in `tests/` (21+ files): `agents_tests.rs`, `document_store.rs`, `embeddings.rs`, `fastembed_wrapper.rs`, `manage_rag.rs`, `mcp_registry.rs`, `observability_tests.rs` (feature-gated on `opentelemetry`), `permission.rs`, `rag.rs`, `rag_reindex.rs`, `rag_search_tool.rs`, `rag_source_keys.rs`, `react_otel_tests.rs` (feature-gated on `opentelemetry`), `react_recovery_tests.rs`, `react_tests.rs`, `sandbox_tests.rs`, `shared_sandbox.rs`, `tool_tests.rs`, `turbo_index.rs`, `tool_registry.rs`, `dispatch.rs`, `state.rs`, `react_e2e.rs` (plus `common/mod.rs`, `mod.rs`).
 - `fastembed_wrapper.rs` — `#[ignore]`d; downloads a fastembed model, needs network or `FASTEMBED_CACHE_DIR`.
 - `test_read_pdf` in `tool_tests.rs` is `#[ignore]` — needs a local PDF file, will fail in CI.
 - Tool tests use `tempfile` for sandbox isolation.
@@ -171,6 +171,7 @@ Tests in `tests/` (18+ files): `agents_tests.rs`, `document_store.rs`, `embeddin
 - The `rag` feature gates all RAG code. Without it, RAG types are compiled out entirely. GPU acceleration is opt-in via `rag-cuda` (NVIDIA), `rag-directml` (Windows), `rag-rocm` (AMD), or `rag-load-dynamic` (system ORT dylib).
 - The `opentelemetry` feature gates the LangSmith OTel tracing path. Without it, `src/observability/` compiles to nothing and `domain/observability::LangSmithConfig` is `cfg`-out.
 - **History ownership:** `BuiltReAct::chat()` takes `&mut Vec<Message>` and replaces it with the full working trace on success; `BuiltManagedAgent::chat()` pushes user+assistant only. On error, the caller's history is left untouched. Builder methods `with_history()` and `history()` accessors are removed — caller owns the vec.
+- RAG chunk storage is keyed by canonical path string (not filename); `manage_rag add` on an already-registered source is a no-op unless `force: true` (see `RagIndexer::reindex`).
 - `domain/` holds pure data types + errors only. Behaviour lives in root-level modules (`agent/`, `observability/`). Pure config structs that mirror loader-side modules live in `domain/<topic>.rs` (e.g. `LangSmithConfig` in `domain/observability.rs` mirrors the runtime wiring in `src/observability/langsmith.rs`).
 
 ## MCP Config

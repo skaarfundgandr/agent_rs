@@ -96,19 +96,23 @@ let rag = RagPipeline::builder()
 ### `BuiltRag`
 
 Output of the builder. Contains:
-- **`vector_index: TurboVectorIndex`** — plug into `agent.dynamic_context(k, rag.vector_index)`.
+- **`vector_index: TurboVectorIndex`** — plug into `agent.dynamic_context(k, rag.vector_index)`. `top_n_ids`/`top_n` honor `VectorSearchRequest.threshold()` (minimum score filter; no filtering when unset). Derives `Clone` (all fields are `Arc`).
 - **`indexer: RagIndexer`** — ingestion handle for managing sources.
 
 ### `RagIndexer`
 
 Owns the pipeline, embedder, source registry, and sandbox. Methods:
-- **`add(&path) -> Result<usize>`** — register + index a file or directory (sandbox-aware).
-- **`remove(&path) -> Result<usize>`** — unregister + delete chunks (sandbox-aware).
+- **`add(&path) -> Result<usize>`** — register + index a file or directory (sandbox-aware). No-op for already-registered sources (returns 0).
+- **`remove(&path) -> Result<usize>`** — unregister + delete chunks (sandbox-aware). Chunks are matched by canonical path string.
+- **`reindex(&path) -> Result<usize>`** — unconditional re-embed replacing existing chunks for an already-registered source.
 - **`list() -> Vec<RagSource>`** — list registered sources.
 - **`is_empty() -> bool`** — check if any sources are registered.
 - **`chunk_count() -> Result<i64>`** — number of persisted chunks.
 - **`pipeline() -> &Arc<RagPipeline>`** — access the underlying pipeline (staging API escape hatch).
-- **`tool(policy) -> ManageRagTool`** — create a rig-compatible tool delegate.
+- **`tool(policy) -> ManageRagTool`** — create a rig-compatible `ManageRagTool` delegate.
+- **`search_tool() -> SearchRagTool`** — create a read-only `SearchRagTool` sharing the pipeline's live store and index.
+
+**Source keying:** Chunks are stored keyed by the canonical path string (not the bare filename from loader metadata). The pipeline overrides `Document.metadata["source"]` with the canonical path on ingest. This prevents same-named files in different directories from clobbering each other's chunks.
 
 ### Pipeline Methods (via `rag.indexer.pipeline()`)
 
@@ -117,7 +121,7 @@ Owns the pipeline, embedder, source registry, and sandbox. Methods:
 - **`add_source_dyn(path, &dyn ErasedEmbedder) -> Result<usize>`**
   Same as `add_source` but accepts a trait object.
 - **`remove_source(source_name) -> Result<usize>`**
-  Drops every chunk whose `source` matches. Returns number removed.
+  Drops every chunk whose `source` (canonical path) matches. Returns number removed.
 - **`save(&index_path) -> Result<()>`**
   Persists the turbovec index to disk.
 - **`commit_pending(&service) -> Result<usize>`**
