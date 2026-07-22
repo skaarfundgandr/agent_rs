@@ -200,6 +200,19 @@ impl RagIndexer {
             }
         }
 
+        self.reindex(path).await
+    }
+
+    /// Re-index a file or directory unconditionally.
+    ///
+    /// Unlike [`Self::add`], this does not short-circuit when the source is
+    /// already registered: existing chunks are replaced (per file, via the
+    /// pipeline's delete-then-add) and the source is re-embedded. Returns the
+    /// number of chunks written. Use this to refresh a source whose contents
+    /// changed since it was first indexed.
+    pub async fn reindex(&self, path: &Path) -> Result<usize> {
+        let canonical = self.sandbox.resolve_path_unchecked(path);
+
         let source_type = if canonical.is_file() {
             RagSourceType::File
         } else if canonical.is_dir() {

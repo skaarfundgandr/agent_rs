@@ -202,6 +202,10 @@ pub struct ManageRagArgs {
     /// Path to the file or directory (relative to sandbox root).
     /// Required for `"add"` and `"remove"` actions.
     pub path: Option<String>,
+    /// When `true` for the `"add"` action, re-index the source even if it is
+    /// already registered (refreshes modified files). Ignored for other
+    /// actions. Defaults to `false`.
+    pub force: Option<bool>,
 }
 
 /// A thin permission shell over [`crate::rag::RagIndexer`].
@@ -237,7 +241,7 @@ impl Tool for ManageRagTool {
     type Output = String;
 
     fn description(&self) -> String {
-        "Manage RAG sources: add a file or directory, remove a source, or list all indexed sources. Changes are persisted directly.".to_string()
+        "Manage RAG sources: add a file or directory, remove a source, or list all indexed sources. Re-adding an already-registered source is a no-op (0 chunks); use force: true to re-index and refresh modified files. Changes are persisted directly.".to_string()
     }
 
     fn parameters(&self) -> serde_json::Value {
@@ -252,6 +256,10 @@ impl Tool for ManageRagTool {
                 "path": {
                     "type": "string",
                     "description": "Path to the file or directory (relative to sandbox root). Required for 'add' and 'remove' actions."
+                },
+                "force": {
+                    "type": "boolean",
+                    "description": "When true with action 'add', re-index the source even if already registered (use to refresh a modified file). Default false."
                 }
             },
             "required": ["action"]
@@ -309,11 +317,17 @@ impl Tool for ManageRagTool {
                     )
                 })?;
                 let path = Path::new(&path_str);
-                let added = self
-                    .indexer
-                    .add(path)
-                    .await
-                    .map_err(|e| DocumentError::Rag(e.to_string()))?;
+                let added = if args.force.unwrap_or(false) {
+                    self.indexer
+                        .reindex(path)
+                        .await
+                        .map_err(|e| DocumentError::Rag(e.to_string()))?
+                } else {
+                    self.indexer
+                        .add(path)
+                        .await
+                        .map_err(|e| DocumentError::Rag(e.to_string()))?
+                };
                 Ok(format!("indexed {added} chunks"))
             }
             "remove" => {

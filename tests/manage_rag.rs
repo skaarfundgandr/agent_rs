@@ -76,6 +76,7 @@ async fn manage_rag_add_persists_to_pipeline() {
         .call(ManageRagArgs {
             action: "add".to_string(),
             path: Some("a.txt".to_string()),
+            force: None,
         })
         .await
         .unwrap();
@@ -99,6 +100,7 @@ async fn manage_rag_list_includes_added_source() {
     tool.call(ManageRagArgs {
         action: "add".to_string(),
         path: Some("listed.txt".to_string()),
+        force: None,
     })
     .await
     .unwrap();
@@ -107,6 +109,7 @@ async fn manage_rag_list_includes_added_source() {
         .call(ManageRagArgs {
             action: "list".to_string(),
             path: None,
+            force: None,
         })
         .await
         .unwrap();
@@ -127,6 +130,7 @@ async fn manage_rag_remove_clears_pipeline() {
     tool.call(ManageRagArgs {
         action: "add".to_string(),
         path: Some("rm.txt".to_string()),
+        force: None,
     })
     .await
     .unwrap();
@@ -136,6 +140,7 @@ async fn manage_rag_remove_clears_pipeline() {
         .call(ManageRagArgs {
             action: "remove".to_string(),
             path: Some("rm.txt".to_string()),
+            force: None,
         })
         .await
         .unwrap();
@@ -170,6 +175,7 @@ async fn manage_rag_add_directory_persists_to_pipeline() {
         .call(ManageRagArgs {
             action: "add".to_string(),
             path: Some("docs".to_string()),
+            force: None,
         })
         .await
         .unwrap();
@@ -177,4 +183,64 @@ async fn manage_rag_add_directory_persists_to_pipeline() {
 
     assert!(pipeline.chunk_count().await.unwrap() > 0);
     assert!(!pipeline.turbo().read().await.is_empty());
+}
+
+#[tokio::test]
+async fn manage_rag_add_force_reindexes() {
+    use agent_rs::agent::tools::rag::ManageRagArgs;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let file = tmp.path().join("f.txt");
+    fs::write(&file, "one two three four five six seven eight nine ten").unwrap();
+    let (tool, pipeline) = build_tool(tmp.path()).await;
+
+    let result = tool
+        .call(ManageRagArgs {
+            action: "add".to_string(),
+            path: Some("f.txt".to_string()),
+            force: None,
+        })
+        .await
+        .unwrap();
+    assert!(result.contains("indexed"));
+    let first_chunks = pipeline.chunk_count().await.unwrap();
+    assert!(first_chunks > 0);
+
+    let long_content: String = (0..300)
+        .map(|i| format!("word_{i}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    fs::write(&file, &long_content).unwrap();
+
+    let noop = tool
+        .call(ManageRagArgs {
+            action: "add".to_string(),
+            path: Some("f.txt".to_string()),
+            force: None,
+        })
+        .await
+        .unwrap();
+    assert!(noop.contains("indexed 0 chunks"));
+    assert_eq!(pipeline.chunk_count().await.unwrap(), first_chunks);
+
+    let forced = tool
+        .call(ManageRagArgs {
+            action: "add".to_string(),
+            path: Some("f.txt".to_string()),
+            force: Some(true),
+        })
+        .await
+        .unwrap();
+    assert!(forced.contains("indexed"));
+    let forced_chunks: usize = forced
+        .strip_prefix("indexed ")
+        .and_then(|s| s.strip_suffix(" chunks"))
+        .and_then(|s| s.parse().ok())
+        .unwrap();
+    assert!(forced_chunks > 0, "forced reindex should produce chunks");
+    assert_eq!(
+        pipeline.chunk_count().await.unwrap(),
+        forced_chunks as i64,
+        "chunk count should match forced reindex result"
+    );
 }
