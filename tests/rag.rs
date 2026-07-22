@@ -393,3 +393,83 @@ async fn pipeline_add_source_dir_nested_walks_recursively() {
     assert!(added > 0);
     assert_eq!(rag.indexer.chunk_count().await.unwrap() as usize, added);
 }
+
+#[tokio::test]
+async fn test_top_n_ids_honors_threshold() {
+    use rig_core::vector_store::VectorStoreIndex;
+    use rig_core::vector_store::request::VectorSearchRequest;
+
+    let dir = tempfile::tempdir().unwrap();
+
+    // Write 3 files with different content lengths so their embeddings differ.
+    let short = dir.path().join("short.txt");
+    fs::write(&short, "Hello world.").unwrap();
+    let medium = dir.path().join("medium.txt");
+    fs::write(&medium, "Rust is a systems programming language that focuses on safety, speed, and concurrency without a garbage collector.").unwrap();
+    let long = dir.path().join("long.txt");
+    fs::write(
+        &long,
+        "This is a longer document with more content. "
+            .repeat(50)
+            .as_str(),
+    )
+    .unwrap();
+
+    let rag = RagPipeline::builder()
+        .embedder(EmbeddingService::new(MockEmbeddingModel))
+        .store_at(dir.path())
+        .build()
+        .await
+        .unwrap();
+
+    rag.indexer.add(&short).await.unwrap();
+    rag.indexer.add(&medium).await.unwrap();
+    rag.indexer.add(&long).await.unwrap();
+
+    // Without a threshold — should return some hits.
+    let base_req = VectorSearchRequest::builder()
+        .query("test query text")
+        .samples(10)
+        .build();
+    let base = rag.vector_index.top_n_ids(base_req).await.unwrap();
+    assert!(!base.is_empty(), "expected hits without threshold");
+
+    // With a threshold above max score — should be empty.
+    let impossible_req = VectorSearchRequest::builder()
+        .query("test query text")
+        .samples(10)
+        .threshold(f64::MAX)
+        .build();
+    let impossible = rag.vector_index.top_n_ids(impossible_req).await.unwrap();
+    assert!(
+        impossible.is_empty(),
+        "expected no hits with threshold f64::MAX"
+    );
+
+    // With a threshold that keeps only the top hit — every score tracked >= threshold.
+    let base_max = base
+        .iter()
+        .map(|(s, _)| *s)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let cut_req = VectorSearchRequest::builder()
+        .query("test query text")
+        .samples(10)
+        .threshold(base_max)
+        .build();
+    let cut = rag.vector_index.top_n_ids(cut_req).await.unwrap();
+    assert!(
+        cut.len() <= base.len(),
+        "threshold filter should not increase result count"
+    );
+    for (score, _id) in &cut {
+        assert!(
+            *score >= base_max,
+            "expected score >= {base_max}, got {score}"
+        );
+    }
+    assert_eq!(
+        cut.len(),
+        1,
+        "threshold = max score should keep exactly 1 result"
+    );
+}

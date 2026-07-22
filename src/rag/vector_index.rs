@@ -107,10 +107,17 @@ impl VectorStoreIndex for TurboVectorIndex {
             return Ok(Vec::new());
         }
         let (scores, ids) = turbo.search(&query_vec, k);
-        Ok(scores
-            .into_iter()
-            .zip(ids)
-            .map(|(s, id)| (s as f64, id.to_string()))
-            .collect())
+        // Threshold is a minimum over the reported score — turbovec's quantized
+        // inner-product estimate, which equals cosine similarity for normalized
+        // embeddings. Filter only when requested; no implicit default.
+        let hits = scores.into_iter().zip(ids);
+        let out: Vec<(f64, String)> = match req.threshold() {
+            Some(t) => hits
+                .filter(|(s, _)| f64::from(*s) >= t)
+                .map(|(s, id)| (f64::from(s), id.to_string()))
+                .collect(),
+            None => hits.map(|(s, id)| (f64::from(s), id.to_string())).collect(),
+        };
+        Ok(out)
     }
 }
