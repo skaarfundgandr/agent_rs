@@ -7,6 +7,8 @@ use crate::rag::RagPipeline;
 use crate::security::SharedSandbox;
 use anyhow::Result;
 use rig_core::tool::Tool;
+use rig_core::vector_store::VectorStoreIndex;
+use rig_core::vector_store::request::VectorSearchRequest;
 use serde_json::json;
 use std::collections::HashSet;
 use std::path::Path;
@@ -368,5 +370,98 @@ impl Tool for ManageRagTool {
                 args.action
             ))),
         }
+    }
+}
+
+/// Arguments for the `rag_search` tool.
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct SearchRagArgs {
+    /// The semantic search query.
+    pub query: String,
+    /// Maximum number of chunks to return. Defaults to 4.
+    pub samples: Option<u64>,
+    /// Minimum score; results below it are dropped. Scores are quantized
+    /// inner-product estimates (≈ cosine similarity for normalized
+    /// embeddings).
+    pub threshold: Option<f64>,
+}
+
+/// Read-only semantic search over the RAG index.
+///
+/// Wraps a [`TurboVectorIndex`](crate::rag::TurboVectorIndex) view created by
+/// [`RagIndexer::search_tool`](crate::rag::RagIndexer::search_tool). Ungated
+/// (searching leaks no data the agent cannot already see through
+/// `dynamic_context`).
+#[derive(Clone)]
+pub struct SearchRagTool {
+    index: crate::rag::TurboVectorIndex,
+}
+
+impl SearchRagTool {
+    pub(crate) fn new(index: crate::rag::TurboVectorIndex) -> Self {
+        Self { index }
+    }
+}
+
+impl Tool for SearchRagTool {
+    const NAME: &'static str = "rag_search";
+
+    type Error = DocumentError;
+    type Args = SearchRagArgs;
+    type Output = String;
+
+    fn description(&self) -> String {
+        "Search indexed RAG sources semantically. Returns the most relevant chunks with their scores. Use manage_rag to add or list sources.".to_string()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The semantic search query"
+                },
+                "samples": {
+                    "type": "integer",
+                    "description": "Maximum number of results to return. Default 4."
+                },
+                "threshold": {
+                    "type": "number",
+                    "description": "Minimum score; results below are dropped. Optional."
+                }
+            },
+            "required": ["query"]
+        })
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        let mut builder = VectorSearchRequest::builder()
+            .query(args.query)
+            .samples(args.samples.unwrap_or(4));
+        if let Some(t) = args.threshold {
+            builder = builder.threshold(t);
+        }
+        let req = builder.build();
+        let hits = self
+            .index
+            .top_n::<String>(req)
+            .await
+            .map_err(|e| DocumentError::Rag(e.to_string()))?;
+        if hits.is_empty() {
+            return Ok(
+                "No results. The index may be empty or no chunk met the threshold — \
+                 use manage_rag action='list' to check what is indexed."
+                    .to_string(),
+            );
+        }
+        let mut out = String::new();
+        for (i, (score, _id, doc)) in hits.iter().enumerate() {
+            out.push_str(&format!(
+                "--- hit {} (score: {score:.4}) ---\n{doc}\n",
+                i + 1
+            ));
+        }
+        Ok(out)
     }
 }

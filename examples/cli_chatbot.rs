@@ -197,6 +197,10 @@ mod rag_main {
                 let pol = policy.clone();
                 move || Box::new(idx.tool(pol.clone()))
             })?
+            .register("rag", {
+                let idx = rag.indexer.clone();
+                move || Box::new(idx.search_tool())
+            })?
             .register("context", move || {
                 let agent = chat_client_for_ctx
                     .agent(&chat_model_name_for_ctx)
@@ -218,7 +222,9 @@ mod rag_main {
                 "You are a helpful AI agent capable of RAG and reading documents \
                  using internal tools. Use `manage_rag` with action='add' to index a \
                  document on the fly, then query it via your knowledge — relevant \
-                 passages will be supplied automatically as dynamic context.",
+                 passages will be supplied automatically as dynamic context. \
+                 Use `rag_search` to run an explicit semantic search over indexed sources \
+                 with your own query.",
             )
             .dynamic_context(rag_top_k, rag.vector_index)
             .default_max_turns(20)

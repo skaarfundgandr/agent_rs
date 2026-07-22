@@ -4,7 +4,7 @@ use super::state::RagPipeline;
 use super::walker;
 use crate::agent::embeddings::EmbeddingService;
 use crate::agent::permission::PermissionPolicy;
-use crate::agent::tools::{ManageRagTool, RagSourceRegistry};
+use crate::agent::tools::{ManageRagTool, RagSourceRegistry, SearchRagTool};
 use crate::domain::rag::{ChunkingOptions, RagSource, RagSourceType};
 use crate::rag::{ErasedEmbedder, TurboVectorIndex};
 use crate::security::SharedSandbox;
@@ -341,5 +341,14 @@ impl RagIndexer {
     /// Create a [`ManageRagTool`] that delegates to this indexer.
     pub fn tool(&self, policy: PermissionPolicy) -> ManageRagTool {
         ManageRagTool::new(self.clone(), policy)
+    }
+
+    /// Create a [`SearchRagTool`] that queries this indexer's vector index.
+    ///
+    /// The tool shares the pipeline's underlying store and index, so chunks
+    /// added or removed through this indexer are visible to searches
+    /// immediately.
+    pub fn search_tool(&self) -> SearchRagTool {
+        SearchRagTool::new(self.pipeline.build(Arc::clone(&self.embedder)))
     }
 }

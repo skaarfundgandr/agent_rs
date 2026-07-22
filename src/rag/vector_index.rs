@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 /// Bridge between [`TurboIndex`] (vector search) and [`DocumentStore`]
 /// (chunk metadata), exposed via rig's [`VectorStoreIndex`] trait so it
 /// can be wired into `Agent::dynamic_context`.
+#[derive(Clone)]
 pub struct TurboVectorIndex {
     turbo: Arc<RwLock<TurboIndex>>,
     store: Arc<DocumentStore>,

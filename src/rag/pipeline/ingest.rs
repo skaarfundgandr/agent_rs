@@ -130,7 +130,7 @@ impl RagPipeline {
 
     /// Remove every chunk whose `source` matches the given string. The
     /// `source` is the canonical path string of the indexed file as written
-    /// by [`Self::add_single_file`]; the loaders' bare-filename metadata is
+    /// by `add_single_file`; the loaders' bare-filename metadata is
     /// no longer used as the chunk key.
     ///
     /// Returns the number of chunks removed.
