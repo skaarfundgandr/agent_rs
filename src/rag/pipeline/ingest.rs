@@ -42,12 +42,10 @@ impl RagPipeline {
     }
 
     async fn add_single_file(&self, path: &Path, embedder: &dyn ErasedEmbedder) -> Result<usize> {
-        let document = if path
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| e.eq_ignore_ascii_case("pdf"))
-            .unwrap_or(false)
-        {
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let document = if let Some(loader) = self.loaders.get(&ext.to_ascii_lowercase()) {
+            loader.load(path).await?
+        } else if ext.eq_ignore_ascii_case("pdf") {
             PdfLoader::new().load(path).await?
         } else {
             TextLoader::new().load(path).await?

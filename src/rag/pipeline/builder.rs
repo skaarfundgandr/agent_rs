@@ -6,12 +6,13 @@ use crate::agent::embeddings::EmbeddingService;
 use crate::agent::permission::PermissionPolicy;
 use crate::agent::tools::{ManageRagTool, RagSourceRegistry, SearchRagTool};
 use crate::domain::rag::{ChunkingOptions, RagSource, RagSourceType};
+use crate::rag::loader::DocumentLoader;
 use crate::rag::{ErasedEmbedder, TurboVectorIndex};
 use crate::security::SharedSandbox;
 use anyhow::{Result, anyhow};
 use rig_core::embeddings::EmbeddingModel;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -28,6 +29,7 @@ pub struct RagPipelineBuilder {
     chunking: ChunkingOptions,
     bit_width: usize,
     sandbox: Option<Arc<SharedSandbox>>,
+    loaders: HashMap<String, Arc<dyn DocumentLoader>>,
 }
 
 impl RagPipelineBuilder {
@@ -41,6 +43,7 @@ impl RagPipelineBuilder {
             chunking: ChunkingOptions::default(),
             bit_width: 4,
             sandbox: None,
+            loaders: HashMap::new(),
         }
     }
 
@@ -114,6 +117,14 @@ impl RagPipelineBuilder {
         self
     }
 
+    /// Register a custom loader for a file extension (without dot,
+    /// e.g. `"pdf"`, `"docx"`). Overrides the built-in loader for
+    /// that extension.
+    pub fn loader(mut self, ext: &str, loader: Arc<dyn DocumentLoader>) -> Self {
+        self.loaders.insert(ext.to_ascii_lowercase(), loader);
+        self
+    }
+
     /// Consume the builder and produce a [`BuiltRag`].
     ///
     /// # Errors
@@ -139,6 +150,7 @@ impl RagPipelineBuilder {
         let mut pipeline =
             RagPipeline::open_or_create(&db, &idx, dim, self.bit_width, Some(exts.clone())).await?;
         pipeline.chunking = self.chunking;
+        pipeline.loaders = self.loaders;
 
         let vector_index = pipeline.build(Arc::clone(&embedder));
 

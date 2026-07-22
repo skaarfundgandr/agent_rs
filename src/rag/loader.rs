@@ -12,7 +12,7 @@ pub const DEFAULT_EXTENSIONS: &[&str] = &["txt", "md", "pdf"];
 
 /// Trait for loading documents from the file system.
 #[async_trait::async_trait]
-pub trait DocumentLoader {
+pub trait DocumentLoader: Send + Sync {
     /// Loads a file and returns a `Document`.
     async fn load(&self, path: &Path) -> Result<Document>;
 }

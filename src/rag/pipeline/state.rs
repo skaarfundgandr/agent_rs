@@ -7,8 +7,9 @@
 
 use super::builder::RagPipelineBuilder;
 use crate::domain::rag::ChunkingOptions;
+use crate::rag::loader::DocumentLoader;
 use crate::rag::{Chunk, DocumentStore, TurboIndex};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -42,6 +43,7 @@ pub struct RagPipeline {
     pub(crate) supported_extensions: Option<HashSet<String>>,
     /// Chunking configuration (chunk size + overlap).
     pub(crate) chunking: ChunkingOptions,
+    pub(crate) loaders: HashMap<String, Arc<dyn DocumentLoader>>,
 }
 
 impl RagPipeline {
@@ -57,6 +59,7 @@ impl RagPipeline {
             pending: Vec::new(),
             supported_extensions,
             chunking: ChunkingOptions::default(),
+            loaders: HashMap::new(),
         }
     }
 
