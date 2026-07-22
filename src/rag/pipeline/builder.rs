@@ -250,11 +250,9 @@ impl RagIndexer {
         }
 
         let removed = if canonical.is_file() {
-            let source_name = canonical
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or_default();
-            self.pipeline.remove_source(source_name).await?
+            self.pipeline
+                .remove_source(&canonical.display().to_string())
+                .await?
         } else if canonical.is_dir() {
             let extensions = self.pipeline.effective_extensions();
             let files = tokio::task::spawn_blocking({
@@ -266,11 +264,11 @@ impl RagIndexer {
 
             let mut total = 0usize;
             for file in files {
-                let source_name = file
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or_default();
-                total += self.pipeline.remove_source(source_name).await?;
+                let file_canonical = file.canonicalize().unwrap_or_else(|_| file.clone());
+                total += self
+                    .pipeline
+                    .remove_source(&file_canonical.display().to_string())
+                    .await?;
             }
             total
         } else {

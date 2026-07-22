@@ -100,7 +100,7 @@ async fn pipeline_add_source_and_search() {
     let hits = rag.vector_index.top_n::<String>(req).await.unwrap();
     assert!(!hits.is_empty());
     let (_score, _id, doc) = &hits[0];
-    assert!(doc.contains("[source: doc.txt"));
+    assert!(doc.contains(&format!("[source: {}", file.display())));
 }
 
 #[tokio::test]
@@ -121,7 +121,7 @@ async fn pipeline_remove_source_clears_store_and_index() {
     let removed = rag
         .indexer
         .pipeline()
-        .remove_source("removable.txt")
+        .remove_source(&file.display().to_string())
         .await
         .unwrap();
     assert!(removed > 0);

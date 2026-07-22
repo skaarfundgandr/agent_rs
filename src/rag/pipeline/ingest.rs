@@ -53,11 +53,8 @@ impl RagPipeline {
             TextLoader::new().load(path).await?
         };
 
-        let source = document
-            .metadata
-            .get("source")
-            .cloned()
-            .unwrap_or_else(|| path.display().to_string());
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let source = canonical.display().to_string();
         let file_type = document
             .metadata
             .get("file_type")
@@ -132,9 +129,9 @@ impl RagPipeline {
     }
 
     /// Remove every chunk whose `source` matches the given string. The
-    /// `source` is typically the file name component (as stored by the
-    /// loaders), not the full canonical path — see [`PdfLoader::load`] /
-    /// [`TextLoader::load`] for what gets stored.
+    /// `source` is the canonical path string of the indexed file as written
+    /// by [`Self::add_single_file`]; the loaders' bare-filename metadata is
+    /// no longer used as the chunk key.
     ///
     /// Returns the number of chunks removed.
     pub async fn remove_source(&self, source: &str) -> Result<usize> {
