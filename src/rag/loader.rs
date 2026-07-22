@@ -35,7 +35,10 @@ impl PdfLoader {
 #[async_trait::async_trait]
 impl DocumentLoader for PdfLoader {
     async fn load(&self, path: &Path) -> Result<Document> {
-        let text = extract_pdf_text(path)?;
+        let path_owned = path.to_path_buf();
+        let text = tokio::task::spawn_blocking(move || extract_pdf_text(&path_owned))
+            .await
+            .map_err(|e| anyhow::anyhow!("spawn_blocking failed: {e}"))??;
         let source_name = path
             .file_name()
             .and_then(|name| name.to_str())
