@@ -149,7 +149,7 @@ By default the `rag` feature builds with CPU-only ONNX Runtime. GPU acceleration
 | `rag-cuda` | NVIDIA GPUs (CUDA) |
 | `rag-directml` | Windows GPUs (DirectML) |
 | `rag-rocm` | AMD GPUs (ROCm) |
-| `rag-load-dynamic` | System-provided ORT dylib (set `ORT_DYLIB_PATH`) |
+| `rag-load-dynamic` | Bundled ORT dylib (auto-resolved) or system-provided (`ORT_DYLIB_PATH`) |
 
 ```rust,no_run
 use agent_rs::agent::embeddings::ort::execution_providers::{
@@ -167,7 +167,7 @@ let embedder = EmbeddingService::from_fastembed_with_providers(
 )?;
 ```
 
-The default `rag` build is CPU-only and behavior-identical to v0.9.x.
+The default `rag` build is CPU-only and behavior-identical to v0.9.x. With `rag-load-dynamic`, the builder auto-registers GPU execution providers (CUDA + ROCm on Linux/macOS, DirectML on Windows) and loads the bundled ORT dylib resolved at build time, falling back to the system linker if none is found.
 
 ---
 

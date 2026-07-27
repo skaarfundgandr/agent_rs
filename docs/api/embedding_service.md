@@ -56,7 +56,7 @@ let embedder = EmbeddingService::builder()
 - **`.execution_providers(providers: Vec<ExecutionProviderDispatch>) -> Self`**
   Sets an explicit, priority-ordered execution provider list for GPU acceleration, overriding GPU auto-detect. Callers should append `CPUExecutionProvider::default().build()` as the final entry for runtime fallback.
 - **`.build() -> Result<EmbeddingService<FastembedEmbeddingModel>>`**
-  Constructs the service. When no `.execution_providers()` is set, auto-adds the GPU providers enabled at compile time (`rag-cuda` → CUDA, `rag-directml` → DirectML, `rag-rocm` → ROCm) followed by a CPU fallback.
+  Constructs the service. When no `.execution_providers()` is set, auto-adds the GPU providers enabled at compile time (`rag-cuda` → CUDA, `rag-directml` → DirectML, `rag-rocm` → ROCm) followed by a CPU fallback. Under `rag-load-dynamic`, all EP types are available at compile time, so the builder auto-registers CUDA + ROCm (Linux/macOS) or DirectML (Windows); it also loads the bundled ORT dylib (resolved at build time) if found, falling back to the system linker otherwise.
 
 ### Re-exports *(requires `rag` feature)*
 
