@@ -506,7 +506,7 @@ impl EmbeddingServiceBuilder {
     /// feature-gated GPU defaults; the CPU provider is always appended as the
     /// final fallback during [`build`](Self::build). Provider types are
     /// available at the re-exported ort path
-    /// `agent_rs::agent::embeddings::ort::execution_providers::*`.
+    /// `agent_rs::agent::embeddings::ort::ep::*`.
     ///
     /// # Arguments
     ///
@@ -552,30 +552,30 @@ impl EmbeddingServiceBuilder {
         if providers.is_empty() {
             #[cfg(feature = "rag-cuda")]
             {
-                providers.push(ort::execution_providers::CUDAExecutionProvider::default().build());
+                providers.push(ort::ep::CUDAExecutionProvider::default().build());
             }
             #[cfg(feature = "rag-directml")]
             {
                 providers
-                    .push(ort::execution_providers::DirectMLExecutionProvider::default().build());
+                    .push(ort::ep::DirectMLExecutionProvider::default().build());
             }
             #[cfg(feature = "rag-rocm")]
             {
-                providers.push(ort::execution_providers::ROCmExecutionProvider::default().build());
+                providers.push(ort::ep::ROCmExecutionProvider::default().build());
             }
             #[cfg(all(feature = "rag-load-dynamic", not(target_os = "windows")))]
             {
-                providers.push(ort::execution_providers::CUDAExecutionProvider::default().build());
-                providers.push(ort::execution_providers::ROCmExecutionProvider::default().build());
+                providers.push(ort::ep::CUDAExecutionProvider::default().build());
+                providers.push(ort::ep::ROCmExecutionProvider::default().build());
             }
             #[cfg(all(feature = "rag-load-dynamic", target_os = "windows"))]
             {
                 providers
-                    .push(ort::execution_providers::DirectMLExecutionProvider::default().build());
+                    .push(ort::ep::DirectMLExecutionProvider::default().build());
             }
         }
 
-        providers.push(ort::execution_providers::CPUExecutionProvider::default().build());
+        providers.push(ort::ep::CPUExecutionProvider::default().build());
 
         let mut opts = fastembed::TextInitOptions::new(model.clone())
             .with_show_download_progress(self.show_progress)

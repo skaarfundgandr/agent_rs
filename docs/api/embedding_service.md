@@ -65,7 +65,7 @@ When the `rag` feature is enabled, `agent_rs::agent::embeddings` re-exports:
 - **`FastembedModel`** — alias for `fastembed::EmbeddingModel` (the enum of supported embedding model variants). Parse from a variant-name string: `"BGESmallENV15".parse::<FastembedModel>()?`.
 - **`FastembedEmbeddingModel`** — the internal `EmbeddingModel` wrapper around a fastembed `TextEmbedding` instance. Its `EmbeddingModel::make()` factory is **unsupported** and returns an error; construct via `EmbeddingService::builder()`.
 - **`EmbeddingServiceBuilder`** — the builder returned by `EmbeddingService::builder()`.
-- **`ort`** — the `ort` crate re-exported for constructing `ExecutionProviderDispatch` values. EPs live at `agent_rs::agent::embeddings::ort::execution_providers::*`.
+- **`ort`** — the `ort` crate re-exported for constructing `ExecutionProviderDispatch` values. EPs live at `agent_rs::agent::embeddings::ort::ep::*`.
 
 ## Free Functions
 

@@ -152,7 +152,7 @@ By default the `rag` feature builds with CPU-only ONNX Runtime. GPU acceleration
 | `rag-load-dynamic` | Bundled ORT dylib (auto-resolved) or system-provided (`ORT_DYLIB_PATH`) |
 
 ```rust,no_run
-use agent_rs::agent::embeddings::ort::execution_providers::{
+use agent_rs::agent::embeddings::ort::ep::{
     CUDAExecutionProvider,
     CPUExecutionProvider,
 };

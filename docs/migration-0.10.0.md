@@ -84,7 +84,7 @@ The provider list is priority-ordered. **Callers must append `CPUExecutionProvid
 EP types are available at the re-exported ort path:
 
 ```rust
-use agent_rs::agent::embeddings::ort::execution_providers::{
+use agent_rs::agent::embeddings::ort::ep::{
     CUDAExecutionProvider,
     CPUExecutionProvider,
 };
