@@ -30,11 +30,11 @@ let embedder = EmbeddingService::from_fastembed_with_providers_and_cache_dir(
 **After (v0.12.0):**
 ```rust
 let embedder = EmbeddingService::builder()
-    .model("BGESmallENV15".parse()?)
+    .model(FastembedModel::BGESmallENV15)
     .build()?;
 
 let embedder = EmbeddingService::builder()
-    .model("BGESmallENV15".parse()?)
+    .model(FastembedModel::BGESmallENV15)
     .cache_dir("./models")
     .execution_providers(vec![
         CUDAExecutionProvider::default().build(),
@@ -58,7 +58,7 @@ The removed constructors hardcoded the model-download progress bar to `true`. Th
 
 ```rust
 let embedder = EmbeddingService::builder()
-    .model("BGESmallENV15".parse()?)
+    .model(FastembedModel::BGESmallENV15)
     .show_progress(true)
     .build()?;
 ```

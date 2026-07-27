@@ -35,10 +35,10 @@ Generic over `M: EmbeddingModel`.
 Builds an `EmbeddingService<FastembedEmbeddingModel>` backed by a local `fastembed` model. Downloads the model from Hugging Face on first build (requires network or a pre-populated cache via `FASTEMBED_CACHE_DIR`).
 
 ```rust
-use agent_rs::agent::embeddings::EmbeddingService;
+use agent_rs::agent::embeddings::{EmbeddingService, FastembedModel};
 
 let embedder = EmbeddingService::builder()
-    .model("BGESmallENV15".parse()?)
+    .model(FastembedModel::BGESmallENV15)
     .cache_dir("./models")
     .show_progress(true)
     .build()?;

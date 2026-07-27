@@ -359,10 +359,10 @@ impl EmbeddingService<FastembedEmbeddingModel> {
     /// # Examples
     ///
     /// ```no_run
-    /// use agent_rs::agent::embeddings::EmbeddingService;
+    /// use agent_rs::agent::embeddings::{EmbeddingService, FastembedModel};
     ///
     /// let service = EmbeddingService::builder()
-    ///     .model("BGESmallENV15".parse().map_err(anyhow::Error::msg)?)
+    ///     .model(FastembedModel::BGESmallENV15)
     ///     .show_progress(true)
     ///     .build()?;
     /// # anyhow::Ok(())
@@ -392,10 +392,10 @@ impl EmbeddingService<FastembedEmbeddingModel> {
 /// # Examples
 ///
 /// ```no_run
-/// use agent_rs::agent::embeddings::EmbeddingService;
+/// use agent_rs::agent::embeddings::{EmbeddingService, FastembedModel};
 ///
 /// let service = EmbeddingService::builder()
-///     .model("BGESmallENV15".parse().map_err(anyhow::Error::msg)?)
+///     .model(FastembedModel::BGESmallENV15)
 ///     .show_progress(true)
 ///     .build()?;
 /// # anyhow::Ok(())

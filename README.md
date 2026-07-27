@@ -117,9 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = openai::CompletionsClient::from_env();
 
     // Load local fastembed embedding model
-    let embedder = EmbeddingService::builder()
-        .model("BGESmallENV15".parse()?)
-        .build()?;
+    let embedder = EmbeddingService::from_fastembed("BGESmallENV15".parse()?)?;
 
     // Build a persistent RAG pipeline with the builder API
     let rag = RagPipeline::builder()
@@ -153,8 +151,6 @@ By default the `rag` feature builds with CPU-only ONNX Runtime. GPU acceleration
 | `rag-rocm` | AMD GPUs (ROCm) |
 | `rag-load-dynamic` | System-provided ORT dylib (set `ORT_DYLIB_PATH`) |
 
-With one of these features enabled, `EmbeddingService::builder().build()` auto-detects the matching GPU execution provider at compile time and appends a CPU fallback — no extra code needed. To control providers explicitly, pass them via `.execution_providers()`:
-
 ```rust,no_run
 use agent_rs::agent::embeddings::ort::execution_providers::{
     CUDAExecutionProvider,
@@ -162,13 +158,13 @@ use agent_rs::agent::embeddings::ort::execution_providers::{
 };
 use agent_rs::agent::embeddings::EmbeddingService;
 
-let embedder = EmbeddingService::builder()
-    .model("BGESmallENV15".parse()?)
-    .execution_providers(vec![
+let embedder = EmbeddingService::from_fastembed_with_providers(
+    "BGESmallENV15".parse()?,
+    vec![
         CUDAExecutionProvider::default().build(),
-        CPUExecutionProvider::default().build(),
-    ])
-    .build()?;
+        CPUExecutionProvider::default().build(), // fallback
+    ],
+)?;
 ```
 
 The default `rag` build is CPU-only and behavior-identical to v0.9.x.
