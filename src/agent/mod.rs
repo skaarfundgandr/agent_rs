@@ -16,7 +16,7 @@ pub use invalid_tool::{InvalidToolPolicy, InvalidToolRecoveryHook, invalid_tool_
 
 mod managed;
 #[cfg(feature = "rag")]
-pub use embeddings::EmbeddingService;
+pub use embeddings::{EmbeddingService, EmbeddingServiceBuilder};
 pub use managed::{BuiltManagedAgent, ManagedBuilder, ManagedExt, ManagedStream};
 pub use permission::{PermissionGate, PermissionPolicy};
 pub use react::{

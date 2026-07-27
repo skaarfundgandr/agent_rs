@@ -87,7 +87,10 @@ mod rag_main {
                 anyhow::anyhow!("Unknown FASTEMBED_MODEL '{fastembed_model_name}': {e}")
             })?;
         println!("Loading fastembed model '{fastembed_model_name}' (downloads on first run)...");
-        let embedding_service = EmbeddingService::from_fastembed(fastembed_variant)
+        let embedding_service = EmbeddingService::builder()
+            .model(fastembed_variant)
+            .show_progress(true)
+            .build()
             .map_err(|e| anyhow::anyhow!("failed to load fastembed model: {e}"))?;
         let embedding_dim = embedding_service.ndims();
         println!("Embedding model ready ({embedding_dim} dims).");

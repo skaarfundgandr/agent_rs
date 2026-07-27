@@ -175,7 +175,10 @@ mod researcher_main {
         let fastembed_variant = fastembed_model_name.parse().map_err(|e: String| {
             anyhow::anyhow!("Unknown FASTEMBED_MODEL '{fastembed_model_name}': {e}")
         })?;
-        let embedding_service = EmbeddingService::from_fastembed(fastembed_variant)?;
+        let embedding_service = EmbeddingService::builder()
+            .model(fastembed_variant)
+            .show_progress(true)
+            .build()?;
 
         let shared_sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single("./")?));
 
