@@ -48,6 +48,7 @@ tracing = "0.1.41"
 futures = "0.3.31"
 tempfile = "3.27.0"
 fastembed = { version = "5.17.3", optional = true, default-features = false, features = ["hf-hub-native-tls", "ort-download-binaries-native-tls"] }
+libloading = { version = "0.8", optional = true }
 ort = { version = "=2.0.0-rc.12", optional = true, default-features = false, features = ["ndarray", "std", "api-24"] }
 rig-sqlite = { version = "0.40.0", optional = true }
 tokio-rusqlite = { version = "0.6", optional = true }
@@ -71,7 +72,7 @@ rag = ["dep:fastembed", "dep:ort", "rig-sqlite", "tokio-rusqlite", "turbovec", "
 rag-cuda         = ["rag", "ort/cuda"]
 rag-directml     = ["rag", "ort/directml"]
 rag-rocm         = ["rag", "ort/rocm"]
-rag-load-dynamic = ["rag", "ort/load-dynamic"]
+rag-load-dynamic = ["rag", "ort/load-dynamic", "dep:libloading"]
 opentelemetry = [
     "dep:opentelemetry",
     "dep:opentelemetry_sdk",

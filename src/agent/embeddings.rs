@@ -243,6 +243,49 @@ where
 pub use fastembed::EmbeddingModel as FastembedModel;
 pub use ort;
 
+#[cfg(feature = "rag-load-dynamic")]
+fn try_load_bundled_ort() {
+    const BUNDLED: Option<&str> = option_env!("ORT_DYLIB_BUNDLED_PATH");
+
+    if std::env::var("ORT_DYLIB_PATH").is_ok() {
+        return;
+    }
+
+    let Some(path_str) = BUNDLED else { return };
+    let path = std::path::Path::new(path_str);
+    if !path.exists() {
+        return;
+    }
+
+    if load_and_set_api(path) {
+        tracing::debug!("Loaded bundled ORT dylib from {path_str}");
+    }
+}
+
+#[cfg(feature = "rag-load-dynamic")]
+fn load_and_set_api(path: &std::path::Path) -> bool {
+    unsafe {
+        let Ok(lib) = libloading::Library::new(path) else {
+            return false;
+        };
+        let Ok(sym) =
+            lib.get::<unsafe extern "C" fn() -> *const ort::sys::OrtApiBase>(b"OrtGetApiBase")
+        else {
+            return false;
+        };
+        let base = sym();
+        if base.is_null() {
+            return false;
+        }
+        let api = ((*base).GetApi)(ort::sys::ORT_API_VERSION);
+        if api.is_null() {
+            return false;
+        }
+        std::mem::forget(lib);
+        ort::set_api((*api).clone())
+    }
+}
+
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -385,7 +428,11 @@ impl EmbeddingService<FastembedEmbeddingModel> {
 /// appends any GPU provider enabled at compile time (`rag-cuda`,
 /// `rag-directml`, `rag-rocm`) followed by the always-available CPU provider,
 /// so GPU acceleration is opt-in via crate features while CPU remains the
-/// runtime fallback.
+/// runtime fallback. Under `rag-load-dynamic`, all EP types are available at
+/// compile time, so the builder registers CUDA and ROCm (Linux/macOS) or
+/// DirectML (Windows) automatically; it also loads the bundled ORT dylib
+/// (resolved at build time) if one is found, falling back to the system
+/// linker otherwise.
 ///
 /// This type is only available with the `rag` feature enabled.
 ///
@@ -480,7 +527,10 @@ impl EmbeddingServiceBuilder {
     ///
     /// When no execution providers were supplied, the GPU provider enabled at
     /// compile time (if any) is added first, and the CPU provider is always
-    /// appended last as a runtime fallback.
+    /// appended last as a runtime fallback. Under `rag-load-dynamic`, CUDA and
+    /// ROCm (Linux/macOS) or DirectML (Windows) providers are registered
+    /// automatically, and the bundled ORT dylib (resolved at build time) is
+    /// loaded if found before the model is initialized.
     ///
     /// # Returns
     ///
@@ -492,6 +542,9 @@ impl EmbeddingServiceBuilder {
     /// Returns an error if no model was set, or if loading or downloading the
     /// model fails.
     pub fn build(self) -> Result<EmbeddingService<FastembedEmbeddingModel>> {
+        #[cfg(feature = "rag-load-dynamic")]
+        try_load_bundled_ort();
+
         let model = self.model.context("model is required")?;
 
         let mut providers = self.providers.unwrap_or_default();
@@ -509,6 +562,16 @@ impl EmbeddingServiceBuilder {
             #[cfg(feature = "rag-rocm")]
             {
                 providers.push(ort::execution_providers::ROCmExecutionProvider::default().build());
+            }
+            #[cfg(all(feature = "rag-load-dynamic", not(target_os = "windows")))]
+            {
+                providers.push(ort::execution_providers::CUDAExecutionProvider::default().build());
+                providers.push(ort::execution_providers::ROCmExecutionProvider::default().build());
+            }
+            #[cfg(all(feature = "rag-load-dynamic", target_os = "windows"))]
+            {
+                providers
+                    .push(ort::execution_providers::DirectMLExecutionProvider::default().build());
             }
         }
 
