@@ -234,10 +234,10 @@ mod researcher_main {
                 5. Once indexed, answer the user's research question in detail based on the dynamic RAG context."
             )
             .dynamic_context(2, rag.vector_index)
-            .default_max_turns(3)
+            .default_max_turns(10)
             .build()
             .react()
-            .set_cycle_limit_reminder_msg(Some("You are aproaching the cycle limit. Finalize your answer now".to_string()))
+            .set_cycle_limit_reminder_msg(Some("<system-reminder>\nYou are approaching the cycle limit. Finalize your answer now\n</system-reminder>".to_string()))
             .max_cycles(4)
             .build();
 
