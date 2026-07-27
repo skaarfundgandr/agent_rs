@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 
-Rust AI agent framework (edition 2024, v0.10.0). Library crate with examples.
+Rust AI agent framework (edition 2024, v0.12.0). Library crate with examples.
 Library consumers import as `agent_rs`.
 
 Core deps: `rig-core` 0.40.0 (with `rmcp` feature), `rmcp` 1.7, `tokio` (full), `reqwest`, `pdf-extract`, `tracing` 0.1.
@@ -65,7 +65,7 @@ src/
 ├── agent/
 │   ├── agents.rs         # strip_reasoning_from_history
 │   ├── managed.rs        # ManagedExt, ManagedBuilder, BuiltManagedAgent, ManagedStream
-│   ├── embeddings.rs     # EmbeddingService<M> — generic over Rig EmbeddingModel
+│   ├── embeddings.rs     # EmbeddingService<M> — generic over Rig EmbeddingModel; EmbeddingServiceBuilder for fastembed
 │   ├── permission.rs     # PermissionPolicy enum + PermissionGate trait
 │   ├── dispatch/         # AgentDefinition trait + AgentDispatcher + ReAct/Managed adapters
 │   │   ├── adapters.rs       # ReAct and Managed adapter implementations
@@ -187,4 +187,5 @@ Tests in `tests/` (21+ files): `agents_tests.rs`, `document_store.rs`, `embeddin
 - `docs/api/` — API reference docs (split by section). See [API Reference Overview](docs/api/README.md)
 - `docs/migration-0.2.0.md` — migration guide (v0.1.0 → v0.2.0)
 - `docs/migration-0.10.0.md` — migration guide (v0.9.x → v0.10.0): fastembed 5.17.3 swap, opt-in GPU features, `FASTEMBED_MODEL` variant-name format
+- `docs/migration-0.12.0.md` — migration guide (v0.11.x → v0.12.0): `from_fastembed*` constructors removed, `EmbeddingService::builder()` is the sole API, GPU auto-detect from feature flags
 - `docs/diagrams/` — architecture diagrams (C4, class, sequence, state, module dependency)

@@ -27,21 +27,44 @@ Generic over `M: EmbeddingModel`.
   Extracts text fragments from a single document implementing Rig's `Embed` trait and embeds them.
 - **`async embed_documents<T: Embed, I>(&self, documents: I) -> Result<Vec<(T, OneOrMany<Embedding>)>>`**
   Batches and embeds multiple `Embed` documents, maintaining original ordering. Returns an error if any document produces no embeddable text.
-- **`from_fastembed(model: FastembedModel) -> Result<Self>`** *(requires `rag` feature)*
-  Convenience constructor for a local `fastembed` model. Downloads the model from Hugging Face on first call (requires network or a pre-populated cache via `FASTEMBED_CACHE_DIR`).
-- **`from_fastembed_with_cache_dir(model: FastembedModel, cache_dir: impl AsRef<Path>) -> Result<Self>`** *(requires `rag` feature)*
-  Convenience constructor with an explicit cache directory. Unlike the old implementation, this does **not** mutate `FASTEMBED_CACHE_DIR` process-wide; it sets the cache directory via `TextInitOptions::with_cache_dir`. The env var is still honored by fastembed as the default when not set.
-- **`from_fastembed_with_providers(model: FastembedModel, providers: Vec<ExecutionProviderDispatch>) -> Result<Self>`** *(requires `rag` feature)*
-  Convenience constructor with opt-in execution providers for GPU acceleration. The provider list is priority-ordered; callers should append `CPUExecutionProvider::default().build()` as the final entry for runtime fallback.
-- **`from_fastembed_with_providers_and_cache_dir(model: FastembedModel, providers: Vec<ExecutionProviderDispatch>, cache_dir: impl AsRef<Path>) -> Result<Self>`** *(requires `rag` feature)*
-  Combines providers and cache directory in one constructor.
+- **`builder() -> EmbeddingServiceBuilder`** *(requires `rag` feature)*
+  Entry point for constructing a local fastembed-backed service. See [`EmbeddingServiceBuilder`](#embeddingservicebuilder-requires-rag-feature) below.
+
+## `EmbeddingServiceBuilder` *(requires `rag` feature)*
+
+Builds an `EmbeddingService<FastembedEmbeddingModel>` backed by a local `fastembed` model. Downloads the model from Hugging Face on first build (requires network or a pre-populated cache via `FASTEMBED_CACHE_DIR`).
+
+```rust
+use agent_rs::agent::embeddings::EmbeddingService;
+
+let embedder = EmbeddingService::builder()
+    .model("BGESmallENV15".parse()?)
+    .cache_dir("./models")
+    .show_progress(true)
+    .build()?;
+```
+
+### Methods
+- **`EmbeddingService::builder() -> EmbeddingServiceBuilder`**
+  Creates a new builder with no model set.
+- **`.model(model: FastembedModel) -> Self`**
+  Sets the fastembed model variant. Required; `build()` errors without it.
+- **`.cache_dir(dir: impl AsRef<Path>) -> Self`**
+  Sets an explicit model cache directory via `TextInitOptions::with_cache_dir`. Does **not** mutate `FASTEMBED_CACHE_DIR` process-wide; fastembed still honors the env var as the default when no directory is set.
+- **`.show_progress(show: bool) -> Self`**
+  Toggles the model-download progress bar. Defaults to `false`.
+- **`.execution_providers(providers: Vec<ExecutionProviderDispatch>) -> Self`**
+  Sets an explicit, priority-ordered execution provider list for GPU acceleration, overriding GPU auto-detect. Callers should append `CPUExecutionProvider::default().build()` as the final entry for runtime fallback.
+- **`.build() -> Result<EmbeddingService<FastembedEmbeddingModel>>`**
+  Constructs the service. When no `.execution_providers()` is set, auto-adds the GPU providers enabled at compile time (`rag-cuda` → CUDA, `rag-directml` → DirectML, `rag-rocm` → ROCm) followed by a CPU fallback.
 
 ### Re-exports *(requires `rag` feature)*
 
 When the `rag` feature is enabled, `agent_rs::agent::embeddings` re-exports:
 
 - **`FastembedModel`** — alias for `fastembed::EmbeddingModel` (the enum of supported embedding model variants). Parse from a variant-name string: `"BGESmallENV15".parse::<FastembedModel>()?`.
-- **`FastembedEmbeddingModel`** — the internal `EmbeddingModel` wrapper around a fastembed `TextEmbedding` instance. Its `EmbeddingModel::make()` factory is **unsupported** and returns an error; construct via `EmbeddingService::from_fastembed*`.
+- **`FastembedEmbeddingModel`** — the internal `EmbeddingModel` wrapper around a fastembed `TextEmbedding` instance. Its `EmbeddingModel::make()` factory is **unsupported** and returns an error; construct via `EmbeddingService::builder()`.
+- **`EmbeddingServiceBuilder`** — the builder returned by `EmbeddingService::builder()`.
 - **`ort`** — the `ort` crate re-exported for constructing `ExecutionProviderDispatch` values. EPs live at `agent_rs::agent::embeddings::ort::execution_providers::*`.
 
 ## Free Functions

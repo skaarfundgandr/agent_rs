@@ -159,9 +159,9 @@ use agent_rs::rag::RagPipeline;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // 1. Initialize local fastembed embeddings
-    let service = EmbeddingService::from_fastembed(
-        agent_rs::agent::embeddings::FastembedModel::AllMiniLML6V2,
-    )?;
+    let service = EmbeddingService::builder()
+        .model(agent_rs::agent::embeddings::FastembedModel::AllMiniLML6V2)
+        .build()?;
 
     // 2. Build persistent RAG pipeline
     let rag = RagPipeline::builder()
