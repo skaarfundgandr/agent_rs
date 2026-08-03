@@ -4,6 +4,8 @@
 //! contains the loop's runtime behaviour. Types here carry no business logic
 //! and are fully serde-serialisable so they can be persisted or streamed.
 
+use rig_core::agent::{CompletionCall, PromptResponse};
+use rig_core::completion::Usage;
 use rig_core::message::Message;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -104,4 +106,66 @@ pub enum ReActStreamItem {
     },
     /// An error occurred during the ReAct loop.
     Error { error: String },
+}
+
+/// Opt-in details state marker for the built agent types.
+pub trait DetailsState {}
+
+/// Default details state: runs return the plain text/trace types.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Standard;
+impl DetailsState for Standard {}
+
+/// Opt-in details state: runs return telemetry-enriched types.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Extended;
+impl DetailsState for Extended {}
+
+/// ReAct run + telemetry. `trace` keeps the existing shape so serialized
+/// traces (LangSmith, persistence) are unchanged.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtendedReActTrace {
+    pub trace: ReActTrace,
+    /// Aggregate token usage across every completion request in the run.
+    /// Zero-valued `Usage` is rig's sentinel for "provider reported nothing".
+    pub usage: Usage,
+    /// Per-request usage, globally indexed across the run.
+    pub completion_calls: Vec<CompletionCall>,
+    /// Provider-native response payloads, one per successful completion
+    /// request, in order. `serde_json::Value` (not `M::Response`) because
+    /// rig's provider response structs derive `Serialize` but NOT `Clone`,
+    /// and `Value` keeps the type non-generic.
+    pub raw_responses: Vec<serde_json::Value>,
+}
+
+/// ReAct chat run + telemetry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtendedChatDetails {
+    pub output: String,
+    pub usage: Usage,
+    pub completion_calls: Vec<CompletionCall>,
+    pub raw_responses: Vec<serde_json::Value>,
+    /// Final working history after the run. The `&mut` history argument
+    /// keeps its existing mutation semantics.
+    pub history: Vec<Message>,
+}
+
+/// Managed agent prompt + telemetry. Reuses rig's `PromptResponse` (output,
+/// usage, completion_calls, messages, content) plus raw payloads.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManagedPromptDetails {
+    pub response: PromptResponse,
+    pub raw_responses: Vec<serde_json::Value>,
+}
+
+/// Managed agent chat run + telemetry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManagedChatDetails {
+    pub output: String,
+    pub usage: Usage,
+    pub completion_calls: Vec<CompletionCall>,
+    pub raw_responses: Vec<serde_json::Value>,
+    /// Final working history after the run. The `&mut` history argument
+    /// keeps its existing mutation semantics.
+    pub history: Vec<Message>,
 }
