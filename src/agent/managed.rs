@@ -2,15 +2,19 @@ use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use rig_core::agent::{Agent, MultiTurnStreamItem, StreamingError};
+use rig_core::agent::{Agent, MultiTurnStreamItem, PromptResponse, StreamingError};
 use rig_core::completion::{CompletionModel, Prompt, PromptError};
 use rig_core::message::Message;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::invalid_tool::{InvalidToolPolicy, InvalidToolRecoveryHook};
 use crate::agent::memory::ContextManager;
-use crate::agent::model::chat::{execute_chat, execute_stream_chat};
+use crate::agent::model::chat::{execute_chat, execute_chat_details, execute_stream_chat};
 use crate::agent::retry::is_retryable;
+use crate::agent::telemetry::TelemetryAccum;
+use crate::domain::agent::{
+    DetailsState, Extended, ManagedChatDetails, ManagedPromptDetails, Standard,
+};
 
 use super::react::{CompactionConfig, NoCompaction};
 
@@ -56,6 +60,36 @@ where
         *working = snapshot.clone();
         match execute_chat(agent, msg, working, max_invalid_tool_call_retries).await {
             Ok(s) => return Ok(s),
+            Err(e) if is_retryable(&e) && attempt < max_retries => {
+                tokio::time::sleep(std::time::Duration::from_millis(
+                    500 * 2u64.pow(attempt - 1),
+                ))
+                .await;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+async fn retry_chat_details<M>(
+    agent: &Agent<M>,
+    msg: &str,
+    working: &mut Vec<Message>,
+    max_retries: u32,
+    max_invalid_tool_call_retries: u32,
+    accum: &mut TelemetryAccum,
+) -> Result<PromptResponse, PromptError>
+where
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+{
+    let snapshot = working.clone();
+    let mut attempt = 0u32;
+    loop {
+        attempt += 1;
+        *working = snapshot.clone();
+        match execute_chat_details(agent, msg, working, max_invalid_tool_call_retries, accum).await
+        {
+            Ok(response) => return Ok(response),
             Err(e) if is_retryable(&e) && attempt < max_retries => {
                 tokio::time::sleep(std::time::Duration::from_millis(
                     500 * 2u64.pow(attempt - 1),
@@ -242,23 +276,32 @@ where
 // ── BuiltManagedAgent ────────────────────────────────────────────────────
 
 /// A fully configured managed agent, ready to run prompts and chats.
-pub struct BuiltManagedAgent<M, C = ()>
+///
+/// `S` selects the details state: [`Standard`] (default) returns plain text,
+/// [`Extended`] (via [`BuiltManagedAgent::extended_details`]) returns
+/// telemetry-enriched types.
+///
+/// [`Standard`]: crate::domain::agent::Standard
+/// [`Extended`]: crate::domain::agent::Extended
+pub struct BuiltManagedAgent<M, C = (), S = Standard>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    S: DetailsState,
 {
     agent: Agent<M>,
     max_retries: u32,
     invalid_tool_policy: InvalidToolPolicy,
     max_invalid_tool_call_retries: u32,
     context_manager: Option<Arc<dyn Any + Send + Sync>>,
-    _compaction: PhantomData<C>,
+    _compaction: PhantomData<(C, S)>,
 }
 
 // ── Shared methods (all CompStates) ──────────────────────────────────────
 
-impl<M, C> BuiltManagedAgent<M, C>
+impl<M, C, S> BuiltManagedAgent<M, C, S>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    S: DetailsState,
 {
     /// Return the configured `max_retries` limit.
     pub fn max_retries(&self) -> u32 {
@@ -273,6 +316,25 @@ where
     /// Return the configured max invalid tool call retries budget.
     pub fn max_invalid_tool_call_retries(&self) -> u32 {
         self.max_invalid_tool_call_retries
+    }
+}
+
+impl<M, C, S> BuiltManagedAgent<M, C, S>
+where
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    S: DetailsState,
+{
+    /// Opt into extended details for all runs. Mirrors
+    /// `rig_core::agent::PromptRequest::extended_details`. Idempotent on `Extended`.
+    pub fn extended_details(self) -> BuiltManagedAgent<M, C, Extended> {
+        BuiltManagedAgent {
+            agent: self.agent,
+            max_retries: self.max_retries,
+            invalid_tool_policy: self.invalid_tool_policy,
+            max_invalid_tool_call_retries: self.max_invalid_tool_call_retries,
+            context_manager: self.context_manager,
+            _compaction: PhantomData,
+        }
     }
 }
 
@@ -305,7 +367,7 @@ where
 
 // ── No-compaction methods ────────────────────────────────────────────────
 
-impl<M> BuiltManagedAgent<M, ()>
+impl<M> BuiltManagedAgent<M, (), Standard>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
 {
@@ -343,7 +405,72 @@ where
         }
         result
     }
+}
 
+impl<M> BuiltManagedAgent<M, (), Extended>
+where
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+{
+    /// Prompt with extended telemetry details.
+    pub async fn prompt(
+        &self,
+        msg: impl Into<String>,
+    ) -> Result<ManagedPromptDetails, PromptError> {
+        let msg = msg.into();
+        let mut accum = TelemetryAccum::new();
+        let mut working = Vec::new();
+        let response = retry_chat_details(
+            &self.agent,
+            &msg,
+            &mut working,
+            self.max_retries,
+            self.max_invalid_tool_call_retries,
+            &mut accum,
+        )
+        .await?;
+        let (_, _, raw_responses) = accum.finish();
+        Ok(ManagedPromptDetails {
+            response,
+            raw_responses,
+        })
+    }
+
+    /// Chat with extended telemetry details.
+    pub async fn chat(
+        &self,
+        msg: impl Into<String>,
+        history: &mut Vec<Message>,
+    ) -> Result<ManagedChatDetails, PromptError> {
+        let msg = msg.into();
+        let mut accum = TelemetryAccum::new();
+        let mut working = history.clone();
+        let response = retry_chat_details(
+            &self.agent,
+            &msg,
+            &mut working,
+            self.max_retries,
+            self.max_invalid_tool_call_retries,
+            &mut accum,
+        )
+        .await?;
+        history.push(Message::user(msg.as_str()));
+        history.push(Message::assistant(&response.output));
+        let (_, _, raw_responses) = accum.finish();
+        Ok(ManagedChatDetails {
+            output: response.output.clone(),
+            usage: response.usage,
+            completion_calls: response.completion_calls.clone(),
+            raw_responses,
+            history: working,
+        })
+    }
+}
+
+impl<M, S> BuiltManagedAgent<M, (), S>
+where
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    S: DetailsState,
+{
     pub async fn stream_prompt(
         &self,
         msg: impl Into<String>,
@@ -387,17 +514,24 @@ where
 
 // ── With-compaction methods ──────────────────────────────────────────────
 
-impl<M, C> BuiltManagedAgent<M, C>
+impl<M, C, S> BuiltManagedAgent<M, C, S>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
+    S: DetailsState,
 {
     fn context_manager(&self) -> Option<&ContextManager<C>> {
         self.context_manager
             .as_ref()
             .and_then(|arc| arc.downcast_ref::<ContextManager<C>>())
     }
+}
 
+impl<M, C> BuiltManagedAgent<M, C, Standard>
+where
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
+{
     pub async fn prompt_compact(&self, msg: impl Into<String>) -> Result<String, PromptError> {
         let msg = msg.into();
         let mut working = Vec::new();
@@ -439,7 +573,81 @@ where
         }
         result
     }
+}
 
+impl<M, C> BuiltManagedAgent<M, C, Extended>
+where
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
+{
+    /// Prompt with extended telemetry details.
+    pub async fn prompt_compact(
+        &self,
+        msg: impl Into<String>,
+    ) -> Result<ManagedPromptDetails, PromptError> {
+        let msg = msg.into();
+        let mut working = Vec::new();
+        if let Some(cm) = self.context_manager() {
+            cm.compact_history_if_needed(&mut working, &msg).await?;
+        }
+        let mut accum = TelemetryAccum::new();
+        let response = retry_chat_details(
+            &self.agent,
+            &msg,
+            &mut working,
+            self.max_retries,
+            self.max_invalid_tool_call_retries,
+            &mut accum,
+        )
+        .await?;
+        let (_, _, raw_responses) = accum.finish();
+        Ok(ManagedPromptDetails {
+            response,
+            raw_responses,
+        })
+    }
+
+    /// Chat with extended telemetry details.
+    pub async fn chat_compact(
+        &self,
+        msg: impl Into<String>,
+        history: &mut Vec<Message>,
+    ) -> Result<ManagedChatDetails, PromptError> {
+        let msg = msg.into();
+        let mut working = history.clone();
+        if let Some(cm) = self.context_manager() {
+            cm.compact_history_if_needed(&mut working, &msg).await?;
+        }
+        let mut accum = TelemetryAccum::new();
+        let response = retry_chat_details(
+            &self.agent,
+            &msg,
+            &mut working,
+            self.max_retries,
+            self.max_invalid_tool_call_retries,
+            &mut accum,
+        )
+        .await?;
+        *history = working.clone();
+        history.push(Message::user(msg.as_str()));
+        history.push(Message::assistant(&response.output));
+        let (_, _, raw_responses) = accum.finish();
+        Ok(ManagedChatDetails {
+            output: response.output.clone(),
+            usage: response.usage,
+            completion_calls: response.completion_calls.clone(),
+            raw_responses,
+            history: working,
+        })
+    }
+}
+
+impl<M, C, S> BuiltManagedAgent<M, C, S>
+where
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
+    S: DetailsState,
+{
     pub async fn stream_prompt_compact(
         &self,
         msg: impl Into<String>,
