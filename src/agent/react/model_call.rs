@@ -5,6 +5,7 @@ use rig_core::completion::{CompletionModel, Prompt, PromptError};
 use rig_core::message::Message;
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
+use crate::agent::telemetry::{CaptureTelemetryHook, TelemetryAccum};
 use crate::domain::agent::ReActTrace;
 use crate::domain::errors::ReActError;
 
@@ -45,6 +46,7 @@ pub(crate) async fn execute_model_call<M>(
     on_error: &Option<ErrorCb>,
     trace: &ReActTrace,
     system_suffix: Option<&str>,
+    mut details: Option<&mut TelemetryAccum>,
 ) -> ModelCallResult
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
@@ -68,9 +70,21 @@ where
         if max_invalid_tool_call_retries > 0 {
             req = req.max_invalid_tool_call_retries(max_invalid_tool_call_retries as usize);
         }
+        let raw_len_before = details.as_ref().map(|accum| accum.raw_len());
+        if let Some(accum) = details.as_deref_mut() {
+            req = req.add_hook(CaptureTelemetryHook::new(accum.raw_handle()));
+        }
         match req.await {
-            Ok(resp) => return ModelCallResult::Ok(resp),
+            Ok(resp) => {
+                if let Some(accum) = details.as_deref_mut() {
+                    accum.fold_response(&resp);
+                }
+                return ModelCallResult::Ok(resp);
+            }
             Err(e) => {
+                if let Some(accum) = details.as_deref_mut() {
+                    accum.truncate_raw(raw_len_before.unwrap_or_default());
+                }
                 let is_transient = crate::agent::retry::is_retryable(&e);
                 let is_turn_limit = matches!(&e, PromptError::MaxTurnsError { .. });
                 if is_transient && attempt < max_retries {

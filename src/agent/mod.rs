@@ -9,8 +9,13 @@ pub mod permission;
 pub mod react;
 pub(crate) mod retry;
 pub mod state;
+pub(crate) mod telemetry;
 pub mod tools;
 
+pub use crate::domain::agent::{
+    DetailsState, Extended, ExtendedChatDetails, ExtendedReActTrace, ManagedChatDetails,
+    ManagedPromptDetails, Standard,
+};
 pub use agents::strip_reasoning_from_history;
 pub use invalid_tool::{InvalidToolPolicy, InvalidToolRecoveryHook, invalid_tool_feedback};
 

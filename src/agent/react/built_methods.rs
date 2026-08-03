@@ -10,7 +10,8 @@ use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 use crate::agent::invalid_tool::InvalidToolPolicy;
 use crate::agent::memory::ContextManager;
 use crate::agent::react::Compact;
-use crate::domain::agent::{Action, Observation, ReActStep, ReActTrace};
+use crate::agent::telemetry::TelemetryAccum;
+use crate::domain::agent::{Action, DetailsState, Observation, ReActStep, ReActTrace};
 use crate::domain::errors::ReActError;
 
 use super::built::{BuiltReAct, run_loop};
@@ -37,9 +38,10 @@ where
     }
 }
 
-impl<M, C> BuiltReAct<M, C>
+impl<M, C, S> BuiltReAct<M, C, S>
 where
     M: rig_core::completion::CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    S: DetailsState,
 {
     pub fn max_cycles(&self) -> usize {
         self.max_cycles
@@ -144,11 +146,16 @@ pub fn emit_internal_tool_callbacks(
     }
 }
 
-impl<M, C> BuiltReAct<M, C>
+impl<M, C, S> BuiltReAct<M, C, S>
 where
     M: rig_core::completion::CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    S: DetailsState,
 {
-    pub(crate) async fn run_prompt_impl(&self, msg: String) -> Result<ReActTrace, ReActError> {
+    pub(crate) async fn run_prompt_impl(
+        &self,
+        msg: String,
+        details: Option<&mut TelemetryAccum>,
+    ) -> Result<ReActTrace, ReActError> {
         let (trace, _) = run_loop(
             &self.agent,
             &msg,
@@ -166,6 +173,7 @@ where
             &self.on_error,
             self.context_manager.as_deref(),
             &self.cycle_limit_reminder_msg,
+            details,
         )
         .await?;
         Ok(trace)
@@ -174,8 +182,9 @@ where
     pub(crate) async fn run_chat_impl(
         &self,
         msg: String,
-        history: &mut Vec<Message>,
-    ) -> Result<String, ReActError> {
+        history: &[Message],
+        details: Option<&mut TelemetryAccum>,
+    ) -> Result<(String, Vec<Message>), ReActError> {
         let (trace, working) = run_loop(
             &self.agent,
             &msg,
@@ -193,18 +202,22 @@ where
             &self.on_error,
             self.context_manager.as_deref(),
             &self.cycle_limit_reminder_msg,
+            details,
         )
         .await?;
-        *history = working;
-        Ok(trace.final_answer.map(|fa| fa.text).unwrap_or_default())
+        Ok((
+            trace.final_answer.map(|fa| fa.text).unwrap_or_default(),
+            working,
+        ))
     }
 }
 
-impl<M, C> BuiltReAct<M, C>
+impl<M, C, S> BuiltReAct<M, C, S>
 where
     M: rig_core::completion::CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     C: Send + Sync + 'static,
+    S: DetailsState,
 {
     pub(crate) fn make_stream_shared(&self) -> Arc<super::streaming::StreamShared<M, C>> {
         Arc::new(super::streaming::StreamShared {

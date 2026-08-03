@@ -7,7 +7,8 @@ use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::invalid_tool::InvalidToolPolicy;
 use crate::agent::react::Compact;
-use crate::domain::agent::ReActTrace;
+use crate::agent::telemetry::TelemetryAccum;
+use crate::domain::agent::{DetailsState, Extended, ReActTrace, Standard};
 use crate::domain::errors::ReActError;
 
 use super::callbacks::{ErrorCb, FinalCb, ThoughtCb};
@@ -32,9 +33,17 @@ fn emit_no_tool_calls_error(
 }
 
 /// A fully configured ReAct agent, ready to run prompts and chats.
-pub struct BuiltReAct<M, C = ()>
+///
+/// `S` selects the details state: [`Standard`] (default) returns the plain
+/// trace/text types, [`Extended`] (via [`BuiltReAct::extended_details`])
+/// returns telemetry-enriched types.
+///
+/// [`Standard`]: crate::domain::agent::Standard
+/// [`Extended`]: crate::domain::agent::Extended
+pub struct BuiltReAct<M, C = (), S = Standard>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    S: DetailsState,
 {
     pub(crate) agent: Agent<M>,
     pub(crate) max_cycles: usize,
@@ -51,7 +60,36 @@ where
     pub(crate) context_manager: Option<Arc<dyn Compact + Send + Sync>>,
     pub(crate) tool_timeout_secs: u64,
     pub(crate) cycle_limit_reminder_msg: Option<String>,
-    pub(crate) _compaction: std::marker::PhantomData<C>,
+    pub(crate) _compaction: std::marker::PhantomData<(C, S)>,
+}
+
+impl<M, C, S> BuiltReAct<M, C, S>
+where
+    M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
+    S: DetailsState,
+{
+    /// Opt into extended details for all runs. Mirrors
+    /// `rig_core::agent::PromptRequest::extended_details`. Idempotent on `Extended`.
+    pub fn extended_details(self) -> BuiltReAct<M, C, Extended> {
+        BuiltReAct {
+            agent: self.agent,
+            max_cycles: self.max_cycles,
+            max_retries: self.max_retries,
+            invalid_tool_policy: self.invalid_tool_policy,
+            max_invalid_tool_call_retries: self.max_invalid_tool_call_retries,
+            react_preamble: self.react_preamble,
+            span_emitter: self.span_emitter,
+            on_thought: self.on_thought,
+            on_action: self.on_action,
+            on_observation: self.on_observation,
+            on_final: self.on_final,
+            on_error: self.on_error,
+            context_manager: self.context_manager,
+            tool_timeout_secs: self.tool_timeout_secs,
+            cycle_limit_reminder_msg: self.cycle_limit_reminder_msg,
+            _compaction: std::marker::PhantomData,
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -72,6 +110,7 @@ pub(crate) async fn run_loop<M>(
     on_error: &Option<ErrorCb>,
     context_manager: Option<&(dyn Compact + Send + Sync)>,
     cycle_limit_reminder_msg: &Option<String>,
+    mut details: Option<&mut TelemetryAccum>,
 ) -> Result<(ReActTrace, Vec<Message>), ReActError>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
@@ -119,6 +158,7 @@ where
             on_error,
             &trace,
             system_suffix,
+            details.as_deref_mut(),
         )
         .await
         {
