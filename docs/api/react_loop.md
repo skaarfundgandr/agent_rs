@@ -31,12 +31,13 @@ use agent_rs::agent::{ReActExt, ReActBuilder, BuiltReAct, ReActSpanEmitter, REAC
 ```
 
 - **`ReActExt::react(agent)`** — extension trait method on
-  `rig::agent::Agent<M, P>`. Returns a `ReActBuilder`.
+  `rig::agent::Agent<M>`. Returns a `ReActBuilder`.
 - **Builder methods** (all return `Self`, preserving typestate):
   - `max_cycles(usize)` — guard rail; default 20.
   - `max_retries(u32)` — retries for transient completion errors (`HttpError`,
-    `ProviderError`) and `MaxTurnsError` within a single cycle; default 3. Uses
-    exponential backoff (500ms × 2^attempt).
+    `ProviderError`) within a single cycle; default 3. Uses exponential
+    backoff (500ms × 2^attempt). `MaxTurnsError` is **not** retried — it
+    triggers turn-limit history recovery (see Per-Cycle Mechanics).
   - `react_preamble(Option<String>)` — preamble prepended to the prompt; default `None` (uses `REACT_PREAMBLE` at runtime).
   - `with_span_emitter(Arc<dyn ReActSpanEmitter>)` — for OTel integration.
   - `on_thought(impl Fn(&Thought) + Send + Sync + 'static)`
@@ -46,19 +47,21 @@ use agent_rs::agent::{ReActExt, ReActBuilder, BuiltReAct, ReActSpanEmitter, REAC
   - `on_error(impl Fn(&ReActError) + Send + Sync + 'static)`
   - `with_compaction()` — enables automatic context compaction (typestate transition).
   - `threshold(usize)`, `compaction_model(C)`, `compaction_prompt(fn)`, `tokenizer(fn)` — compaction config.
-  - `build()` — returns `BuiltReAct<M, P, C>`.
+  - `build()` — returns `BuiltReAct<M, C>` (details state `S = Standard`).
 - **`BuiltReAct`** methods:
   - `prompt(msg)` — stateless; returns `Result<ReActTrace, ReActError>`. No history interaction.
   - `chat(msg, &mut history)` — caller-owned history; on success writes the full working trace into `*history`. Returns `Result<String, ReActError>`.
   - `stream_prompt(msg)` / `stream_chat(msg, &mut history)` — streaming variants returning `ReActStream`. On `Completed`, `stream_chat` writes `*history = final_history`.
   - `max_cycles()` — accessor for the configured limit.
   - `max_retries()` — accessor for the configured retry limit.
-- **`ReActSpanEmitter`** — trait with no-op defaults for `emit_cycle_start`,
-  `emit_cycle_end`, `emit_action`, `emit_observation`. The `opentelemetry` feature
+- **`ReActSpanEmitter`** — trait with no-op defaults for all six events:
+  `emit_thought`, `emit_cycle_start`, `emit_cycle_end`, `emit_action`,
+  `emit_observation`, `emit_error`. The `opentelemetry` feature
   provides `LangSmithReActEmitter` as a concrete impl.
-- **`ReActStream<'h, M, P, C>`** — implements `Stream<Item = ReActStreamItem>` for streaming ReAct loops. Holds `history_out: Option<&'h mut Vec<Message>>` for write-back on `Completed`.
+- **`ReActStream<'h, M, C = ()>`** — implements `Stream<Item = ReActStreamItem>` for streaming ReAct loops. Holds `history_out: Option<&'h mut Vec<Message>>` for write-back on `Completed`.
 - **`ReActStreamItem`** — enum of streaming events: `CycleStart`, `ThoughtDelta`, `Action`,
-  `Observation`, `FinalAnswerDelta`, `Completed { trace, final_history }`, `Error`.
+  `ActionArgsDelta { tool_name, delta, cycle }`, `Observation`, `FinalAnswerDelta`,
+  `Completed { trace, final_history }`, `Error`.
 
 ## Data Types (in `domain::agent`)
 
@@ -68,6 +71,28 @@ use agent_rs::domain::agent::{Thought, Action, Observation, FinalAnswer, ReActSt
 
 All step types are `Serialize` + `Deserialize` (groundwork for M3 state persistence).
 `ReActTrace` is the serializable record of one `react()` invocation.
+
+### Invalid-Tool Recovery
+
+`InvalidToolPolicy { Skip, Fail, Retry }` (default `Skip`) governs what happens
+when the model calls an unknown or not-allowed tool name. `InvalidToolRecoveryHook`
+(an `AgentHook<M>` impl, re-exported at `agent_rs::agent::`) implements the
+policy with `Flow::skip` / `Flow::fail` / `Flow::retry`, feeding
+`invalid_tool_feedback(tool_name, allowed_tools)` back to the model. The hook is
+auto-composed into every `BuiltReAct` at build time. Builder methods:
+`invalid_tool_policy(...)`, `max_invalid_tool_call_retries(u32)`,
+`tool_timeout_secs(u64)`, `set_cycle_limit_reminder_msg(Option<String>)`.
+Accessors: `react_preamble()`, `invalid_tool_policy()`,
+`max_invalid_tool_call_retries()`.
+
+### Extended Details
+
+`BuiltReAct::extended_details()` opts into the `Extended` details state, so
+`prompt()` / `chat()` return `ExtendedReActTrace` / `ExtendedChatDetails` —
+telemetry-enriched types carrying aggregate token usage, per-request
+`completion_calls`, and provider-native `raw_responses` (plus final `history`
+for chat runs). `ReActTrace` inside keeps its existing shape, so serialized
+traces (LangSmith, persistence) are unchanged.
 
 ## Termination Conditions
 
@@ -112,6 +137,7 @@ println!("{answer}");
      a `UserContent::ToolResult` message into working history for the next cycle.
    - Post-tool-call `Text(t)` containing "Final Answer:" sentinel → emit `FinalAnswer`.
 
-The `ToolResult` correlation uses `tc.id` (provider-assigned) with a fallback of
-`react-cycle-{n}` if absent. `tc.call_id` is also populated with the synthetic id
-for providers that distinguish the two.
+The `ToolResult` correlation: `tc.id` (provider-assigned) is **always** used
+as the tool-result id. The synthetic `react-cycle-{n}` fallback applies to
+`tc.call_id` only: `tc.call_id.clone().unwrap_or_else(|| format!("react-cycle-{cycle}"))`
+— for providers that distinguish the two fields.

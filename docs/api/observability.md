@@ -16,7 +16,8 @@ use agent_rs::domain::observability::LangSmithConfig;
 ```
 
 - **`LangSmithConfig`** (in `domain::observability`) — pure data: `endpoint`,
-  `api_key`, `project`, `service_name`, `console`, `batch`. Constructors:
+  `api_key`, `project`, `service_name`, `console`, `batch`, `batch_delay_ms`.
+  Constructors:
   - `LangSmithConfig::default()` — LangSmith cloud defaults; `api_key` is empty.
   - `LangSmithConfig::from_env()` — read from conventional env vars.
   - `LangSmithConfig::from_env_or_default(key_env)` — like `from_env` but
@@ -29,10 +30,10 @@ use agent_rs::domain::observability::LangSmithConfig;
 - **`shutdown_tracing(handle) -> Result<()>`** — async; flush + shut down.
 - **`LangSmithReActEmitter`** — `ReActSpanEmitter` impl that records
   LangSmith run-typing on the current `tracing` span.
-- **`LangSmithAgentHook<M>`** — `rig_core::agent::PromptHook<M>` impl that
+- **`LangSmithAgentHook<M>`** — `rig_core::agent::AgentHook<M>` impl that
   tags rig's `chat` / `execute_tool` spans with `langsmith.span.kind` and
   fills `gen_ai.input.messages` / `gen_ai.output.messages` (which rig
-  declares but does not populate). rig 0.39 natively emits
+  declares but does not populate). rig 0.40 natively emits
   `gen_ai.operation.name`, `gen_ai.usage.*`, and `gen_ai.tool.name` — the
   hook no longer records these to avoid duplication.
 
@@ -45,8 +46,16 @@ use agent_rs::domain::observability::LangSmithConfig;
 | `LANGSMITH_PROJECT` | `project` | `"default"` |
 | `OTEL_SERVICE_NAME` | `service_name` | `"agent_rs"` |
 | `LANGSMITH_OTEL_CONSOLE` | `console` | `false` (reserved for future use) |
-| `LANGSMITH_OTEL_BATCH` | `batch` | `true` (currently always batch) |
+| `LANGSMITH_OTEL_BATCH` | `batch` | `true` (read into the config, but not consulted by `init_tracing`) |
+| `LANGSMITH_OTEL_BATCH_DELAY_MS` | `batch_delay_ms` | `1000` |
 | `RUST_LOG` | `EnvFilter` | `info` |
+
+The exporter selection in `init_tracing` keys off **`batch_delay_ms` only** —
+the `batch` field is not read:
+- `batch_delay_ms = 0` selects a **synchronous simple exporter** (no batching) —
+  useful for local development and debugging.
+- Any positive value uses a `BatchSpanProcessor` with that scheduled delay
+  (default `1000` ms, down from the OTel SDK default of 5000 ms).
 
 The endpoint is passed verbatim to the OTel SDK — no path is appended or
 transformed. Set the **full** URL (including the signal path) for the
@@ -61,7 +70,7 @@ via `WithHttpConfig::with_headers` — no env-var pollution or unsafe.
 
 Defined in `src/observability/conventions.rs`:
 
-- **GenAI (OTel, emitted natively by rig 0.39)**: `gen_ai.operation.name`,
+- **GenAI (OTel, emitted natively by rig 0.40)**: `gen_ai.operation.name`,
   `gen_ai.tool.name`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`.
   These are recorded by rig on its `invoke_agent`, `chat`, and `execute_tool`
   spans — the hook does NOT record them.
@@ -73,7 +82,7 @@ Defined in `src/observability/conventions.rs`:
   `input.value`, `output.value`.
 
 The ReAct bridge layers `chain` / `agent` / `tool` runs on top of rig's
-`chat` / `execute_tool` spans, and the `PromptHook` layer adds LangSmith
+`chat` / `execute_tool` spans, and the `AgentHook` layer adds LangSmith
 run-typing and input/output messages to the same spans.
 
 ## Usage Example

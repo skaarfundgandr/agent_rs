@@ -10,11 +10,7 @@ Generic over `M: EmbeddingModel`.
 
 ### Methods
 - **`new(model: M) -> Self`**
-  Wraps a concrete Rig embedding model.
-- **`into_inner(self) -> M`**
-  Consumes the service and returns the inner model.
-- **`model(&self) -> &M`**
-  Returns a reference to the wrapped Rig embedding model.
+  Wraps a concrete Rig embedding model. The wrapped model is stored privately — there is no accessor to retrieve it.
 - **`ndims(&self) -> usize`**
   Returns the dimensions of the embedding vectors.
 - **`max_documents(&self) -> usize`**
@@ -23,10 +19,8 @@ Generic over `M: EmbeddingModel`.
   Embeds a single string of text.
 - **`async embed_texts<I, S>(&self, texts: I) -> Result<Vec<Embedding>>`**
   Embeds an iterator of text slices. Automatically batches the requests to respect `max_documents` while preserving original ordering. Returns an error if the collection is empty or if a batch returns a mismatched count.
-- **`async embed_document<T: Embed>(&self, document: T) -> Result<(T, OneOrMany<Embedding>)>`**
-  Extracts text fragments from a single document implementing Rig's `Embed` trait and embeds them.
-- **`async embed_documents<T: Embed, I>(&self, documents: I) -> Result<Vec<(T, OneOrMany<Embedding>)>>`**
-  Batches and embeds multiple `Embed` documents, maintaining original ordering. Returns an error if any document produces no embeddable text.
+- **`async embed_documents<T, I>(&self, documents: I) -> Result<Vec<(T, OneOrMany<Embedding>)>>`** where `T: Embed`, `I: IntoIterator<Item = T>`
+  Extracts text fragments from each document implementing Rig's `Embed` trait and embeds them. There is no single-document variant — pass a one-element iterator to embed one document. Preserves the original document order and the order of embedded text fragments within each document, and batches requests to respect `max_documents`. Returns an error if any document produces no embeddable text, if the collection is empty, or if a batch returns a mismatched embedding count.
 - **`builder() -> EmbeddingServiceBuilder`** *(requires `rag` feature)*
   Entry point for constructing a local fastembed-backed service. See [`EmbeddingServiceBuilder`](#embeddingservicebuilder-requires-rag-feature) below.
 
@@ -54,9 +48,9 @@ let embedder = EmbeddingService::builder()
 - **`.show_progress(show: bool) -> Self`**
   Toggles the model-download progress bar. Defaults to `false`.
 - **`.execution_providers(providers: Vec<ExecutionProviderDispatch>) -> Self`**
-  Sets an explicit, priority-ordered execution provider list for GPU acceleration, overriding GPU auto-detect. Callers should append `CPUExecutionProvider::default().build()` as the final entry for runtime fallback.
+  Sets an explicit, priority-ordered execution provider list for GPU acceleration. Supplied providers **replace** the feature-gated GPU auto-detect defaults; the CPU provider is always appended automatically as the final runtime fallback during `build()` — do **not** add it manually.
 - **`.build() -> Result<EmbeddingService<FastembedEmbeddingModel>>`**
-  Constructs the service. When no `.execution_providers()` is set, auto-adds the GPU providers enabled at compile time (`rag-cuda` → CUDA, `rag-directml` → DirectML, `rag-rocm` → ROCm) followed by a CPU fallback. Under `rag-load-dynamic`, all EP types are available at compile time, so the builder auto-registers CUDA + ROCm (Linux/macOS) or DirectML (Windows); it also loads the bundled ORT dylib (resolved at build time) if found, falling back to the system linker otherwise.
+  Constructs the service. When no `.execution_providers()` is set, auto-adds the GPU providers enabled at compile time (`rag-cuda` → CUDA, `rag-directml` → DirectML, `rag-rocm` → ROCm). The CPU provider is appended unconditionally as the final fallback — whether or not `.execution_providers()` was set. Under `rag-load-dynamic`, all EP types are available at compile time, so the builder auto-registers CUDA + ROCm (Linux/macOS) or DirectML (Windows); it also loads the bundled ORT dylib (resolved at build time) if found, falling back to the system linker otherwise.
 
 ### Re-exports *(requires `rag` feature)*
 
@@ -67,27 +61,3 @@ When the `rag` feature is enabled, `agent_rs::agent::embeddings` re-exports:
 - **`EmbeddingServiceBuilder`** — the builder returned by `EmbeddingService::builder()`.
 - **`ort`** — the `ort` crate re-exported for constructing `ExecutionProviderDispatch` values. EPs live at `agent_rs::agent::embeddings::ort::ep::*`.
 
-## Free Functions
-
-### `service_from_client()`
-
-```rust
-pub fn service_from_client<C: EmbeddingsClient>(
-    client: &C,
-    model: impl Into<String>,
-) -> EmbeddingService<C::EmbeddingModel>
-```
-
-Builds an `EmbeddingService` from any Rig embedding-capable client.
-
-### `service_from_client_with_ndims()`
-
-```rust
-pub fn service_from_client_with_ndims<C: EmbeddingsClient>(
-    client: &C,
-    model: impl Into<String>,
-    ndims: usize,
-) -> EmbeddingService<C::EmbeddingModel>
-```
-
-Builds an `EmbeddingService` from a model name and explicit dimensions.

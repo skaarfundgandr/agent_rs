@@ -159,16 +159,15 @@ Unified tool for managing RAG sources. Supports four actions via a string enum: 
   - `force`: When `true` on `"add"`, re-indexes an already-registered source (refreshes modified files). Plain re-add stays a no-op returning `"indexed 0 chunks"`.
 - **Output** (`status` action): Reports registered source count, per-source list (`[FILE]`/`[DIR]` + path), persisted chunk count, embedding dimensionality, and a hint when zero chunks are indexed.
 
-### Constructor
+### Construction
+
+`ManageRagTool` has **no public constructor** — its `new` is `pub(crate)` and takes a `RagIndexer` plus a `PermissionPolicy`. The only public construction path is through the indexer:
+
 ```rust
-ManageRagTool::new(
-    registry: Arc<Mutex<RagSourceRegistry>>,
-    pipeline: Arc<RagPipeline>,
-    embedder: Arc<dyn ErasedEmbedder>,
-    sandbox: Arc<SharedSandbox>,
-    policy: PermissionPolicy,
-) -> Self
+let manage_tool = rag.indexer.tool(PermissionPolicy::AllowAll);
 ```
+
+See [`RagIndexer::tool(policy)`](rag_pipeline.md) in the RAG pipeline docs.
 
 ---
 
@@ -201,6 +200,8 @@ Thread-safe registry that tracks which files and directories are indexed for RAG
 ### Methods
 - **`new(supported_extensions: HashSet<String>) -> Self`**
   Creates an empty registry. `supported_extensions` is the set of file extensions (without the dot) the consumer can load.
+- **`hydrate_from_store(pipeline: &RagPipeline, supported_extensions: HashSet<String>) -> Result<Self>`**
+  Rebuilds the registry from sources persisted in the SQLite `rag_sources` table (used to restore the registry after a restart).
 - **`add_source(&mut self, path: &Path, sandbox: &SharedSandbox) -> Result<String, DocumentError>`**
   Validates the path against the sandbox, checks the file extension, rejects duplicates, and registers the source.
 - **`remove_source(&mut self, canonical_path: &Path) -> Result<String, DocumentError>`**
@@ -238,10 +239,13 @@ pub use directory::ListDirectoryTool;
 pub use document::{ReadDocumentTool, WriteDocumentTool};
 pub use glob::GlobSearchTool;
 pub use search::GrepSearchTool;
+pub use registry::{RegisteredTool, ToolFactory, ToolRegistry, ToolRegistryBuilder};
 pub use think::{ThinkArgs, ThinkOutput, ThinkTool};
 #[cfg(feature = "rag")]
 pub use rag::{ManageRagTool, RagSourceRegistry, SearchRagTool};
 ```
+
+**Tool composition:** `ToolRegistry`, `ToolRegistryBuilder`, `RegisteredTool`, and `ToolFactory` are re-exported from `agent_rs::agent::tools` for composing tool sets into a shared registry — see `src/agent/tools/registry.rs`.
 
 Crate-level re-exports (`src/agent/mod.rs`):
 
@@ -251,5 +255,7 @@ pub use tools::{
     ThinkTool, WriteDocumentTool,
 };
 #[cfg(feature = "rag")]
-pub use tools::{ManageRagTool, RagSourceRegistry, SearchRagTool};
+pub use tools::{ManageRagTool, RagSourceRegistry};
 ```
+
+Note: `SearchRagTool` is **not** re-exported at the crate level — import it via `agent_rs::agent::tools::SearchRagTool`.

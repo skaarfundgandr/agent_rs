@@ -16,7 +16,13 @@ pub struct Document {
 
 pub struct Chunk {
     pub text: String,
-    pub metadata: HashMap<String, String>,
+    pub metadata: ChunkMetadata,
+}
+
+pub struct ChunkMetadata {
+    pub source: String,      // source filename (e.g. "doc.txt")
+    pub file_type: String,   // file type / extension (e.g. "txt", "pdf")
+    pub chunk_index: usize,  // zero-based index within the source document
 }
 
 pub enum RagSourceType {
@@ -42,13 +48,16 @@ pub struct ChunkingOptions {
 Trait for reading source files into generic `Document` structs.
 
 ```rust
-pub trait DocumentLoader {
-    fn load(&self, path: &Path) -> Result<Document>;
+#[async_trait::async_trait]
+pub trait DocumentLoader: Send + Sync {
+    async fn load(&self, path: &Path) -> Result<Document>;
 }
 ```
 
+Implementers must be `Send + Sync` and provide an **async** `load`.
+
 - **`PdfLoader`**: Extracts plain text from `.pdf` files.
-- **`TextLoader`**: Reads plaintext content from `.txt` and `.md` files.
+- **`TextLoader`**: Reads plaintext content from any file it is asked to load — the `.txt`/`.md` restriction comes from `DEFAULT_EXTENSIONS`, not from the loader itself.
 
 ---
 
@@ -140,12 +149,14 @@ Owns the pipeline, embedder, source registry, and sandbox. Methods:
 Object-safe trait for embedding without knowing the concrete model type. Implementors: `EmbeddingService<M>` (blanket impl) and custom wrappers.
 
 ```rust
-pub trait ErasedEmbedder: Send + Sync {
+pub trait ErasedEmbedder: WasmCompatSend + WasmCompatSync {
     fn embed_query<'a>(&'a self, text: &'a str) -> QueryFuture<'a>;
     fn embed_texts<'a>(&'a self, texts: Vec<String>) -> TextsFuture<'a>;
     fn ndims(&self) -> usize;
 }
 ```
+
+(`WasmCompatSend`/`WasmCompatSync` are rig-core marker traits equivalent to `Send`/`Sync` on native targets; on wasm32 with the `wasm` feature they become no-op markers.)
 
 ---
 

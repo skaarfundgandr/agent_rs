@@ -24,15 +24,21 @@
 
 ---
 
-## `BuiltManagedAgent<M, P, C>`
+## `BuiltManagedAgent<M, C, S>`
 
 A fully configured managed agent, ready to run prompts and chats. Constructed by calling [`.build()`](ManagedBuilder::build) on a [`ManagedBuilder`].
 
-Wraps an `Agent<M, P>` (where `M: CompletionModel` and `P: PromptHook<M>`) with an optional compaction model `C: Prompt` that automatically summarizes history when it crosses a token threshold. History is now **caller-owned** — passed as `&mut Vec<Message>` to `chat()`.
+Wraps an `Agent<M>` (where `M: CompletionModel`) with an optional compaction model `C: Prompt` that automatically summarizes history when it crosses a token threshold. The `S` parameter selects the details state: `Standard` (default) returns plain text, `Extended` (via `extended_details()`) returns telemetry-enriched types. History is now **caller-owned** — passed as `&mut Vec<Message>` to `chat()`.
 
 ### Methods
 - **`max_retries(&self) -> u32`**
   Returns the configured retry limit for completion calls (default 3).
+- **`invalid_tool_policy(&self) -> InvalidToolPolicy`**
+  Returns the configured invalid-tool policy (default `Skip`).
+- **`max_invalid_tool_call_retries(&self) -> u32`**
+  Returns the configured retry budget for invalid tool calls (default 0 — no retries).
+- **`extended_details(self) -> BuiltManagedAgent<M, C, Extended>`**
+  Opts into telemetry-enriched return types: `prompt()` returns `ManagedPromptDetails` and `chat()` returns `ManagedChatDetails` (see `domain::agent`). Idempotent on `Extended`.
 - **`async prompt(&self, msg: impl Into<String>) -> Result<String, PromptError>`**
   Stateless — returns the response text. No history interaction.
 - **`async chat(&self, msg, &mut history) -> Result<String, PromptError>`**
@@ -48,7 +54,7 @@ Wraps an `Agent<M, P>` (where `M: CompletionModel` and `P: PromptHook<M>`) with 
 
 ---
 
-## `ManagedBuilder<'a, M, P, CompState>`
+## `ManagedBuilder<'a, M, CompState = NoCompaction>`
 
 Builder for a managed agent. Constructed via [`ManagedExt::managed`].
 
@@ -58,17 +64,24 @@ Builder for a managed agent. Constructed via [`ManagedExt::managed`].
   (`HttpError`, `ProviderError`). Defaults to 3. Retries use exponential
   backoff (500ms × 2^attempt). Note: streaming methods are not retried at the
   construction level because stream errors only surface during polling.
-- **`with_compaction(self) -> ManagedBuilder<'a, M, P, CompactionConfig<Agent<M, P>>>`**
+- **`invalid_tool_policy(self, policy: InvalidToolPolicy) -> Self`**
+  Sets the policy for invalid tool names: `Skip` (default), `Fail`, or `Retry`.
+  Choosing `Retry` implicitly sets `max_invalid_tool_call_retries` to 2 unless
+  it was set explicitly.
+- **`max_invalid_tool_call_retries(self, n: u32) -> Self`**
+  Sets the budget of consecutive invalid tool calls allowed before the turn
+  fails. Default 0 (no retries).
+- **`with_compaction(self) -> ManagedBuilder<'a, M, CompactionConfig<Agent<M>>>`**
   Enables automatic context compaction. The compaction model defaults to a clone of the agent itself.
-- **`build(self) -> BuiltManagedAgent<M, P, ()>`**
+- **`build(self) -> BuiltManagedAgent<M, ()>`**
   Builds the agent without compaction.
 
-When compaction is enabled, additional methods are available on `ManagedBuilder<'a, M, P, CompactionConfig<C>>`:
+When compaction is enabled, additional methods are available on `ManagedBuilder<'a, M, CompactionConfig<C>>`:
 - **`threshold(self, n: usize) -> Self`** — Sets the compaction threshold (must be > 0).
 - **`compaction_model<NewC: Prompt>(self, model: NewC) -> Self`** — Replaces the compaction model.
 - **`compaction_prompt(self, formatter: fn(&str) -> String) -> Self`** — Sets a custom compaction prompt formatter.
 - **`tokenizer(self, estimator: fn(&[Message]) -> usize) -> Self`** — Sets a custom token estimator.
-- **`build(self) -> BuiltManagedAgent<M, P, C>`** — Builds the agent with compaction. Panics if threshold was not set.
+- **`build(self) -> BuiltManagedAgent<M, C>`** — Builds the agent with compaction. Panics if threshold was not set.
 
 ---
 
@@ -80,11 +93,11 @@ Implements `futures::Stream<Item = Result<MultiTurnStreamItem<R>, StreamingError
 
 ---
 
-## `ManagedExt`
+## `ManagedExt<M>`
 
-Extension trait implemented for standard Rig `Agent<M, P>` structs to start building a managed agent.
+Extension trait implemented for standard Rig `Agent<M>` structs to start building a managed agent.
 
-- **`fn managed(&self) -> ManagedBuilder<'_, M, P, NoCompaction>`**
+- **`fn managed(&self) -> ManagedBuilder<'_, M, NoCompaction>`**
   Entry point for building a managed agent.
 
 ---
@@ -122,9 +135,9 @@ Located in `agent::memory::tokenizer`.
 
 Located in `agent::model::chat`.
 
-- **`async execute_chat(agent: &Agent<M, P>, prompt: &str, history: &mut Vec<Message>) -> Result<String, PromptError>`**
-  Utility to execute a standard (non-streaming) chat turn against the LLM using the provided history. Updates history in-place with the assistant response.
-- **`execute_stream_chat(agent: &Agent<M, P>, prompt: &str, history: Vec<Message>) -> StreamingPromptRequest<M, P>`**
+- **`async execute_chat<M>(agent: &Agent<M>, prompt: &str, history: &mut Vec<Message>, max_invalid_tool_call_retries: u32) -> Result<String, PromptError>`**
+  Utility to execute a standard (non-streaming) chat turn against the LLM using the provided history. Updates history in-place with the assistant response. A positive `max_invalid_tool_call_retries` passes the budget through to rig's `PromptRequest::max_invalid_tool_call_retries`.
+- **`execute_stream_chat<M>(agent: &Agent<M>, prompt: &str, history: Vec<Message>) -> StreamingPromptRequest<M>`**
   Utility to prepare a streaming chat turn request against the LLM.
 
 ---

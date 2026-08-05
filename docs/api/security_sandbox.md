@@ -62,7 +62,7 @@ pub struct SharedSandbox { /* private */ }
 - **`remove_root(&self, root: impl AsRef<Path>) -> Result<(), DocumentError>`** — removes a root under a write lock. Idempotent on miss. Returns `Io` if the path cannot be canonicalized, `Sandbox` if it would leave the sandbox empty.
 - **`contains_root(&self, root: impl AsRef<Path>) -> Result<bool, DocumentError>`** — strict canonical-form membership check under a read lock. Returns `Ok(true)`/`Ok(false)` if the path canonicalizes, `Err(Io)` otherwise.
 - **`check_permission(&self, policy: &PermissionPolicy, tool_name: &str, description: &str) -> Result<(), DocumentError>`**
-  Evaluates the permission policy for a tool invocation. Returns `Ok(())` on `Allow`, or `DocumentError::PermissionDenied` on `Deny`/`DeferToUser`. This is the gate-check half of `resolve_path_with_permission`, exposed separately for tools with branching path logic.
+  Evaluates the permission policy for a tool invocation. Returns `Ok(())` on `Allow`, or `DocumentError::PermissionDenied` (with the deny reason) on `Deny`. This is the gate-check half of `resolve_path_with_permission`, exposed separately for tools with branching path logic.
 - **`resolve_path_unchecked(&self, user_path: &Path) -> PathBuf`**
   Resolves `user_path` against the sandbox roots without enforcing sandbox containment. Absolute paths are canonicalized (falling back to the original on IO error). Relative paths search each canonical root in order; if no existing match is found, the path is joined onto the primary root for new-file writes.
 - **`async resolve_path_with_permission(&self, policy: &PermissionPolicy, tool_name: &str, description: &str, user_path: &Path) -> Result<PathBuf, DocumentError>`**
@@ -142,7 +142,7 @@ Snapshot-then-find variant of `find_containing_root`. **Returns `Option<PathBuf>
 pub fn relative_display_path(sandbox: &SandboxConfig, path: &Path) -> String
 ```
 
-Computes a relative display path for a file, preferring the shortest prefix among the sandbox roots for readability. Tries canonical comparison first, then falls back to original-root comparison. Falls back to the full path if no root matches.
+Computes a relative display path for a file, preferring the shortest prefix among the sandbox roots for readability. Tries canonical comparison first, then falls back to original-root comparison. Returns the literal string `"<outside-sandbox>"` if no root matches.
 
 ---
 

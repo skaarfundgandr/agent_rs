@@ -16,8 +16,6 @@ pub enum PermissionResult {
     Allow,
     /// The operation is denied with a reason.
     Deny { reason: String },
-    /// The operation should be deferred to the user (e.g. interactive prompt).
-    DeferToUser,
 }
 ```
 
@@ -123,23 +121,13 @@ pub struct PermissionEvent {
 }
 ```
 
-### `LoggingObserver`
-A built-in observer that logs evaluations to the `tracing` framework.
-
-```rust
-pub struct LoggingObserver;
-```
-Logs are emitted at `info` level under the target `"permission"` containing structured fields: `tool_name`, `allowed` (boolean), and `policy_variant`.
-
 ---
 
-## Example: Policy Map with Overrides & Logging
+## Example: Policy Map with Overrides
 
 ```rust
 use std::sync::Arc;
-use agent_rs::agent::permission::{
-    PermissionPolicy, PermissionGate, PermissionResult, PolicyMap, LoggingObserver
-};
+use agent_rs::agent::permission::{PermissionPolicy, PermissionGate, PermissionResult, PolicyMap};
 
 struct MyCustomGate;
 
@@ -158,6 +146,5 @@ fn setup_policies() -> PolicyMap {
     PolicyMap::new(PermissionPolicy::CliPrompt) // Default is prompt mode
         .tool("read_document", PermissionPolicy::AllowAll) // Read is always allowed
         .tool("write_document", PermissionPolicy::Custom(Arc::new(MyCustomGate))) // Custom validation for writes
-        .with_observer(Arc::new(LoggingObserver)) // Log everything
 }
 ```
