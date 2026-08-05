@@ -122,6 +122,7 @@ impl<'a, M, CompState> ManagedBuilder<'a, M, CompState>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
 {
+    /// Set the number of retries per prompt on retryable errors (default 3).
     pub fn max_retries(self, max_retries: u32) -> Self {
         Self {
             max_retries,
@@ -129,6 +130,10 @@ where
         }
     }
 
+    /// Set the recovery policy for invalid tool names (default
+    /// [`InvalidToolPolicy::Skip`]). Selecting
+    /// [`Retry`](InvalidToolPolicy::Retry) without an explicit
+    /// [`Self::max_invalid_tool_call_retries`] raises the retry budget to 2.
     pub fn invalid_tool_policy(mut self, policy: InvalidToolPolicy) -> Self {
         self.invalid_tool_policy = policy;
         if matches!(policy, InvalidToolPolicy::Retry) && !self.invalid_tool_retries_explicit {
@@ -137,6 +142,9 @@ where
         self
     }
 
+    /// Set the explicit budget of retries for invalid tool calls. Marks the
+    /// budget as explicitly configured so a later
+    /// [`Self::invalid_tool_policy`] change does not override it.
     pub fn max_invalid_tool_call_retries(mut self, n: u32) -> Self {
         self.max_invalid_tool_call_retries = n;
         self.invalid_tool_retries_explicit = true;
@@ -150,6 +158,9 @@ impl<'a, M> ManagedBuilder<'a, M, NoCompaction>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
 {
+    /// Switch to the compaction-enabled builder state, using the agent's own
+    /// model (when `Clone`) as the compaction model. Configure
+    /// [`Self::threshold`] before [`build`](Self::build).
     pub fn with_compaction(self) -> ManagedBuilder<'a, M, CompactionConfig<Agent<M>>>
     where
         Agent<M>: Clone,
@@ -169,6 +180,8 @@ where
         }
     }
 
+    /// Finalize the builder into a [`BuiltManagedAgent`] without compaction,
+    /// installing an [`InvalidToolRecoveryHook`] with the configured policy.
     pub fn build(self) -> BuiltManagedAgent<M, ()> {
         let mut agent = self.agent.clone();
         agent
@@ -191,6 +204,11 @@ impl<'a, M, C: Prompt> ManagedBuilder<'a, M, CompactionConfig<C>>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
 {
+    /// Set the history token threshold that triggers compaction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n` is 0.
     pub fn threshold(self, n: usize) -> Self {
         assert!(n > 0, "threshold must be greater than 0");
         Self {
@@ -202,6 +220,7 @@ where
         }
     }
 
+    /// Replace the model used to generate compaction summaries.
     pub fn compaction_model<NewC: Prompt>(
         self,
         model: NewC,
@@ -221,6 +240,8 @@ where
         }
     }
 
+    /// Set a custom formatter turning the serialized history into the
+    /// compaction summary prompt (defaults to the crate's built-in prompt).
     pub fn compaction_prompt(self, formatter: fn(&str) -> String) -> Self {
         Self {
             compaction: CompactionConfig {
@@ -231,6 +252,8 @@ where
         }
     }
 
+    /// Set a custom token estimator for the history; defaults to the crate's
+    /// built-in character-based heuristic.
     pub fn tokenizer(self, estimator: fn(&[Message]) -> usize) -> Self {
         Self {
             compaction: CompactionConfig {
@@ -241,6 +264,14 @@ where
         }
     }
 
+    /// Finalize the builder into a [`BuiltManagedAgent`] with compaction
+    /// enabled, wiring up a
+    /// [`ContextManager`](crate::agent::memory::ContextManager) and an
+    /// [`InvalidToolRecoveryHook`] with the configured policy.
+    ///
+    /// # Panics
+    ///
+    /// Panics if [`threshold`](Self::threshold) was not configured first.
     pub fn build(self) -> BuiltManagedAgent<M, C>
     where
         C: WasmCompatSend + WasmCompatSync + 'static,
@@ -371,6 +402,8 @@ impl<M> BuiltManagedAgent<M, (), Standard>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
 {
+    /// Run a single prompt with retries on a fresh history and return the
+    /// model's text response.
     pub async fn prompt(&self, msg: impl Into<String>) -> Result<String, PromptError> {
         let msg = msg.into();
         let mut working = Vec::new();
@@ -384,6 +417,9 @@ where
         .await
     }
 
+    /// Run a prompt with `msg`, appending the user message and the assistant
+    /// reply to `history` on success (the caller's history is left untouched
+    /// on error) and returning the model's text response.
     pub async fn chat(
         &self,
         msg: impl Into<String>,
@@ -471,6 +507,8 @@ where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     S: DetailsState,
 {
+    /// Stream a managed prompt on a fresh history as
+    /// [`MultiTurnStreamItem`]s; no history is written back.
     pub async fn stream_prompt(
         &self,
         msg: impl Into<String>,
@@ -490,6 +528,9 @@ where
         .await
     }
 
+    /// Stream a managed prompt seeded with `history`; on the final response
+    /// the caller's history gets the user message and the assistant reply
+    /// appended.
     pub async fn stream_chat<'a>(
         &self,
         msg: impl Into<String>,
@@ -532,6 +573,9 @@ where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
 {
+    /// Run a single prompt with compaction enabled, compacting the history
+    /// up front when it exceeds the configured threshold, and return the
+    /// model's text response.
     pub async fn prompt_compact(&self, msg: impl Into<String>) -> Result<String, PromptError> {
         let msg = msg.into();
         let mut working = Vec::new();
@@ -548,6 +592,10 @@ where
         .await
     }
 
+    /// Run a prompt with compaction enabled, compacting `history` up front
+    /// when it exceeds the configured threshold and replacing it with the
+    /// compacted working history plus the new user/assistant messages on
+    /// success, and return the model's text response.
     pub async fn chat_compact(
         &self,
         msg: impl Into<String>,
@@ -648,6 +696,8 @@ where
     C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
     S: DetailsState,
 {
+    /// Stream a managed prompt with compaction enabled on a fresh history;
+    /// no history is written back.
     pub async fn stream_prompt_compact(
         &self,
         msg: impl Into<String>,
@@ -671,6 +721,10 @@ where
         .await
     }
 
+    /// Stream a managed prompt with compaction enabled seeded with `history`
+    /// (compacted up front if over threshold); on the final response the
+    /// caller's history is replaced with the compacted baseline plus the new
+    /// user/assistant messages.
     pub async fn stream_chat_compact<'a>(
         &self,
         msg: impl Into<String>,
@@ -710,6 +764,12 @@ pub struct ManagedStream<'h, R: Send + 'static> {
 }
 
 impl<'h, R: Send + 'static> ManagedStream<'h, R> {
+    /// Wrap a stream of [`MultiTurnStreamItem`]s into a [`ManagedStream`].
+    ///
+    /// `history_out`, when given, receives the user prompt and assistant
+    /// reply on the final response — replacing `replace_baseline` (if any)
+    /// first. A pump task forwards items from `stream` into the stream's
+    /// channel.
     pub fn new<S>(
         stream: S,
         history_out: Option<&'h mut Vec<Message>>,
