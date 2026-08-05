@@ -56,12 +56,20 @@ Required env vars: `API_KEY`, `LANGSMITH_API_KEY`. Optional: `CHAT_MODEL`, `LANG
 ```
 examples/
 ├── cli_chatbot.rs           # CLI chatbot example wiring
-└── langsmith_react.rs       # LangSmith ReAct + OTel example (requires --features opentelemetry)
+├── langsmith_react.rs       # LangSmith ReAct + OTel example (requires --features opentelemetry)
+├── web_researcher.rs        # autonomous web research + dynamic RAG ingestion (requires --features rag)
+├── multi_agent_coder.rs     # AgentDispatcher: coder (ReAct) + reviewer (Managed) pipeline
+└── db_assistant.rs          # secure database assistant with PermissionPolicy gates
 src/
-├── lib.rs               # re-exports: agent, config, domain, mcp
+├── lib.rs               # module declarations: agent, config, domain, mcp, rag, security (+ observability, feature-gated on opentelemetry)
 ├── config.rs            # McpConfig loader + validation
 ├── security/
-│   └── sandbox.rs       # SandboxConfig, SharedSandbox, validate_sandboxed_path, find_containing_root, relative_display_path (+ _shared variants)
+│   └── sandbox/          # SandboxConfig, SharedSandbox, validate_sandboxed_path, find_containing_root, relative_display_path (+ _shared variants)
+│       ├── config.rs         # SandboxConfig
+│       ├── shared.rs         # SharedSandbox
+│       ├── resolve.rs        # validate_sandboxed_path, find_containing_root, relative_display_path
+│       ├── resolve_shared.rs # _shared variants operating on SharedSandbox
+│       └── mod.rs            # Re-exports
 ├── agent/
 │   ├── agents.rs         # strip_reasoning_from_history
 │   ├── managed.rs        # ManagedExt, ManagedBuilder, BuiltManagedAgent, ManagedStream
@@ -152,7 +160,7 @@ Internal tools (filesystem, RAG, compact) register into `ToolRegistry` alongside
 
 All tests must reside in the `tests/` directory rather than inside `src/`. No unit tests should be placed inline within `src/` to keep production code clean.
 
-Tests in `tests/` (21+ files): `agents_tests.rs`, `document_store.rs`, `embeddings.rs`, `fastembed_wrapper.rs`, `manage_rag.rs`, `mcp_registry.rs`, `observability_tests.rs` (feature-gated on `opentelemetry`), `permission.rs`, `rag.rs`, `rag_reindex.rs`, `rag_search_tool.rs`, `rag_source_keys.rs`, `react_otel_tests.rs` (feature-gated on `opentelemetry`), `react_recovery_tests.rs`, `react_tests.rs`, `sandbox_tests.rs`, `shared_sandbox.rs`, `tool_tests.rs`, `turbo_index.rs`, `tool_registry.rs`, `dispatch.rs`, `state.rs`, `react_e2e.rs` (plus `common/mod.rs`, `mod.rs`).
+Tests in `tests/` (28 files): `agents_tests.rs`, `document_store.rs`, `embeddings.rs`, `fastembed_wrapper.rs`, `manage_rag.rs`, `mcp_registry.rs`, `observability_tests.rs` (feature-gated on `opentelemetry`), `permission.rs`, `rag.rs`, `rag_reindex.rs`, `rag_search_tool.rs`, `rag_source_keys.rs`, `react_otel_tests.rs` (feature-gated on `opentelemetry`), `react_recovery_tests.rs`, `react_tests.rs`, `sandbox_tests.rs`, `shared_sandbox.rs`, `tool_tests.rs`, `turbo_index.rs`, `tool_registry.rs`, `dispatch.rs`, `state.rs`, `react_e2e.rs`, `extended_details.rs`, `managed_recovery_tests.rs`, `rag_loader_registry.rs`, `rag_remove_after_restart.rs`, `streaming_tests.rs` (plus `common/mod.rs` and a `fixtures/` directory).
 - `fastembed_wrapper.rs` — `#[ignore]`d; downloads a fastembed model, needs network or `FASTEMBED_CACHE_DIR`.
 - `test_read_pdf` in `tool_tests.rs` is `#[ignore]` — needs a local PDF file, will fail in CI.
 - Tool tests use `tempfile` for sandbox isolation.
@@ -187,5 +195,5 @@ Tests in `tests/` (21+ files): `agents_tests.rs`, `document_store.rs`, `embeddin
 - `docs/api/` — API reference docs (split by section). See [API Reference Overview](docs/api/README.md)
 - `docs/migration-0.2.0.md` — migration guide (v0.1.0 → v0.2.0)
 - `docs/migration-0.10.0.md` — migration guide (v0.9.x → v0.10.0): fastembed 5.17.3 swap, opt-in GPU features, `FASTEMBED_MODEL` variant-name format
-- `docs/migration-0.12.0.md` — migration guide (v0.11.x → v0.12.0): `from_fastembed*` constructors removed, `EmbeddingService::builder()` is the sole API, GPU auto-detect from feature flags
+- `docs/migration-0.12.0.md` — migration guide (v0.11.x → v0.12.0): removed fastembed constructors, `EmbeddingService::builder()` is the sole API, GPU auto-detect from feature flags
 - `docs/diagrams/` — architecture diagrams (C4, class, sequence, state, module dependency)
