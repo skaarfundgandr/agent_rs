@@ -9,6 +9,12 @@
 use crate::rag::alias::{QueryFuture, TextsFuture};
 use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
+/// Object-safe embedding adapter implemented by every
+/// [`EmbeddingService<M>`](crate::agent::embeddings::EmbeddingService).
+///
+/// Lets non-generic consumers (e.g.
+/// [`TurboVectorIndex`](crate::rag::TurboVectorIndex)) embed query strings
+/// without being parameterised over the concrete embedding model.
 pub trait ErasedEmbedder: WasmCompatSend + WasmCompatSync {
     /// Embed a single query string. Returns the embedding as `f32` vectors
     /// (cast from rig's native `f64` embeddings for turbovec compatibility).

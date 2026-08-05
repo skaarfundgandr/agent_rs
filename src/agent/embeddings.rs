@@ -288,6 +288,14 @@ fn load_and_set_api(path: &std::path::Path) -> bool {
 
 use std::sync::{Arc, Mutex};
 
+/// Local [`EmbeddingModel`](rig_core::embeddings::EmbeddingModel) backed by a
+/// [`fastembed`] text-embedding model, wrapping an onnxruntime inference
+/// session behind a mutex.
+///
+/// Constructed via
+/// [`EmbeddingService::builder()`](crate::agent::embeddings::EmbeddingService::builder);
+/// the [`make`](rig_core::embeddings::EmbeddingModel::make) constructor is
+/// unsupported and records an initialization error instead.
 #[derive(Clone)]
 pub struct FastembedEmbeddingModel {
     model: fastembed::EmbeddingModel,

@@ -45,6 +45,10 @@ pub struct Chunk {
     pub metadata: ChunkMetadata,
 }
 
+/// Options controlling how a document is split into chunks.
+///
+/// Defaults: [`chunk_words`](Self::chunk_words) 220,
+/// [`chunk_overlap_words`](Self::chunk_overlap_words) 40.
 #[derive(Debug, Clone)]
 pub struct ChunkingOptions {
     /// Maximum number of words per chunk.

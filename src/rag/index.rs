@@ -49,18 +49,22 @@ impl TurboIndex {
         self.inner.write(path)
     }
 
+    /// Number of vectors currently stored in the index.
     pub fn len(&self) -> usize {
         self.inner.len()
     }
 
+    /// Dimensionality of the vectors the index was created with.
     pub fn dim(&self) -> usize {
         self.inner.dim()
     }
 
+    /// Quantization bit width the index was created with (`2`, `3`, or `4`).
     pub fn bit_width(&self) -> usize {
         self.inner.bit_width()
     }
 
+    /// Whether the index holds no vectors.
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
