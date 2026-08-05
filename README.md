@@ -108,7 +108,7 @@ Set up a vector database index that updates dynamically on-the-fly:
 
 ```rust
 use std::path::Path;
-use agent_rs::agent::embeddings::EmbeddingService;
+use agent_rs::agent::embeddings::{EmbeddingService, FastembedModel};
 use agent_rs::rag::RagPipeline;
 use rig_core::providers::openai;
 
@@ -117,7 +117,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = openai::CompletionsClient::from_env();
 
     // Load local fastembed embedding model
-    let embedder = EmbeddingService::from_fastembed("BGESmallENV15".parse()?)?;
+    let embedder = EmbeddingService::builder()
+        .model(FastembedModel::BGESmallENV15)
+        .show_progress(true)
+        .build()?;
 
     // Build a persistent RAG pipeline with the builder API
     let rag = RagPipeline::builder()
@@ -152,19 +155,13 @@ By default the `rag` feature builds with CPU-only ONNX Runtime. GPU acceleration
 | `rag-load-dynamic` | Bundled ORT dylib (auto-resolved) or system-provided (`ORT_DYLIB_PATH`) |
 
 ```rust,no_run
-use agent_rs::agent::embeddings::ort::ep::{
-    CUDAExecutionProvider,
-    CPUExecutionProvider,
-};
-use agent_rs::agent::embeddings::EmbeddingService;
+use agent_rs::agent::embeddings::ort::ep::CUDAExecutionProvider;
+use agent_rs::agent::embeddings::{EmbeddingService, FastembedModel};
 
-let embedder = EmbeddingService::from_fastembed_with_providers(
-    "BGESmallENV15".parse()?,
-    vec![
-        CUDAExecutionProvider::default().build(),
-        CPUExecutionProvider::default().build(), // fallback
-    ],
-)?;
+let embedder = EmbeddingService::builder()
+    .model(FastembedModel::BGESmallENV15)
+    .execution_providers(vec![CUDAExecutionProvider::default().build()])
+    .build()?;
 ```
 
 The default `rag` build is CPU-only and behavior-identical to v0.9.x. With `rag-load-dynamic`, the builder auto-registers GPU execution providers (CUDA + ROCm on Linux/macOS, DirectML on Windows) and loads the bundled ORT dylib resolved at build time, falling back to the system linker if none is found.
