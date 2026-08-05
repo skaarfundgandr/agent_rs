@@ -52,7 +52,7 @@ Sign up at [tavily.com](https://tavily.com/) and create an API key.
 #### 3. Wire the server into the ToolRegistry
 
 ```rust
-use agent_rs::mcp::registry::core::McpRegistry;
+use agent_rs::mcp::registry::McpRegistry;
 use agent_rs::agent::tools::ToolRegistryBuilder;
 use agent_rs::agent::permission::PermissionPolicy;
 
