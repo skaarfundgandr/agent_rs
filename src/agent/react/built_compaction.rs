@@ -15,6 +15,8 @@ where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
 {
+    /// Run the ReAct loop on a fresh prompt with compaction enabled and
+    /// return the full trace.
     pub async fn prompt_compact(
         &self,
         msg: impl Into<String>,
@@ -22,6 +24,9 @@ where
         self.run_prompt_impl(msg.into(), None).await
     }
 
+    /// Run the ReAct loop with compaction enabled, compacting `history` when
+    /// it exceeds the configured threshold, replacing it with the full
+    /// working trace on success, and returning the final answer text.
     pub async fn chat_compact(
         &self,
         msg: impl Into<String>,
@@ -133,6 +138,10 @@ where
     C: Prompt + WasmCompatSend + WasmCompatSync + 'static,
     S: DetailsState,
 {
+    /// Stream a compaction-enabled ReAct run on a fresh prompt as
+    /// [`ReActStreamItem`]s (no history is written back).
+    ///
+    /// [`ReActStreamItem`]: crate::domain::agent::ReActStreamItem
     pub async fn stream_prompt_compact<'h>(
         &self,
         msg: impl Into<String>,
@@ -140,6 +149,9 @@ where
         self.run_stream_impl(msg.into())
     }
 
+    /// Stream a compaction-enabled ReAct run seeded with `history` (compacted
+    /// up front if over threshold); the caller's history is replaced with the
+    /// final working trace when the stream completes.
     pub async fn stream_chat_compact<'h>(
         &self,
         msg: impl Into<String>,

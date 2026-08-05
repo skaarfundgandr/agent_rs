@@ -28,6 +28,14 @@ where
     pub(crate) _compaction: PhantomData<fn(M, C)>,
 }
 
+/// Streaming ReAct run. Yields [`ReActStreamItem`]s (thoughts, actions,
+/// observations, and the final trace) as they are produced by the loop
+/// running in a spawned task.
+///
+/// When created via a `stream_chat`-style method, the caller's history is
+/// replaced with the final working trace upon completion.
+///
+/// [`ReActStreamItem`]: crate::domain::agent::ReActStreamItem
 pub struct ReActStream<'h, M, C = ()>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,

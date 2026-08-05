@@ -14,6 +14,7 @@ impl<M> BuiltReAct<M, (), Standard>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
 {
+    /// Run the ReAct loop on a fresh prompt and return the full trace.
     pub async fn prompt(
         &self,
         msg: impl Into<String>,
@@ -21,6 +22,8 @@ where
         self.run_prompt_impl(msg.into(), None).await
     }
 
+    /// Run the ReAct loop with `msg`, replacing `history` with the full
+    /// working trace on success and returning the final answer text.
     pub async fn chat(
         &self,
         msg: impl Into<String>,
@@ -77,6 +80,10 @@ where
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send,
     S: DetailsState,
 {
+    /// Stream a ReAct run on a fresh prompt as [`ReActStreamItem`]s
+    /// (no history is written back).
+    ///
+    /// [`ReActStreamItem`]: crate::domain::agent::ReActStreamItem
     pub fn stream_prompt<'h>(
         &self,
         msg: impl Into<String>,
@@ -84,6 +91,8 @@ where
         self.run_stream_impl(msg.into())
     }
 
+    /// Stream a ReAct run seeded with `history`; the caller's history is
+    /// replaced with the final working trace when the stream completes.
     pub fn stream_chat<'h>(
         &self,
         msg: impl Into<String>,

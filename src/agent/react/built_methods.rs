@@ -43,22 +43,27 @@ where
     M: rig_core::completion::CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     S: DetailsState,
 {
+    /// Return the configured `max_cycles` limit.
     pub fn max_cycles(&self) -> usize {
         self.max_cycles
     }
 
+    /// Return the configured `max_retries` limit.
     pub fn max_retries(&self) -> u32 {
         self.max_retries
     }
 
+    /// Return the configured ReAct preamble, if any.
     pub fn react_preamble(&self) -> Option<&str> {
         self.react_preamble.as_deref()
     }
 
+    /// Return the configured invalid tool policy.
     pub fn invalid_tool_policy(&self) -> InvalidToolPolicy {
         self.invalid_tool_policy
     }
 
+    /// Return the configured max invalid tool call retries budget.
     pub fn max_invalid_tool_call_retries(&self) -> u32 {
         self.max_invalid_tool_call_retries
     }
