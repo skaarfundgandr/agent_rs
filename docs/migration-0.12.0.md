@@ -73,7 +73,7 @@ When no `.execution_providers()` is set, `build()` auto-adds the GPU providers e
 | `rag-directml` | DirectML |
 | `rag-rocm` | ROCm |
 
-Calling `.execution_providers()` overrides auto-detect entirely; the supplied list is used as-is, so append `CPUExecutionProvider::default().build()` as the final entry for runtime fallback.
+Calling `.execution_providers()` overrides auto-detect entirely; the supplied list replaces the feature-flag-derived providers. The CPU provider is always appended automatically as the final fallback during `build()`, so do **not** add `CPUExecutionProvider::default().build()` manually — doing so produces a duplicate CPU entry.
 
 ## New: `EmbeddingServiceBuilder` Re-export
 

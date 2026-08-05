@@ -1,5 +1,7 @@
 # Migration Guide: v0.9.x → v0.10.0
 
+> **Note**: The `from_fastembed*` constructors shown below were **removed in v0.12.0** — use `EmbeddingService::builder()`; see [migration-0.12.0.md](migration-0.12.0.md).
+
 ## Overview
 
 v0.10.0 replaces the `rig-fastembed 0.40.0` dependency with a direct `fastembed 5.17.3` dependency (unified to `ort =2.0.0-rc.12`). The default `rag` build is CPU-only; GPU acceleration is opt-in via four new features. `FASTEMBED_MODEL` env var and `.parse()` format changed from HuggingFace model codes to fastembed variant names.
@@ -78,6 +80,8 @@ Two new constructors accept execution providers:
 
 - `from_fastembed_with_providers(model, providers)`
 - `from_fastembed_with_providers_and_cache_dir(model, providers, cache_dir)`
+
+> **Note**: These constructors were **removed in v0.12.0** — use `EmbeddingService::builder().execution_providers(...)`; see [migration-0.12.0.md](migration-0.12.0.md).
 
 The provider list is priority-ordered. **Callers must append `CPUExecutionProvider::default().build()` as the final entry** for runtime fallback when no GPU is available.
 

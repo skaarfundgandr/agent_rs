@@ -24,14 +24,17 @@ let tool = ReadDocumentTool;
 **After (v0.2.0):**
 ```rust
 use std::collections::HashSet;
-use agent_rs::security::SandboxConfig;
+use std::sync::Arc;
+use agent_rs::security::{SandboxConfig, SharedSandbox};
 use agent_rs::agent::permission::PermissionPolicy;
 
-let sandbox = SandboxConfig::single("./sandbox").unwrap();
+let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single("./sandbox").unwrap()));
 let allowed_extensions = HashSet::from(["txt".to_string(), "md".to_string(), "pdf".to_string()]);
 let policy = PermissionPolicy::AllowAll;
 let tool = ReadDocumentTool::new(sandbox, allowed_extensions, policy);
 ```
+
+> **Note**: Tool constructors were later changed to take `Arc<SharedSandbox>` instead of `SandboxConfig` directly — the samples below wrap the config as `Arc::new(SharedSandbox::from(config))`.
 
 #### `WriteDocumentTool::new`
 
@@ -43,10 +46,11 @@ let tool = WriteDocumentTool;
 **After (v0.2.0):**
 ```rust
 use std::collections::HashSet;
-use agent_rs::security::SandboxConfig;
+use std::sync::Arc;
+use agent_rs::security::{SandboxConfig, SharedSandbox};
 use agent_rs::agent::permission::PermissionPolicy;
 
-let sandbox = SandboxConfig::single("./sandbox").unwrap();
+let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single("./sandbox").unwrap()));
 let allowed_extensions = HashSet::from(["txt".to_string(), "md".to_string()]);
 let policy = PermissionPolicy::AllowAll;
 let tool = WriteDocumentTool::new(sandbox, allowed_extensions, policy);
@@ -64,10 +68,11 @@ let lister = ListDirectoryTool::new(sandbox);
 
 **After (v0.2.0):**
 ```rust
-use agent_rs::security::SandboxConfig;
+use std::sync::Arc;
+use agent_rs::security::{SandboxConfig, SharedSandbox};
 use agent_rs::agent::permission::PermissionPolicy;
 
-let sandbox = SandboxConfig::single("./sandbox").unwrap();
+let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single("./sandbox").unwrap()));
 let policy = PermissionPolicy::AllowAll;
 let reader = ReadDocumentTool::new(sandbox.clone(), read_extensions, policy.clone());
 let lister = ListDirectoryTool::new(sandbox, policy);
@@ -93,11 +98,12 @@ A new error variant `DocumentError::SandboxEscape` has been added to `DocumentEr
 
 ### Step 1: Add Imports
 
-Ensure you import `HashSet`, `SandboxConfig`, `PermissionPolicy` and the new error variant if you pattern match on document errors:
+Ensure you import `HashSet`, `Arc`, `SandboxConfig`, `SharedSandbox`, `PermissionPolicy` and the new error variant if you pattern match on document errors:
 
 ```rust
 use std::collections::HashSet;
-use agent_rs::security::SandboxConfig;
+use std::sync::Arc;
+use agent_rs::security::{SandboxConfig, SharedSandbox};
 use agent_rs::agent::permission::PermissionPolicy;
 use agent_rs::agent::tools::{ReadDocumentTool, WriteDocumentTool};
 use agent_rs::domain::errors::DocumentError;
@@ -108,10 +114,12 @@ use agent_rs::domain::errors::DocumentError;
 Define your sandbox configuration and the set of allowed file extensions (without leading dots):
 
 ```rust
-use agent_rs::security::SandboxConfig;
+use std::collections::HashSet;
+use std::sync::Arc;
+use agent_rs::security::{SandboxConfig, SharedSandbox};
 use agent_rs::agent::permission::PermissionPolicy;
 
-let sandbox = SandboxConfig::single("./data").unwrap();
+let sandbox = Arc::new(SharedSandbox::from(SandboxConfig::single("./data").unwrap()));
 let policy = PermissionPolicy::AllowAll;
 
 // Read: txt, md, and pdf
