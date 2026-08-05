@@ -73,7 +73,7 @@ flowchart TB
 flowchart TB
     subgraph AgentCore ["Agent Core (Container Boundary)"]
         subgraph Ingestion ["Knowledge & Embedding Ingestion"]
-            rag["RagPipeline<br/><small>rag.rs</small><br/><small>Load, chunk, embed documents</small>"]:::component
+            rag["RagPipeline<br/><small>rag/pipeline/</small><br/><small>Load, chunk, embed documents</small>"]:::component
             embed["EmbeddingService&lt;M&gt;<br/><small>embeddings.rs</small><br/><small>Batched embedding via any model</small>"]:::component
         end
 
@@ -89,12 +89,12 @@ flowchart TB
             glob["GlobSearchTool<br/><small>tools/glob.rs</small><br/><small>Glob matching</small>"]:::component
             list["ListDirectoryTool<br/><small>tools/directory.rs</small><br/><small>Directory listing</small>"]:::component
             
-            sandbox["Sandbox Validator<br/><small>security/sandbox.rs</small><br/><small>Path canonicalization</small>"]:::component
+            sandbox["Sandbox Validator<br/><small>security/sandbox/</small><br/><small>SandboxConfig + SharedSandbox<br/>(resolve.rs)</small>"]:::component
         end
     end
 
     rag -->|Embeds document chunks| embed
-    rag -->|Loads documents| read
+    rag -->|Uses extract_pdf_text helper| read
     
     read -->|Validates paths| sandbox
     write -->|Validates paths| sandbox

@@ -3,24 +3,24 @@
 ```mermaid
 graph LR
     subgraph Binary
-        main_rs["main.rs"]
+        main_rs["examples/cli_chatbot.rs<br/>examples/langsmith_react.rs"]
     end
 
     subgraph lib["lib.rs (reexports)"]
-        lib_rs["agent, config, domain, mcp, observability, security"]
+        lib_rs["agent, config, domain, mcp, observability, rag, security"]
     end
 
     subgraph domain["src/domain/"]
         domain_config["config.rs<br/>McpConfig (raw JSON)"]
         domain_mcp["mcp.rs<br/>McpTransportKind, McpServerDef<br/>McpTransportSpec, ResolvedMcpServer"]
-        domain_rag["rag.rs (cfg rag)<br/>Document, Chunk, ChunkingOptions"]
+        domain_rag["rag.rs (cfg rag)<br/>Document, Chunk, ChunkMetadata<br/>ChunkingOptions, RagSource, RagSourceType"]
         domain_agent["agent.rs<br/>Thought, Action, Observation<br/>FinalAnswer, ReActStep, ReActTrace"]
         domain_observability["observability.rs (cfg otel)<br/>LangSmithConfig"]
         domain_errors["errors.rs<br/>DocumentError, CompactError<br/>ReActError"]
     end
 
     subgraph security["src/security/"]
-        security_sandbox["sandbox.rs<br/>SandboxConfig<br/>validate_sandboxed_path<br/>find_containing_root<br/>relative_display_path"]
+        security_sandbox["sandbox/<br/>SandboxConfig, SharedSandbox<br/>resolve.rs: validate_sandboxed_path<br/>find_containing_root, relative_display_path"]
     end
 
     subgraph config["src/config.rs"]
@@ -37,6 +37,7 @@ graph LR
         end
 
         managed["managed.rs<br/>ManagedExt, ManagedBuilder<br/>BuiltManagedAgent, ManagedStream"]
+        permission["permission.rs<br/>PermissionPolicy, PermissionGate"]
 
     subgraph tools["tools/"]
         document["document.rs<br/>ReadDocumentTool, WriteDocumentTool"]
@@ -57,7 +58,7 @@ graph LR
         obs_langsmith["langsmith.rs<br/>OTLP/HTTP exporter +<br/>tracing-opentelemetry layer"]
         obs_conv["conventions.rs<br/>GenAI / LangSmith /<br/>OpenInference attribute consts"]
         obs_react["react_spans.rs<br/>LangSmithReActEmitter"]
-        obs_hooks["hooks.rs<br/>LangSmithAgentHook<br/>(impl rig PromptHook&lt;M&gt;)"]
+        obs_hooks["hooks.rs<br/>LangSmithAgentHook<br/>(impl rig AgentHook&lt;M&gt;)"]
     end
 
     subgraph mcp["src/mcp/"]
@@ -80,19 +81,20 @@ graph LR
     agent_mod --> react
     agent_mod --> memory
     agent_mod --> tools
+    agent_mod --> managed
+    agent_mod --> permission
     agent_mod --> dispatch
     agent_mod --> state
 
     react --> domain_agent
     react --> domain_errors
-    react --> domain_observability
-    react --> obs_react
+    obs_react --> react
 
     rag --> embeddings
     rag --> domain_rag
+    rag --> document
 
     document --> domain_errors
-    document --> rag
     document --> security_sandbox
     search --> security_sandbox
     glob --> security_sandbox
@@ -105,7 +107,6 @@ graph LR
     obs_mod --> obs_hooks
     obs_langsmith --> domain_observability
     obs_react --> domain_agent
-    obs_hooks --> domain_observability
     obs_hooks --> obs_conv
 
     registry --> domain_config

@@ -26,9 +26,11 @@ classDiagram
         +Option~McpTransportKind~ transport_type
         +Option~String~ command
         +Vec~String~ args
+        +HashMap~String, String~ env
         +Option~PathBuf~ cwd
         +Option~String~ url
         +HashMap~String, String~ headers
+        +HashMap~String, Value~ extra (serde flatten)
         +transport_spec() Result~McpTransportSpec~
     }
 
@@ -64,8 +66,8 @@ classDiagram
     McpConfig "1" *--> "many" McpServerDef
     McpServerDef --> McpTransportKind : has
     McpServerDef ..> McpTransportSpec : resolves to
-    McpTransportSpec <|.. McpStdioTransportSpec
-    McpTransportSpec <|.. McpStreamableHttpTransportSpec
+    McpTransportSpec "1" *--> McpStdioTransportSpec : variant
+    McpTransportSpec "1" *--> McpStreamableHttpTransportSpec : variant
     ResolvedMcpServer --> McpTransportSpec : has
 ```
 
@@ -81,8 +83,8 @@ classDiagram
     class McpRegistry {
         -McpConfig config
         +from_path(path) Result~Self~
-        +connect() Result~McpRegistryRuntime~
-        +tools() List~ToolDyn~
+        +connect(policy PermissionPolicy) Result~McpRegistryRuntime~
+        +tools(policy PermissionPolicy) Result~List~ToolDyn~~
     }
 
     class McpRegistryRuntime {
@@ -128,7 +130,7 @@ classDiagram
 
     class Chunk {
         +String text
-        +HashMap~String, String~ metadata
+        +ChunkMetadata metadata
     }
 
     class ChunkingOptions {
@@ -138,15 +140,15 @@ classDiagram
 
     class DocumentLoader {
         <<interface>>
-        +load(path) Result~Document~
+        +async load(path) Result~Document~
     }
 
     class PdfLoader {
-        +load(path) Result~Document~
+        +async load(path) Result~Document~
     }
 
     class TextLoader {
-        +load(path) Result~Document~
+        +async load(path) Result~Document~
     }
 
     class TextSplitter {
@@ -162,7 +164,7 @@ classDiagram
     class RagPipeline {
         -turbo SharedTurboIndex
         -store Arc~DocumentStore~
-        +open_or_create(db, index, dim, bit_width) Result~Self~
+        +builder() RagPipelineBuilder
         +add_source(path, service) Result~usize~
         +add_source_dyn(path, embedder) Result~usize~
         +remove_source(name) Result~usize~
@@ -171,9 +173,29 @@ classDiagram
         +chunk_count() Result~i64~
     }
 
-    class EmbeddingVector {
-        <<type alias>>
-        Vec~f64~
+    class RagPipelineBuilder {
+        +embedder(service) Self
+        +db_path(path) Self
+        +index_path(path) Self
+        +extensions(exts) Self
+        +chunk_words(n) Self
+        +chunk_overlap_words(n) Self
+        +bit_width(n) Self
+        +sandbox(s) Self
+        +build() BuiltRag
+    }
+
+    class BuiltRag {
+        +TurboVectorIndex vector_index
+        +RagIndexer indexer
+    }
+
+    class RagIndexer {
+        +add(path) Result~usize~
+        +remove(path) Result~usize~
+        +reindex(path) Result~usize~
+        +list() List~RagSource~
+        +tool(policy) ManageRagTool
     }
 
     class EmbeddingService~M~ {
@@ -181,9 +203,9 @@ classDiagram
         +new(model) Self
         +ndims() usize
         +max_documents() usize
-        +embed_text(text) EmbeddingVector
-        +embed_texts(texts) List~EmbeddingVector~
-        +embed_document(doc) List~EmbeddingVector~
+        +embed_text(text) Result~Embedding~
+        +embed_texts(texts) Result~Vec~Embedding~~
+        +embed_documents(docs) Result~Vec~(T, OneOrMany~Embedding~)~~
     }
 
     class DocumentError {
@@ -192,6 +214,7 @@ classDiagram
         +Pdf(String)
         +UnsupportedExtension(String)
         +SandboxEscape(String)
+        +Sandbox(String)
         +PermissionDenied(String)
         +Rag(String)
     }
@@ -202,15 +225,19 @@ classDiagram
     DocumentLoader ..> DocumentError : throws
     
     TextSplitter <|.. WordSplitter
-    WordSplitter --> ChunkingOptions : configures
     TextSplitter ..> Chunk : creates
+
+    RagPipeline ..> RagPipelineBuilder : builder()
+    RagPipelineBuilder ..> BuiltRag : build()
+    BuiltRag *--> TurboVectorIndex : vector_index
+    BuiltRag *--> RagIndexer : indexer
+    RagIndexer *--> RagPipeline : owns (Arc)
 
     RagPipeline --> EmbeddingService : uses
     RagPipeline --> TextSplitter : uses
     RagPipeline *--> Chunk : stores
 
-    note for RagPipeline "SharedTurboIndex = Arc<RwLock<TurboIndex>>"
-    note for EmbeddingVector "EmbeddingVector = Vec<f64>"
+    note for RagPipeline "SharedTurboIndex = Arc<RwLock<TurboIndex>>\nopen_or_create / from_parts are pub(crate)"
 ```
 
 ---
@@ -222,7 +249,7 @@ This diagram outlines the context-managed agent wrapper for conversation compact
 ```mermaid
 classDiagram
     direction TB
-    class BuiltManagedAgent~M, P, C~ {
+    class BuiltManagedAgent~M, C = (), S = Standard~ {
         -agent Agent~M~
         -max_retries u32
         -context_manager OptionalContextManager
@@ -242,7 +269,7 @@ classDiagram
         +managed() ManagedBuilder
     }
 
-    class ManagedBuilder~M, P, CompState~ {
+    class ManagedBuilder~M, CompState~ {
         -agent Agent~M~
         -max_retries u32
         -compaction CompState
@@ -260,8 +287,10 @@ classDiagram
 
     class Tool {
         <<interface>>
-        +definition(prompt) ToolDefinition
-        +call(args) Result~Output~
+        +const NAME &'static str
+        +description() String
+        +parameters() Value
+        +async call(args) Result~Output~
     }
 
     class ReadDocumentTool {

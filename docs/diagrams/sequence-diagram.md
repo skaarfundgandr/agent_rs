@@ -18,11 +18,11 @@ sequenceDiagram
 
     Main->>DotEnv: load .env
     Main->>RigClient: new(http://127.0.0.1:1234/v1)
-    Main->>Embed: new(client.embedding_model())
+    Main->>Embed: builder().model(fastembed_variant).show_progress(true).build()
     Main->>McpReg: from_path(./mcp.json)
     activate McpReg
     McpReg->>McpReg: parse McpConfig
-    Main->>McpReg: connect()
+    Main->>McpReg: connect(policy.clone())
     McpReg->>McpSrv: for each server: spawn/connect
     activate McpSrv
     McpSrv-->>McpReg: list_all_tools()
@@ -34,28 +34,24 @@ sequenceDiagram
     Main->>Tools: register internal tools by group
     Main->>Tools: enable groups + active_tools()
 
-    Main->>Pdf: load(./docs/sample.pdf)
-    activate Pdf
-    Pdf-->>Main: Document
-    deactivate Pdf
-    Main->>Splitter: new(220, 40)
-    Main->>Splitter: split(document)
-    activate Splitter
-    Splitter-->>Main: chunk list
-    deactivate Splitter
-    Main->>Rag: open_or_create(db, index, dim, 4)
-    Main->>Rag: add_source(./docs/sample.pdf, service)
+    Main->>Rag: builder().embedder(embed).db_path(..).index_path(..).extensions(..).sandbox(..).build().await
     activate Rag
+    Rag->>Rag: open_or_create (pub(crate)): load SQLite + .tvim
+    Rag-->>Main: BuiltRag { vector_index, indexer }
+    deactivate Rag
+    Main->>Rag: indexer.add(./docs/sample.pdf)
+    activate Rag
+    Rag->>Pdf: PdfLoader::load (via add_single_file)
+    Pdf-->>Rag: Document
+    Rag->>Splitter: WordSplitter::split()
+    Splitter-->>Rag: chunks
     Rag->>Embed: embed_texts(chunks)
     Embed-->>Rag: embeddings
-    Rag->>Rag: persist to SQLite + turbovec
+    Rag->>Rag: persist to SQLite + turbovec (.tvim)
     Rag-->>Main: chunk count
     deactivate Rag
-    Main->>Rag: save(index_path)
-    Main->>Rag: build(embedder_arc)
-    Rag-->>Main: TurboVectorIndex
 
-    Main->>Agent: new(client, tools, preamble, context(index))
+    Main->>Agent: client.agent(model).tools(tools).preamble(..).dynamic_context(top_k, rag.vector_index)..build()
     Main->>Main: ChatBotBuilder run()
 ```
 

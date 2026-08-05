@@ -21,9 +21,9 @@ flowchart TB
     BatchLoop -->|Yes| EmbedBatch["model.embed_texts(batch)"]
     BatchLoop -->|No| SplitBatch["chunks(batch_size)<br/>→ multiple batches"]
     SplitBatch --> EmbedBatch
-    EmbedBatch --> Store["InMemoryVectorStore<br/>.add_documents(embeddings)"]
-    Store --> Index["InMemoryVectorIndex<br/>.index(model)"]
-    Index --> QueryReady["Ready for semantic search<br/>(top-k retrieval)"]
+    EmbedBatch --> Store["DocumentStore (SQLite)<br/>persist chunks + metadata"]
+    Store --> Index["TurboIndex (.tvim)<br/>HNSW vectors on disk"]
+    Index --> QueryReady["TurboVectorIndex<br/>top-k retrieval via dynamic_context"]
     linkStyle default stroke:#4a82b8,stroke-width:2px;
 ```
 
@@ -56,7 +56,7 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    In(["Agent::chat(prompt, history)"]) --> Estimate["Estimate token count<br/>(JSON chars / 4)"]
+    In(["Agent::chat(prompt, history)"]) --> Estimate["Estimate token count<br/>(tiktoken cl100k_base BPE;<br/>char/4 fallback)"]
     Estimate --> Threshold{"history + prompt<br/>&gt; compaction_threshold?"}
     Threshold -->|No| NormalChat["Call inner Agent::chat()<br/>with existing history"]
     Threshold -->|Yes| Serialize["Serialize history → text"]
