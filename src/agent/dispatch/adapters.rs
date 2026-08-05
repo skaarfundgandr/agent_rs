@@ -9,6 +9,9 @@ use crate::agent::react::BuiltReAct;
 
 use super::definition::{AgentDefinition, AgentInput, AgentKind, AgentOutput};
 
+/// [`AgentDefinition`] wrapping a built ReAct agent; `run` executes
+/// [`BuiltReAct::prompt`](crate::agent::react::BuiltReAct::prompt) and
+/// reports its trace in the [`AgentOutput`].
 pub struct ReActAgentDefinition<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
@@ -23,6 +26,8 @@ impl<M> ReActAgentDefinition<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
 {
+    /// Create a definition wrapping a ReAct agent under the given name, tool
+    /// groups, and description.
     pub fn new(
         name: String,
         tool_groups: Vec<String>,
@@ -86,6 +91,9 @@ where
     }
 }
 
+/// [`AgentDefinition`] wrapping a built managed agent; `run` executes
+/// [`BuiltManagedAgent::chat`](crate::agent::managed::BuiltManagedAgent::chat)
+/// and reports no trace in the [`AgentOutput`].
 pub struct ManagedAgentDefinition<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
@@ -100,6 +108,8 @@ impl<M> ManagedAgentDefinition<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
 {
+    /// Create a definition wrapping a managed agent under the given name,
+    /// tool groups, and description.
     pub fn new(
         name: String,
         tool_groups: Vec<String>,

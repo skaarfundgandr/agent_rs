@@ -11,11 +11,16 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 
+/// Arguments for [`ReadDocumentTool`](ReadDocumentTool): the path to the file
+/// to read, resolved within the sandbox root(s).
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct ReadDocumentArgs {
     pub path: String,
 }
 
+/// Arguments for [`WriteDocumentTool`](WriteDocumentTool): the path to write,
+/// the content to write, and whether to append instead of overwriting
+/// (`append: true` appends; anything else overwrites).
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct WriteDocumentArgs {
     pub path: String,

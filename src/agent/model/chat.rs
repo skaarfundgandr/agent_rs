@@ -6,6 +6,14 @@ use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 
 use crate::agent::telemetry::{CaptureTelemetryHook, TelemetryAccum};
 
+/// Run a single chat turn against `agent` with retries for invalid tool
+/// calls, extending `history` with any messages the provider returned, and
+/// return the model's text output.
+///
+/// # Errors
+///
+/// Returns a [`PromptError`] when the model call fails and retries are
+/// exhausted.
 pub async fn execute_chat<M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static>(
     agent: &Agent<M>,
     prompt: &str,
@@ -56,6 +64,12 @@ pub(crate) async fn execute_chat_details<
     Ok(response)
 }
 
+/// Build a [`StreamingPromptRequest`] for `agent` seeded with `prompt` and
+/// `history`, streaming the model's responses.
+///
+/// # Errors
+///
+/// Errors surface when the returned request is awaited.
 pub fn execute_stream_chat<M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static>(
     agent: &Agent<M>,
     prompt: &str,

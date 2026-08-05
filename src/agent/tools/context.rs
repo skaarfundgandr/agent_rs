@@ -5,6 +5,8 @@ use rig_core::wasm_compat::{WasmCompatSend, WasmCompatSync};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+/// Arguments for [`CompactTool`](CompactTool): the conversation history or
+/// text to summarize.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CompactArgs {
     pub text: String,
